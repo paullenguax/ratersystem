@@ -2,15 +2,13 @@ import { initializeApp } from 'firebase/app'
 import { getAuth } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
 
-// TODO: Replace with your Firebase project config.
-// Firebase Console → Project settings → Your apps → SDK setup and configuration
 const firebaseConfig = {
-  apiKey: 'YOUR_API_KEY',
-  authDomain: 'YOUR_AUTH_DOMAIN',
-  projectId: 'YOUR_PROJECT_ID',
-  storageBucket: 'YOUR_STORAGE_BUCKET',
-  messagingSenderId: 'YOUR_MESSAGING_SENDER_ID',
-  appId: 'YOUR_APP_ID',
+  apiKey: 'AIzaSyDBVB-gdCCd4iLlq7oIRtxWKAjPXGfK3tc',
+  authDomain: 'ratersystem.firebaseapp.com',
+  projectId: 'ratersystem',
+  storageBucket: 'ratersystem.firebasestorage.app',
+  messagingSenderId: '6406948731',
+  appId: '1:6406948731:web:7b269951ffe2fe57d61fde',
 }
 
 const app = initializeApp(firebaseConfig)

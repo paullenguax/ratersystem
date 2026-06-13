@@ -21,7 +21,7 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <BrowserRouter>
+        <BrowserRouter basename="/ratersystem">
           <AuthProvider>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
