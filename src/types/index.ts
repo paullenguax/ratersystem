@@ -16,9 +16,7 @@ export interface Test {
   candidateName: string
   candidateNationality: string
   testType: 'PPL' | 'Airline Pilot' | 'Helicopter Pilot' | 'Student Pilot' | 'Aerodrome ATC' | 'Approach ATC' | 'Area ATC' | 'Student ATCO' | 'Airport Operations' | 'ADP Driver'
-  promptType: 'interview' | 'read-aloud' | 'roleplay'
   durationSeconds?: number
-  targetLevel: number
   status: 'active' | 'retired'
   canonicalDifficulty?: number | null
   canonicalSE?: number | null

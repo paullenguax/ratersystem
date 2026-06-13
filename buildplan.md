@@ -71,10 +71,9 @@ test_bank/
     candidateName:      string
     candidateNationality: string
     testType:           "PPL" | "Airline Pilot" | "Helicopter Pilot" | "Student Pilot" | "Aerodrome ATC" | "Approach ATC" | "Area ATC" | "Student ATCO" | "Airport Operations" | "ADP Driver"
-    promptType:         "interview" | "read-aloud" | "roleplay"
     durationSeconds:    number
-    targetLevel:        number        // ICAO 1–6
     status:             "active" | "retired"
+    // Empirical difficulty comes from Rasch runs (canonicalDifficulty), not set manually
     canonicalDifficulty: number | null  // logit estimate, null until anchored
     canonicalSE:        number | null
     anchoredAt:         timestamp | null
@@ -251,7 +250,7 @@ Build in order. Each module should be mergeable to `main` and usable before the 
 
 ### Test Bank
 
-**Fields:** Recording URL, candidate name, candidate nationality, test type (PPL | Airline Pilot | Helicopter Pilot | Student Pilot | Aerodrome ATC | Approach ATC | Area ATC | Student ATCO | Airport Operations | ADP Driver), prompt type (interview/read-aloud/roleplay), duration, target ICAO level (1–6), status (active/retired), notes.
+**Fields:** Recording URL, candidate name, candidate nationality, test type (PPL | Airline Pilot | Helicopter Pilot | Student Pilot | Aerodrome ATC | Approach ATC | Area ATC | Student ATCO | Airport Operations | ADP Driver), duration (seconds), status (active/retired), notes. Empirical difficulty is derived from Rasch runs, not stored manually.
 
 **UI:**
 - Test list table, filterable by status and licence type
@@ -264,7 +263,7 @@ Build in order. Each module should be mergeable to `main` and usable before the 
 - [ ] Table shows status and number of times assigned
 
 **Prompt seed for Cursor:**
-> "Add People and Test Bank modules to the existing shell. No backend — all Firestore SDK. People: collection `people/`, TanStack Table with columns [Name, Email, Role, Status], filterable by role and status. Slide-over drawer for create/edit using react-hook-form + zod. Check email uniqueness against Firestore before creating. Test Bank: collection `test_bank/`, fields: recordingUrl, candidateName, candidateNationality, testType (PPL|Airline Pilot|Helicopter Pilot|Student Pilot|Aerodrome ATC|Approach ATC|Area ATC|Student ATCO|Airport Operations|ADP Driver), promptType (interview|read-aloud|roleplay), durationSeconds, targetLevel (1–6 integer), status (active|retired), notes. Table with inline HTML5 audio player for recordingUrl. Both modules: admin-only access."
+> "Add People and Test Bank modules to the existing shell. No backend — all Firestore SDK. People: collection `people/`, TanStack Table with columns [Name, Email, Role, Status], filterable by role and status. Slide-over drawer for create/edit using react-hook-form + zod. Check email uniqueness against Firestore before creating. Test Bank: collection `test_bank/`, fields: recordingUrl, candidateName, candidateNationality, testType (PPL|Airline Pilot|Helicopter Pilot|Student Pilot|Aerodrome ATC|Approach ATC|Area ATC|Student ATCO|Airport Operations|ADP Driver), durationSeconds, status (active|retired), notes. Table with inline HTML5 audio player for recordingUrl. Both modules: admin-only access."
 
 ---
 

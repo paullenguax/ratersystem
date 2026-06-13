@@ -45,16 +45,6 @@ export function TestBankPage() {
       cell: ({ row }) => <Badge variant="outline">{row.original.testType}</Badge>,
     },
     {
-      accessorKey: 'promptType',
-      header: 'Prompt',
-      cell: ({ row }) => <span className="capitalize">{row.original.promptType}</span>,
-    },
-    {
-      accessorKey: 'targetLevel',
-      header: 'Level',
-      cell: ({ row }) => <span>L{row.original.targetLevel}</span>,
-    },
-    {
       accessorKey: 'status',
       header: 'Status',
       cell: ({ row }) => (

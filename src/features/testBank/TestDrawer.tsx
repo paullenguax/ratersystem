@@ -13,14 +13,14 @@ import { Textarea } from '@/components/ui/textarea'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from '@/components/ui/sheet'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
+const TEST_TYPES = ['PPL', 'Airline Pilot', 'Helicopter Pilot', 'Student Pilot', 'Aerodrome ATC', 'Approach ATC', 'Area ATC', 'Student ATCO', 'Airport Operations', 'ADP Driver'] as const
+
 const schema = z.object({
   recordingUrl: z.string().min(1, 'Required'),
   candidateName: z.string().min(1, 'Required'),
   candidateNationality: z.string().min(1, 'Required'),
-  testType: z.enum(['PPL', 'Airline Pilot', 'Helicopter Pilot', 'Student Pilot', 'Aerodrome ATC', 'Approach ATC', 'Area ATC', 'Student ATCO', 'Airport Operations', 'ADP Driver']),
-  promptType: z.enum(['interview', 'read-aloud', 'roleplay']),
+  testType: z.enum(TEST_TYPES),
   durationSeconds: z.number().min(0).optional(),
-  targetLevel: z.number().min(1).max(6),
   status: z.enum(['active', 'retired']),
   notes: z.string().optional(),
 })
@@ -28,8 +28,7 @@ type FormData = z.infer<typeof schema>
 
 const EMPTY: FormData = {
   recordingUrl: '', candidateName: '', candidateNationality: '',
-  testType: 'PPL', promptType: 'interview',
-  durationSeconds: undefined, targetLevel: 4, status: 'active', notes: '',
+  testType: 'PPL', durationSeconds: undefined, status: 'active', notes: '',
 }
 
 interface Props {
@@ -55,9 +54,7 @@ export function TestDrawer({ open, onClose, test }: Props) {
         candidateName: test.candidateName,
         candidateNationality: test.candidateNationality,
         testType: test.testType,
-        promptType: test.promptType,
         durationSeconds: test.durationSeconds,
-        targetLevel: test.targetLevel,
         status: test.status,
         notes: test.notes ?? '',
       } : EMPTY
@@ -74,9 +71,7 @@ export function TestDrawer({ open, onClose, test }: Props) {
       candidateName: data.candidateName,
       candidateNationality: data.candidateNationality,
       testType: data.testType,
-      promptType: data.promptType,
       durationSeconds: data.durationSeconds ?? null,
-      targetLevel: data.targetLevel,
       status: data.status,
       notes: data.notes ?? '',
     }
@@ -127,52 +122,14 @@ export function TestDrawer({ open, onClose, test }: Props) {
                 <Select value={field.value} onValueChange={field.onChange}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="PPL">PPL</SelectItem>
-                    <SelectItem value="Airline Pilot">Airline Pilot</SelectItem>
-                    <SelectItem value="Helicopter Pilot">Helicopter Pilot</SelectItem>
-                    <SelectItem value="Student Pilot">Student Pilot</SelectItem>
-                    <SelectItem value="Aerodrome ATC">Aerodrome ATC</SelectItem>
-                    <SelectItem value="Approach ATC">Approach ATC</SelectItem>
-                    <SelectItem value="Area ATC">Area ATC</SelectItem>
-                    <SelectItem value="Student ATCO">Student ATCO</SelectItem>
-                    <SelectItem value="Airport Operations">Airport Operations</SelectItem>
-                    <SelectItem value="ADP Driver">ADP Driver</SelectItem>
+                    {TEST_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                   </SelectContent>
                 </Select>
               )} />
             </div>
-            <div className="space-y-1">
-              <Label>Prompt type</Label>
-              <Controller name="promptType" control={control} render={({ field }) => (
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="interview">Interview</SelectItem>
-                    <SelectItem value="read-aloud">Read-aloud</SelectItem>
-                    <SelectItem value="roleplay">Roleplay</SelectItem>
-                  </SelectContent>
-                </Select>
-              )} />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label>Duration (seconds)</Label>
               <Input type="number" min={0} {...register('durationSeconds', { valueAsNumber: true })} />
-            </div>
-            <div className="space-y-1">
-              <Label>Target level (1–6)</Label>
-              <Controller name="targetLevel" control={control} render={({ field }) => (
-                <Select value={String(field.value)} onValueChange={v => field.onChange(Number(v))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {[1, 2, 3, 4, 5, 6].map(n => (
-                      <SelectItem key={n} value={String(n)}>Level {n}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )} />
             </div>
           </div>
 
