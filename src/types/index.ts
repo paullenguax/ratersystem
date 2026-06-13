@@ -15,7 +15,7 @@ export interface Test {
   recordingUrl: string
   candidateName: string
   candidateNationality: string
-  licenceType: 'PPL' | 'CPL' | 'ATPL' | 'ATC'
+  testType: 'PPL' | 'CPL' | 'ATPL' | 'ATC'
   promptType: 'interview' | 'read-aloud' | 'roleplay'
   durationSeconds?: number
   targetLevel: number

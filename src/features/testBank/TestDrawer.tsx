@@ -17,7 +17,7 @@ const schema = z.object({
   recordingUrl: z.string().min(1, 'Required'),
   candidateName: z.string().min(1, 'Required'),
   candidateNationality: z.string().min(1, 'Required'),
-  licenceType: z.enum(['PPL', 'CPL', 'ATPL', 'ATC']),
+  testType: z.enum(['PPL', 'CPL', 'ATPL', 'ATC']),
   promptType: z.enum(['interview', 'read-aloud', 'roleplay']),
   durationSeconds: z.number().min(0).optional(),
   targetLevel: z.number().min(1).max(6),
@@ -28,7 +28,7 @@ type FormData = z.infer<typeof schema>
 
 const EMPTY: FormData = {
   recordingUrl: '', candidateName: '', candidateNationality: '',
-  licenceType: 'PPL', promptType: 'interview',
+  testType: 'PPL', promptType: 'interview',
   durationSeconds: undefined, targetLevel: 4, status: 'active', notes: '',
 }
 
@@ -54,7 +54,7 @@ export function TestDrawer({ open, onClose, test }: Props) {
         recordingUrl: test.recordingUrl,
         candidateName: test.candidateName,
         candidateNationality: test.candidateNationality,
-        licenceType: test.licenceType,
+        testType: test.testType,
         promptType: test.promptType,
         durationSeconds: test.durationSeconds,
         targetLevel: test.targetLevel,
@@ -73,7 +73,7 @@ export function TestDrawer({ open, onClose, test }: Props) {
       recordingUrl: data.recordingUrl,
       candidateName: data.candidateName,
       candidateNationality: data.candidateNationality,
-      licenceType: data.licenceType,
+      testType: data.testType,
       promptType: data.promptType,
       durationSeconds: data.durationSeconds ?? null,
       targetLevel: data.targetLevel,
@@ -122,8 +122,8 @@ export function TestDrawer({ open, onClose, test }: Props) {
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <Label>Licence type</Label>
-              <Controller name="licenceType" control={control} render={({ field }) => (
+              <Label>Test type</Label>
+              <Controller name="testType" control={control} render={({ field }) => (
                 <Select value={field.value} onValueChange={field.onChange}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>

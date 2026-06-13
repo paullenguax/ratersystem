@@ -19,7 +19,7 @@ async function fetchTests(): Promise<Test[]> {
 
 export function TestBankPage() {
   const [search, setSearch] = useState('')
-  const [licenceFilter, setLicenceFilter] = useState<'all' | Test['licenceType']>('all')
+  const [licenceFilter, setLicenceFilter] = useState<'all' | Test['testType']>('all')
   const [statusFilter, setStatusFilter] = useState<'all' | Test['status']>('all')
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [selectedTest, setSelectedTest] = useState<Test | undefined>()
@@ -31,7 +31,7 @@ export function TestBankPage() {
     const s = search.toLowerCase()
     return (
       (s === '' || t.candidateName.toLowerCase().includes(s) || t.candidateNationality.toLowerCase().includes(s)) &&
-      (licenceFilter === 'all' || t.licenceType === licenceFilter) &&
+      (licenceFilter === 'all' || t.testType === licenceFilter) &&
       (statusFilter === 'all' || t.status === statusFilter)
     )
   }), [tests, search, licenceFilter, statusFilter])
@@ -40,9 +40,9 @@ export function TestBankPage() {
     { accessorKey: 'candidateName', header: 'Candidate' },
     { accessorKey: 'candidateNationality', header: 'Nationality' },
     {
-      accessorKey: 'licenceType',
-      header: 'Licence',
-      cell: ({ row }) => <Badge variant="outline">{row.original.licenceType}</Badge>,
+      accessorKey: 'testType',
+      header: 'Test type',
+      cell: ({ row }) => <Badge variant="outline">{row.original.testType}</Badge>,
     },
     {
       accessorKey: 'promptType',
@@ -115,9 +115,9 @@ export function TestBankPage() {
           className="w-64"
         />
         <Select value={licenceFilter} onValueChange={v => setLicenceFilter(v as typeof licenceFilter)}>
-          <SelectTrigger className="w-36"><SelectValue placeholder="All licences" /></SelectTrigger>
+          <SelectTrigger className="w-36"><SelectValue placeholder="All types" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All licences</SelectItem>
+            <SelectItem value="all">All types</SelectItem>
             <SelectItem value="PPL">PPL</SelectItem>
             <SelectItem value="CPL">CPL</SelectItem>
             <SelectItem value="ATPL">ATPL</SelectItem>
