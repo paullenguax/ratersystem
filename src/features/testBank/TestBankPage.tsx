@@ -19,7 +19,7 @@ async function fetchTests(): Promise<Test[]> {
 
 export function TestBankPage() {
   const [search, setSearch] = useState('')
-  const [licenceFilter, setLicenceFilter] = useState<'all' | Test['testType']>('all')
+  const [typeFilter, setLicenceFilter] = useState<'all' | Test['testType']>('all')
   const [statusFilter, setStatusFilter] = useState<'all' | Test['status']>('all')
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [selectedTest, setSelectedTest] = useState<Test | undefined>()
@@ -31,10 +31,10 @@ export function TestBankPage() {
     const s = search.toLowerCase()
     return (
       (s === '' || t.candidateName.toLowerCase().includes(s) || t.candidateNationality.toLowerCase().includes(s)) &&
-      (licenceFilter === 'all' || t.testType === licenceFilter) &&
+      (typeFilter === 'all' || t.testType === typeFilter) &&
       (statusFilter === 'all' || t.status === statusFilter)
     )
-  }), [tests, search, licenceFilter, statusFilter])
+  }), [tests, search, typeFilter, statusFilter])
 
   const columns: ColumnDef<Test>[] = [
     { accessorKey: 'candidateName', header: 'Candidate' },
@@ -114,14 +114,20 @@ export function TestBankPage() {
           onChange={e => setSearch(e.target.value)}
           className="w-64"
         />
-        <Select value={licenceFilter} onValueChange={v => setLicenceFilter(v as typeof licenceFilter)}>
+        <Select value={typeFilter} onValueChange={v => setLicenceFilter(v as typeof typeFilter)}>
           <SelectTrigger className="w-36"><SelectValue placeholder="All types" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All types</SelectItem>
             <SelectItem value="PPL">PPL</SelectItem>
-            <SelectItem value="CPL">CPL</SelectItem>
-            <SelectItem value="ATPL">ATPL</SelectItem>
-            <SelectItem value="ATC">ATC</SelectItem>
+            <SelectItem value="Airline Pilot">Airline Pilot</SelectItem>
+            <SelectItem value="Helicopter Pilot">Helicopter Pilot</SelectItem>
+            <SelectItem value="Student Pilot">Student Pilot</SelectItem>
+            <SelectItem value="Aerodrome ATC">Aerodrome ATC</SelectItem>
+            <SelectItem value="Approach ATC">Approach ATC</SelectItem>
+            <SelectItem value="Area ATC">Area ATC</SelectItem>
+            <SelectItem value="Student ATCO">Student ATCO</SelectItem>
+            <SelectItem value="Airport Operations">Airport Operations</SelectItem>
+            <SelectItem value="ADP Driver">ADP Driver</SelectItem>
           </SelectContent>
         </Select>
         <Select value={statusFilter} onValueChange={v => setStatusFilter(v as typeof statusFilter)}>

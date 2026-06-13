@@ -15,7 +15,7 @@ export interface Test {
   recordingUrl: string
   candidateName: string
   candidateNationality: string
-  testType: 'PPL' | 'CPL' | 'ATPL' | 'ATC'
+  testType: 'PPL' | 'Airline Pilot' | 'Helicopter Pilot' | 'Student Pilot' | 'Aerodrome ATC' | 'Approach ATC' | 'Area ATC' | 'Student ATCO' | 'Airport Operations' | 'ADP Driver'
   promptType: 'interview' | 'read-aloud' | 'roleplay'
   durationSeconds?: number
   targetLevel: number

@@ -17,7 +17,7 @@ const schema = z.object({
   recordingUrl: z.string().min(1, 'Required'),
   candidateName: z.string().min(1, 'Required'),
   candidateNationality: z.string().min(1, 'Required'),
-  testType: z.enum(['PPL', 'CPL', 'ATPL', 'ATC']),
+  testType: z.enum(['PPL', 'Airline Pilot', 'Helicopter Pilot', 'Student Pilot', 'Aerodrome ATC', 'Approach ATC', 'Area ATC', 'Student ATCO', 'Airport Operations', 'ADP Driver']),
   promptType: z.enum(['interview', 'read-aloud', 'roleplay']),
   durationSeconds: z.number().min(0).optional(),
   targetLevel: z.number().min(1).max(6),
@@ -128,9 +128,15 @@ export function TestDrawer({ open, onClose, test }: Props) {
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="PPL">PPL</SelectItem>
-                    <SelectItem value="CPL">CPL</SelectItem>
-                    <SelectItem value="ATPL">ATPL</SelectItem>
-                    <SelectItem value="ATC">ATC</SelectItem>
+                    <SelectItem value="Airline Pilot">Airline Pilot</SelectItem>
+                    <SelectItem value="Helicopter Pilot">Helicopter Pilot</SelectItem>
+                    <SelectItem value="Student Pilot">Student Pilot</SelectItem>
+                    <SelectItem value="Aerodrome ATC">Aerodrome ATC</SelectItem>
+                    <SelectItem value="Approach ATC">Approach ATC</SelectItem>
+                    <SelectItem value="Area ATC">Area ATC</SelectItem>
+                    <SelectItem value="Student ATCO">Student ATCO</SelectItem>
+                    <SelectItem value="Airport Operations">Airport Operations</SelectItem>
+                    <SelectItem value="ADP Driver">ADP Driver</SelectItem>
                   </SelectContent>
                 </Select>
               )} />
