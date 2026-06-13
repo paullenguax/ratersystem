@@ -195,8 +195,8 @@ This reconciliation should be a dedicated admin UI step — a "merge participati
 
 | # | Module | Core user story | Depends on |
 |---|--------|----------------|------------|
-| 0 | **Auth & Shell** | Admin can log in; navigation shell exists | — |
-| 1 | **People & Test Bank** | CRUD rater profiles; manage test recordings | 0 |
+| 0 | **Auth & Shell** ✅ | Admin can log in; navigation shell exists | — |
+| 1 | **People & Test Bank** ✅ | CRUD rater profiles; manage test recordings | 0 |
 | 2 | **Sessions** | Create senior calibration runs and trainee course cohorts | 1 |
 | 3 | **Assignments** | Assign seniors to tests manually; auto-allocate trainees | 2 |
 | 4 | **Scoring** | Rater opens assignment, submits 6-dimension scores | 3 |
@@ -208,7 +208,7 @@ Build in order. Each module should be mergeable to `main` and usable before the 
 
 ---
 
-## Module 0 — Auth & Shell
+## Module 0 — Auth & Shell ✅
 
 **Goal:** Working login, role-aware nav, blank page stubs for all modules.
 
@@ -218,18 +218,18 @@ Build in order. Each module should be mergeable to `main` and usable before the 
 - Role stored in Firestore `people/{uid}.role`
 
 **Acceptance criteria:**
-- [ ] Admin can log in with email + password
-- [ ] Senior rater can log in; sees only Assignments and Scoring in nav
-- [ ] Route guards redirect unauthenticated users to login
-- [ ] Nav shell renders stubs for all modules
-- [ ] Dark/light mode toggle (optional but set up Tailwind tokens now)
+- [x] Admin can log in with email + password
+- [x] Senior rater can log in; sees only Assignments and Scoring in nav
+- [x] Route guards redirect unauthenticated users to login
+- [x] Nav shell renders stubs for all modules
+- [ ] Dark/light mode toggle (optional — deferred)
 
 **Prompt seed for Cursor:**
 > "Build a React + Vite app with Tailwind and shadcn/ui. Firebase Auth (email/password only — no other providers). Layout shell with a sidebar nav containing: Dashboard, People, Test Bank, Sessions, Assignments, Scoring, Statistics, Reports, Admin. Protect all routes using Firebase Auth onAuthStateChanged. Role is stored in Firestore `people/{uid}.role` as `admin` or `senior_rater`. Admins see all nav items; senior_raters see only Assignments and Scoring. Each nav item renders a placeholder page component. No Express or Node server — all data will go via Firebase SDK directly."
 
 ---
 
-## Module 1 — People & Test Bank
+## Module 1 — People & Test Bank ✅
 
 **Goal:** CRUD for rater profiles and test recordings. Both are admin-managed master data.
 
@@ -243,24 +243,26 @@ Build in order. Each module should be mergeable to `main` and usable before the 
 - Status badge (colour-coded)
 
 **Acceptance criteria:**
-- [ ] Admin can create, edit, deactivate a person
-- [ ] Email uniqueness enforced (check against Firestore before write)
-- [ ] Table is searchable and filterable by role/status
-- [ ] Person record shows count of linked participations
+- [x] Admin can create, edit, deactivate a person
+- [x] Email uniqueness enforced (check against Firestore before write)
+- [x] Table is searchable and filterable by role/status
+- [ ] Person record shows count of linked participations — deferred to after Sessions/Assignments exist
 
 ### Test Bank
 
 **Fields:** Recording URL, candidate name, candidate nationality, test type (PPL | Airline Pilot | Helicopter Pilot | Student Pilot | Aerodrome ATC | Approach ATC | Area ATC | Student ATCO | Airport Operations | ADP Driver), duration (seconds), status (active/retired), notes. Empirical difficulty is derived from Rasch runs, not stored manually.
 
 **UI:**
-- Test list table, filterable by status and licence type
-- Inline HTML5 audio player for recording URL
-- Add/edit form
+- Test list table, filterable by test type and status
+- Inline audio player (play/stop per row)
+- Slide-over drawer for add/edit
 
 **Acceptance criteria:**
-- [ ] Admin can add, edit, retire a test
-- [ ] Recording URL plays inline
-- [ ] Table shows status and number of times assigned
+- [x] Admin can add, edit, retire a test
+- [x] Recording URL plays inline
+- [ ] Table shows number of times assigned — deferred to after Assignments exist
+
+**Data migration (deferred to Module 7):** Import from old `tests_dev` collection. Field mapping: `audioUrl` → `recordingUrl`, status mapping (`new`/`scoring`/`benchmarked` → `active`, `archived` → `retired`), `testType` assigned in bulk. Old data lives in `raterscores.firebasestorage.app` — audio URLs remain valid.
 
 **Prompt seed for Cursor:**
 > "Add People and Test Bank modules to the existing shell. No backend — all Firestore SDK. People: collection `people/`, TanStack Table with columns [Name, Email, Role, Status], filterable by role and status. Slide-over drawer for create/edit using react-hook-form + zod. Check email uniqueness against Firestore before creating. Test Bank: collection `test_bank/`, fields: recordingUrl, candidateName, candidateNationality, testType (PPL|Airline Pilot|Helicopter Pilot|Student Pilot|Aerodrome ATC|Approach ATC|Area ATC|Student ATCO|Airport Operations|ADP Driver), durationSeconds, status (active|retired), notes. Table with inline HTML5 audio player for recordingUrl. Both modules: admin-only access."
@@ -459,4 +461,4 @@ Before each Cursor session, confirm:
 
 ---
 
-*Last updated: June 2026 — new build, clean Firebase project*
+*Last updated: June 2026 — Modules 0 and 1 complete. Next: Module 2 (Sessions).*
