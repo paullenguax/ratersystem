@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { collection, getDocs } from 'firebase/firestore'
-import { useReactTable, getCoreRowModel, flexRender, type ColumnDef } from '@tanstack/react-table'
-import { Plus, Play, Square } from 'lucide-react'
+import { useReactTable, getCoreRowModel, getSortedRowModel, flexRender, type ColumnDef, type SortingState } from '@tanstack/react-table'
+import { Plus, Play, Square, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import type { Test } from '@/types'
 import { TestDrawer } from './TestDrawer'
@@ -24,6 +24,7 @@ export function TestBankPage() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [selectedTest, setSelectedTest] = useState<Test | undefined>()
   const [playingUrl, setPlayingUrl] = useState<string | null>(null)
+  const [sorting, setSorting] = useState<SortingState>([{ id: 'testId', desc: false }])
 
   const { data: tests = [], isLoading } = useQuery({ queryKey: ['tests'], queryFn: fetchTests })
 
@@ -36,26 +37,48 @@ export function TestBankPage() {
     )
   }), [tests, search, typeFilter, statusFilter])
 
+  function SortHeader({ label, columnId }: { label: string; columnId: string }) {
+    const col = table.getColumn(columnId)
+    if (!col) return <>{label}</>
+    const sorted = col.getIsSorted()
+    return (
+      <button
+        className="flex items-center gap-1 hover:text-foreground transition-colors"
+        onClick={col.getToggleSortingHandler()}
+      >
+        {label}
+        {sorted === 'asc' ? <ChevronUp className="size-3" /> : sorted === 'desc' ? <ChevronDown className="size-3" /> : <ChevronsUpDown className="size-3 opacity-40" />}
+      </button>
+    )
+  }
+
   const columns: ColumnDef<Test>[] = [
     {
       accessorKey: 'testId',
-      header: '#',
+      header: () => <SortHeader label="#" columnId="testId" />,
+      sortUndefined: 'last',
       cell: ({ row }) => (
         <span className="text-muted-foreground text-xs font-mono">
           {row.original.testId ?? '—'}
         </span>
       ),
     },
-    { accessorKey: 'candidateName', header: 'Candidate' },
-    { accessorKey: 'candidateNationality', header: 'Nationality' },
+    {
+      accessorKey: 'candidateName',
+      header: () => <SortHeader label="Candidate" columnId="candidateName" />,
+    },
+    {
+      accessorKey: 'candidateNationality',
+      header: () => <SortHeader label="Nationality" columnId="candidateNationality" />,
+    },
     {
       accessorKey: 'testType',
-      header: 'Test type',
+      header: () => <SortHeader label="Test type" columnId="testType" />,
       cell: ({ row }) => <Badge variant="outline">{row.original.testType}</Badge>,
     },
     {
       accessorKey: 'status',
-      header: 'Status',
+      header: () => <SortHeader label="Status" columnId="status" />,
       cell: ({ row }) => (
         <Badge variant={row.original.status === 'active' ? 'default' : 'secondary'}>
           {row.original.status}
@@ -91,7 +114,14 @@ export function TestBankPage() {
     },
   ]
 
-  const table = useReactTable({ data: filtered, columns, getCoreRowModel: getCoreRowModel() })
+  const table = useReactTable({
+    data: filtered,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    state: { sorting },
+    onSortingChange: setSorting,
+  })
 
   return (
     <div className="space-y-4">
