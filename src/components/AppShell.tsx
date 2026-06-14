@@ -2,7 +2,7 @@ import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { signOut } from 'firebase/auth'
 import {
   LayoutDashboard, Users, FileAudio, CalendarDays,
-  ClipboardList, SlidersHorizontal, BarChart2,
+  ClipboardList, SlidersHorizontal, Star, BarChart2,
   FileText, Settings, LogOut,
 } from 'lucide-react'
 import {
@@ -21,6 +21,7 @@ const ALL_NAV = [
   { label: 'Sessions',    path: '/sessions',    icon: CalendarDays,        roles: ['admin'] },
   { label: 'Assignments', path: '/assignments', icon: ClipboardList,       roles: ['admin', 'senior_rater'] },
   { label: 'Scoring',     path: '/scoring',     icon: SlidersHorizontal,   roles: ['admin', 'senior_rater'] },
+  { label: 'Scores',      path: '/scores',      icon: Star,                roles: ['admin'] },
   { label: 'Statistics',  path: '/statistics',  icon: BarChart2,           roles: ['admin'] },
   { label: 'Reports',     path: '/reports',     icon: FileText,            roles: ['admin'] },
   { label: 'Admin',       path: '/admin',       icon: Settings,            roles: ['admin'] },

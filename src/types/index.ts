@@ -10,6 +10,25 @@ export interface Person {
   createdAt?: Timestamp
 }
 
+export interface Score {
+  id: string
+  raterId: string
+  raterName: string
+  testDocId: string
+  testNumber?: number
+  candidateName: string
+  testType: string
+  pronunciation: number
+  structure: number
+  vocabulary: number
+  fluency: number
+  comprehension: number
+  interactions: number
+  overallLevel: number
+  notes?: string
+  createdAt?: Timestamp
+}
+
 export interface Test {
   id: string
   testId?: number

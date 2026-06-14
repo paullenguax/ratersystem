@@ -13,6 +13,7 @@ import { AssignmentsPage } from '@/features/assignments/AssignmentsPage'
 import { ScoringPage } from '@/features/scoring/ScoringPage'
 import { StatisticsPage } from '@/features/statistics/StatisticsPage'
 import { ReportsPage } from '@/features/reports/ReportsPage'
+import { ScoresPage } from '@/features/scores/ScoresPage'
 import { AdminPage } from '@/features/admin/AdminPage'
 import { ImportRatersPage } from '@/features/admin/ImportRatersPage'
 import { ImportTestsPage } from '@/features/admin/ImportTestsPage'
@@ -41,6 +42,7 @@ export default function App() {
                 <Route path="sessions"    element={<ProtectedRoute allowedRoles={['admin']}><SessionsPage /></ProtectedRoute>} />
                 <Route path="assignments" element={<AssignmentsPage />} />
                 <Route path="scoring"     element={<ScoringPage />} />
+                <Route path="scores"      element={<ProtectedRoute allowedRoles={['admin']}><ScoresPage /></ProtectedRoute>} />
                 <Route path="statistics"  element={<ProtectedRoute allowedRoles={['admin']}><StatisticsPage /></ProtectedRoute>} />
                 <Route path="reports"     element={<ProtectedRoute allowedRoles={['admin']}><ReportsPage /></ProtectedRoute>} />
                 <Route path="admin"       element={<ProtectedRoute allowedRoles={['admin']}><AdminPage /></ProtectedRoute>} />
