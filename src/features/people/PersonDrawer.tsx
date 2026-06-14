@@ -1,10 +1,11 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { collection, addDoc, doc, updateDoc, query, where, getDocs, serverTimestamp } from 'firebase/firestore'
+import { sendPasswordResetEmail } from 'firebase/auth'
 import { useQueryClient } from '@tanstack/react-query'
-import { db } from '@/lib/firebase'
+import { db, auth } from '@/lib/firebase'
 import type { Person } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -31,6 +32,18 @@ interface Props {
 export function PersonDrawer({ open, onClose, person }: Props) {
   const queryClient = useQueryClient()
   const isEdit = !!person
+  const [resetState, setResetState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
+
+  async function handlePasswordReset() {
+    if (!person) return
+    setResetState('sending')
+    try {
+      await sendPasswordResetEmail(auth, person.email)
+      setResetState('sent')
+    } catch {
+      setResetState('error')
+    }
+  }
 
   const { register, handleSubmit, control, reset, setError, formState: { errors, isSubmitting } } =
     useForm<FormData>({
@@ -40,6 +53,7 @@ export function PersonDrawer({ open, onClose, person }: Props) {
 
   useEffect(() => {
     if (open) {
+      setResetState('idle')
       reset(person
         ? { name: person.name, email: person.email, role: person.role, status: person.status, notes: person.notes ?? '' }
         : { name: '', email: '', role: 'senior_rater', status: 'active', notes: '' }
@@ -120,6 +134,26 @@ export function PersonDrawer({ open, onClose, person }: Props) {
             <Label>Notes</Label>
             <Textarea {...register('notes')} rows={3} />
           </div>
+
+          {isEdit && (
+            <div className="border-t pt-4 space-y-2">
+              <Label className="text-muted-foreground">Password reset</Label>
+              <div className="flex items-center gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={resetState === 'sending' || resetState === 'sent'}
+                  onClick={handlePasswordReset}
+                >
+                  {resetState === 'sending' ? 'Sending…' : resetState === 'sent' ? 'Email sent ✓' : 'Send reset email'}
+                </Button>
+                {resetState === 'error' && (
+                  <p className="text-xs text-destructive">Failed — is this email registered in Firebase Auth?</p>
+                )}
+              </div>
+            </div>
+          )}
 
           <SheetFooter className="mt-2">
             <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
