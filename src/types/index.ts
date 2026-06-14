@@ -12,6 +12,7 @@ export interface Person {
 
 export interface Test {
   id: string
+  testId?: number
   recordingUrl: string
   candidateName: string
   candidateNationality: string

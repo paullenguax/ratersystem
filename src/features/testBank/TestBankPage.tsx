@@ -37,6 +37,15 @@ export function TestBankPage() {
   }), [tests, search, typeFilter, statusFilter])
 
   const columns: ColumnDef<Test>[] = [
+    {
+      accessorKey: 'testId',
+      header: '#',
+      cell: ({ row }) => (
+        <span className="text-muted-foreground text-xs font-mono">
+          {row.original.testId ?? '—'}
+        </span>
+      ),
+    },
     { accessorKey: 'candidateName', header: 'Candidate' },
     { accessorKey: 'candidateNationality', header: 'Nationality' },
     {

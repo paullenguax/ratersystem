@@ -95,6 +95,9 @@ export function TestDrawer({ open, onClose, test }: Props) {
         </SheetHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4 py-4">
+          {isEdit && test?.testId && (
+            <p className="text-xs text-muted-foreground">Test #{test.testId}</p>
+          )}
           <div className="space-y-1">
             <Label>Recording URL</Label>
             <Input {...register('recordingUrl')} placeholder="https://…" />

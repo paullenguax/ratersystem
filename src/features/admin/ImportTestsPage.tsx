@@ -111,6 +111,7 @@ export function ImportTestsPage() {
         for (const row of chunk) {
           const ref = doc(collection(db, 'test_bank'))
           batch.set(ref, {
+            testId: row.testId,
             recordingUrl: row.recordingUrl,
             candidateName: row.candidateName,
             candidateNationality: row.candidateNationality,
