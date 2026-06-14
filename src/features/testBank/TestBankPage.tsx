@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { collection, getDocs } from 'firebase/firestore'
-import { useReactTable, getCoreRowModel, getSortedRowModel, flexRender, type ColumnDef, type SortingState, type Column } from '@tanstack/react-table'
+import { useReactTable, getCoreRowModel, getSortedRowModel, flexRender, type ColumnDef, type SortingState } from '@tanstack/react-table'
 import { Plus, Play, Square, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import type { Test } from '@/types'
@@ -11,19 +11,6 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-
-function SortBtn({ label, column }: { label: string; column: Column<Test> }) {
-  const sorted = column.getIsSorted()
-  return (
-    <button
-      className="flex items-center gap-1 hover:text-foreground transition-colors"
-      onClick={column.getToggleSortingHandler()}
-    >
-      {label}
-      {sorted === 'asc' ? <ChevronUp className="size-3" /> : sorted === 'desc' ? <ChevronDown className="size-3" /> : <ChevronsUpDown className="size-3 opacity-40" />}
-    </button>
-  )
-}
 
 async function fetchTests(): Promise<Test[]> {
   const snap = await getDocs(collection(db, 'test_bank'))
@@ -53,7 +40,7 @@ export function TestBankPage() {
   const columns: ColumnDef<Test>[] = [
     {
       accessorKey: 'testId',
-      header: ({ column }) => <SortBtn label="#" column={column} />,
+      header: '#',
       sortUndefined: 'last',
       cell: ({ row }) => (
         <span className="text-muted-foreground text-xs font-mono">
@@ -61,22 +48,16 @@ export function TestBankPage() {
         </span>
       ),
     },
-    {
-      accessorKey: 'candidateName',
-      header: ({ column }) => <SortBtn label="Candidate" column={column} />,
-    },
-    {
-      accessorKey: 'candidateNationality',
-      header: ({ column }) => <SortBtn label="Nationality" column={column} />,
-    },
+    { accessorKey: 'candidateName', header: 'Candidate' },
+    { accessorKey: 'candidateNationality', header: 'Nationality' },
     {
       accessorKey: 'testType',
-      header: ({ column }) => <SortBtn label="Test type" column={column} />,
+      header: 'Test type',
       cell: ({ row }) => <Badge variant="outline">{row.original.testType}</Badge>,
     },
     {
       accessorKey: 'status',
-      header: ({ column }) => <SortBtn label="Status" column={column} />,
+      header: 'Status',
       cell: ({ row }) => (
         <Badge variant={row.original.status === 'active' ? 'default' : 'secondary'}>
           {row.original.status}
@@ -175,9 +156,22 @@ export function TestBankPage() {
             <TableHeader>
               {table.getHeaderGroups().map(hg => (
                 <TableRow key={hg.id}>
-                  {hg.headers.map(h => (
-                    <TableHead key={h.id}>{flexRender(h.column.columnDef.header, h.getContext())}</TableHead>
-                  ))}
+                  {hg.headers.map(h => {
+                    const canSort = h.column.getCanSort()
+                    const sorted = h.column.getIsSorted()
+                    return (
+                      <TableHead
+                        key={h.id}
+                        onClick={canSort ? h.column.getToggleSortingHandler() : undefined}
+                        className={canSort ? 'cursor-pointer select-none' : ''}
+                      >
+                        <div className="flex items-center gap-1">
+                          {flexRender(h.column.columnDef.header, h.getContext())}
+                          {canSort && (sorted === 'asc' ? <ChevronUp className="size-3" /> : sorted === 'desc' ? <ChevronDown className="size-3" /> : <ChevronsUpDown className="size-3 opacity-40" />)}
+                        </div>
+                      </TableHead>
+                    )
+                  })}
                 </TableRow>
               ))}
             </TableHeader>
