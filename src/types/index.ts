@@ -10,8 +10,19 @@ export interface Person {
   createdAt?: Timestamp
 }
 
+export interface Session {
+  id: string
+  name: string
+  type: 'refresher' | 'reliability' | 'calibration' | 'historical' | 'ad_hoc'
+  status: 'open' | 'closed' | 'published'
+  notes?: string
+  createdAt?: Timestamp
+}
+
 export interface Score {
   id: string
+  sessionId: string
+  sessionName: string
   raterId: string
   raterName: string
   testDocId: string
@@ -25,6 +36,7 @@ export interface Score {
   comprehension: number
   interactions: number
   overallLevel: number
+  published: boolean
   notes?: string
   createdAt?: Timestamp
 }

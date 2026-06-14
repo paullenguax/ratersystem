@@ -58,6 +58,7 @@ export function ScoresPage() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>Session</TableHead>
                 <TableHead>Rater</TableHead>
                 <TableHead>Test</TableHead>
                 {DIMS.map(d => (
@@ -70,6 +71,7 @@ export function ScoresPage() {
             <TableBody>
               {scores.map(s => (
                 <TableRow key={s.id}>
+                  <TableCell className="text-muted-foreground text-sm">{s.sessionName}</TableCell>
                   <TableCell className="font-medium">{s.raterName}</TableCell>
                   <TableCell className="text-muted-foreground">
                     {s.testNumber ? <span className="font-mono text-xs mr-1">#{s.testNumber}</span> : null}

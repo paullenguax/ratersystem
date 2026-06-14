@@ -5,7 +5,7 @@ import { z } from 'zod'
 import { collection, addDoc, doc, updateDoc, serverTimestamp, getDocs } from 'firebase/firestore'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { db } from '@/lib/firebase'
-import type { Person, Test, Score } from '@/types'
+import type { Person, Test, Score, Session } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -25,6 +25,7 @@ type DimKey = typeof DIMENSIONS[number]['key']
 
 const dimSchema = z.number().min(1, 'Required').max(6)
 const schema = z.object({
+  sessionId:     z.string().min(1, 'Required'),
   raterId:       z.string().min(1, 'Required'),
   testDocId:     z.string().min(1, 'Required'),
   pronunciation: dimSchema,
@@ -38,7 +39,7 @@ const schema = z.object({
 type FormData = z.infer<typeof schema>
 
 const EMPTY: FormData = {
-  raterId: '', testDocId: '',
+  sessionId: '', raterId: '', testDocId: '',
   pronunciation: 0 as number, structure: 0 as number, vocabulary: 0 as number,
   fluency: 0 as number, comprehension: 0 as number, interactions: 0 as number,
   notes: '',
@@ -60,6 +61,14 @@ async function fetchTests(): Promise<Test[]> {
     .sort((a, b) => (a.testId ?? 999) - (b.testId ?? 999))
 }
 
+async function fetchSessions(): Promise<Session[]> {
+  const snap = await getDocs(collection(db, 'sessions'))
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data() }) as Session)
+    .filter(s => s.status === 'open')
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
 function levelColour(n: number) {
   if (n >= 5) return 'text-green-700 bg-green-50'
   if (n === 4) return 'text-blue-700 bg-blue-50'
@@ -79,6 +88,7 @@ export function ScoreDrawer({ open, onClose, score }: Props) {
 
   const { data: people = [] } = useQuery({ queryKey: ['people'], queryFn: fetchPeople })
   const { data: tests = [] } = useQuery({ queryKey: ['tests'], queryFn: fetchTests })
+  const { data: sessions = [] } = useQuery({ queryKey: ['sessions'], queryFn: fetchSessions })
 
   const { register, handleSubmit, control, reset, formState: { errors, isSubmitting } } =
     useForm<FormData>({ resolver: zodResolver(schema), defaultValues: EMPTY })
@@ -91,6 +101,7 @@ export function ScoreDrawer({ open, onClose, score }: Props) {
     if (!open) return
     if (score) {
       reset({
+        sessionId: score.sessionId,
         raterId: score.raterId,
         testDocId: score.testDocId,
         pronunciation: score.pronunciation,
@@ -109,7 +120,11 @@ export function ScoreDrawer({ open, onClose, score }: Props) {
   async function onSubmit(data: FormData) {
     const rater = people.find(p => p.id === data.raterId)
     const test = tests.find(t => t.id === data.testDocId)
-    if (!rater || !test) return
+    const session = sessions.find(s => s.id === data.sessionId)
+      ?? (isEdit && score?.sessionId === data.sessionId
+          ? { id: score.sessionId, name: score.sessionName } as Session
+          : null)
+    if (!rater || !test || !session) return
 
     const overall = Math.min(
       data.pronunciation, data.structure, data.vocabulary,
@@ -117,6 +132,8 @@ export function ScoreDrawer({ open, onClose, score }: Props) {
     )
 
     const payload = {
+      sessionId: data.sessionId,
+      sessionName: session.name,
       raterId: data.raterId,
       raterName: rater.name,
       testDocId: data.testDocId,
@@ -130,6 +147,7 @@ export function ScoreDrawer({ open, onClose, score }: Props) {
       comprehension: data.comprehension,
       interactions: data.interactions,
       overallLevel: overall,
+      published: false,
       notes: data.notes ?? '',
     }
 
@@ -151,13 +169,40 @@ export function ScoreDrawer({ open, onClose, score }: Props) {
         </SheetHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5 py-4">
+
+          {/* Session */}
+          <div className="space-y-1">
+            <Label>Session</Label>
+            <Controller name="sessionId" control={control} render={({ field }) => (
+              <Select value={field.value} onValueChange={field.onChange}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select session…">
+                    {sessions.find(s => s.id === field.value)?.name
+                      ?? (isEdit ? score?.sessionName : undefined)}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  {sessions.length === 0
+                    ? <div className="px-3 py-2 text-sm text-muted-foreground">No open sessions — create one first.</div>
+                    : sessions.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)
+                  }
+                </SelectContent>
+              </Select>
+            )} />
+            {errors.sessionId && <p className="text-xs text-destructive">{errors.sessionId.message}</p>}
+          </div>
+
           {/* Rater */}
           <div className="space-y-1">
             <Label>Rater</Label>
             <Controller name="raterId" control={control} render={({ field }) => (
               <Select value={field.value} onValueChange={field.onChange}>
-                <SelectTrigger><SelectValue placeholder="Select rater…" /></SelectTrigger>
-                <SelectContent>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select rater…">
+                    {people.find(p => p.id === field.value)?.name}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
                   {people.map(p => (
                     <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                   ))}
@@ -170,18 +215,25 @@ export function ScoreDrawer({ open, onClose, score }: Props) {
           {/* Test */}
           <div className="space-y-1">
             <Label>Test</Label>
-            <Controller name="testDocId" control={control} render={({ field }) => (
-              <Select value={field.value} onValueChange={field.onChange}>
-                <SelectTrigger><SelectValue placeholder="Select test…" /></SelectTrigger>
-                <SelectContent>
-                  {tests.map(t => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.testId ? `#${t.testId} – ` : ''}{t.candidateName} ({t.testType})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )} />
+            <Controller name="testDocId" control={control} render={({ field }) => {
+              const t = tests.find(t => t.id === field.value)
+              return (
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select test…">
+                      {t ? `${t.testId ? `#${t.testId} – ` : ''}${t.candidateName} (${t.testType})` : undefined}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72 w-[32rem]">
+                    {tests.map(t => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.testId ? `#${t.testId} – ` : ''}{t.candidateName} ({t.testType})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )
+            }} />
             {errors.testDocId && <p className="text-xs text-destructive">{errors.testDocId.message}</p>}
           </div>
 
