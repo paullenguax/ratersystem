@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import {
-  collection, getDocs, writeBatch, doc, serverTimestamp,
+  collection, getDocs, writeBatch, doc, serverTimestamp, updateDoc,
 } from 'firebase/firestore'
 import { useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, Upload } from 'lucide-react'
@@ -99,12 +99,23 @@ export function ImportTestsPage() {
     if (!rows) return
     setImporting(true)
     try {
-      // Check which recording URLs already exist
+      // Build a map of existing docs by recordingUrl
       const snap = await getDocs(collection(db, 'test_bank'))
-      const existingUrls = new Set(snap.docs.map(d => d.data().recordingUrl as string))
+      const urlToDocId = new Map(snap.docs.map(d => [d.data().recordingUrl as string, d.id]))
 
-      const toAdd = rows.filter(r => !existingUrls.has(r.recordingUrl))
+      const toAdd = rows.filter(r => !urlToDocId.has(r.recordingUrl))
+      const toUpdate = rows.filter(r => urlToDocId.has(r.recordingUrl))
 
+      // Patch existing records to add testId (and correct testType if changed)
+      for (const row of toUpdate) {
+        const docId = urlToDocId.get(row.recordingUrl)!
+        await updateDoc(doc(db, 'test_bank', docId), {
+          testId: row.testId,
+          testType: types[row.testId] ?? row.testType,
+        })
+      }
+
+      // Add new records
       for (let i = 0; i < toAdd.length; i += 499) {
         const chunk = toAdd.slice(i, i + 499)
         const batch = writeBatch(db)
@@ -128,7 +139,7 @@ export function ImportTestsPage() {
       }
 
       queryClient.invalidateQueries({ queryKey: ['tests'] })
-      setResult({ added: toAdd.length, skipped: rows.length - toAdd.length })
+      setResult({ added: toAdd.length, skipped: toUpdate.length })
     } finally {
       setImporting(false)
     }
@@ -218,7 +229,7 @@ export function ImportTestsPage() {
               {result.added} {result.added === 1 ? 'test' : 'tests'} imported.
             </p>
             {result.skipped > 0 && (
-              <p className="text-green-700">{result.skipped} skipped (already in database).</p>
+              <p className="text-green-700">{result.skipped} existing records patched with test number.</p>
             )}
           </div>
           <Button variant="outline" size="sm" className="ml-auto" onClick={() => { setRows(null); setResult(null) }}>

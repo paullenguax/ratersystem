@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { collection, addDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore'
+import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage'
 import { useQueryClient } from '@tanstack/react-query'
-import { db } from '@/lib/firebase'
+import { Upload } from 'lucide-react'
+import { db, storage } from '@/lib/firebase'
 import type { Test } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -42,10 +44,29 @@ export function TestDrawer({ open, onClose, test }: Props) {
   const isEdit = !!test
   const [previewUrl, setPreviewUrl] = useState('')
 
-  const { register, handleSubmit, control, reset, watch, formState: { errors, isSubmitting } } =
+  const { register, handleSubmit, control, reset, watch, setValue, formState: { errors, isSubmitting } } =
     useForm<FormData>({ resolver: zodResolver(schema), defaultValues: EMPTY })
 
   const recordingUrlValue = watch('recordingUrl')
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null)
+
+  function handleFileUpload(file: File) {
+    const path = `tests/${Date.now()}_${file.name}`
+    const ref = storageRef(storage, path)
+    const task = uploadBytesResumable(ref, file)
+    setUploadProgress(0)
+    task.on(
+      'state_changed',
+      snap => setUploadProgress(Math.round((snap.bytesTransferred / snap.totalBytes) * 100)),
+      () => setUploadProgress(null),
+      async () => {
+        const url = await getDownloadURL(task.snapshot.ref)
+        setValue('recordingUrl', url, { shouldValidate: true })
+        setUploadProgress(null)
+      },
+    )
+  }
 
   useEffect(() => {
     if (open) {
@@ -99,8 +120,32 @@ export function TestDrawer({ open, onClose, test }: Props) {
             <p className="text-xs text-muted-foreground">Test #{test.testId}</p>
           )}
           <div className="space-y-1">
-            <Label>Recording URL</Label>
-            <Input {...register('recordingUrl')} placeholder="https://…" />
+            <Label>Recording</Label>
+            <div className="flex gap-2">
+              <Input {...register('recordingUrl')} placeholder="https://… or upload below" className="flex-1" />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                title="Upload audio file"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadProgress !== null}
+              >
+                <Upload className="size-4" />
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="audio/*"
+                className="sr-only"
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleFileUpload(f) }}
+              />
+            </div>
+            {uploadProgress !== null && (
+              <div className="w-full bg-muted rounded-full h-1.5 mt-1">
+                <div className="bg-primary h-1.5 rounded-full transition-all" style={{ width: `${uploadProgress}%` }} />
+              </div>
+            )}
             {errors.recordingUrl && <p className="text-xs text-destructive">{errors.recordingUrl.message}</p>}
             {previewUrl && <audio controls src={previewUrl} className="w-full mt-1" />}
           </div>
