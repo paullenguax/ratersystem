@@ -154,6 +154,9 @@ export function parseRaterCSV(csvText: string): ParseResult {
       names.push(name)
     }
 
+    // Only index by name key if the email is valid — bad-email records
+    // must not pollute the dual-email detection for valid records.
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return
     const nk = makeNameKey(name)
     if (nk.length < 8) return
     if (!byNameKey.has(nk)) byNameKey.set(nk, [])
@@ -203,7 +206,10 @@ export function parseRaterCSV(csvText: string): ParseResult {
       if (dualEmails.length > 0) allFlags.push('dual_email')
 
       const suggestedName = autoFix(primaryName, flags)
-      const suggestedAlts = altNames.map(n => autoFix(n, detectFlags(n, email)))
+      const suggestedAlts = altNames
+        .map(n => autoFix(n, detectFlags(n, email)))
+        // Drop alts that are blank or identical to the canonical name
+        .filter(n => n && n.toLowerCase() !== suggestedName.toLowerCase())
 
       review.push({
         id: `rv${++_id}`,

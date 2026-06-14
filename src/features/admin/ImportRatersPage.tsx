@@ -3,9 +3,7 @@ import {
   collection, getDocs, writeBatch, doc, serverTimestamp,
 } from 'firebase/firestore'
 import { useQueryClient } from '@tanstack/react-query'
-import {
-  CheckCircle2, XCircle, AlertTriangle, Upload, ChevronDown, ChevronUp,
-} from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Upload, ChevronDown, ChevronUp } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { parseRaterCSV, type ParseResult, type ReviewRecord, type ParseFlag } from '@/lib/csvParser'
 import type { Person } from '@/types'
@@ -63,96 +61,99 @@ function ReviewCard({
   onChange: (d: Decision) => void
 }) {
   const isBadEmail = record.flags.includes('bad_email')
+  const isOneWord = record.flags.includes('one_word')
 
   return (
-    <div
-      className={`rounded-lg border p-3 space-y-2 transition-opacity ${
-        decision.included ? '' : 'opacity-40'
-      }`}
-    >
-      {/* header row */}
+    <div className={`rounded-lg border p-3 space-y-2 ${decision.included ? '' : 'bg-muted/30'}`}>
+      {/* header: name input + action button */}
       <div className="flex items-start gap-2">
-        <button
-          type="button"
-          disabled={isBadEmail}
-          onClick={() => onChange({ ...decision, included: !decision.included })}
-          className="mt-0.5 shrink-0 disabled:cursor-not-allowed"
-          title={decision.included ? 'Click to exclude' : 'Click to include'}
-        >
-          {decision.included ? (
-            <CheckCircle2 className="size-5 text-green-500" />
+        <div className="flex-1 min-w-0 space-y-0.5">
+          {isBadEmail ? (
+            <p className="font-medium text-sm">{decision.name || '(no name)'}</p>
           ) : (
-            <XCircle className="size-5 text-muted-foreground" />
+            <Input
+              value={decision.name}
+              onChange={e => onChange({ ...decision, name: e.target.value })}
+              className="h-8 text-sm font-medium"
+              placeholder="Enter full name…"
+            />
           )}
-        </button>
-
-        <div className="flex-1 min-w-0 space-y-1">
-          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-            <span className="font-medium text-sm">{decision.name || '(no name)'}</span>
-            <span className="text-xs text-muted-foreground font-mono">{record.email}</span>
-          </div>
-          <div className="flex gap-1 flex-wrap">
-            {record.flags.map(f => (
-              <span
-                key={f}
-                className={`text-xs px-1.5 py-0.5 rounded border font-medium ${FLAG_COLOUR[f]}`}
-              >
-                {FLAG_LABEL[f]}
-              </span>
-            ))}
-          </div>
+          <p className="text-xs text-muted-foreground font-mono pl-0.5">{record.email}</p>
         </div>
+
+        {isBadEmail ? (
+          <span className="text-xs font-medium text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1 shrink-0 mt-0.5">
+            Cannot import
+          </span>
+        ) : (
+          <Button
+            type="button"
+            size="sm"
+            variant={decision.included ? 'default' : 'outline'}
+            className="shrink-0 mt-0.5"
+            onClick={() => onChange({ ...decision, included: !decision.included })}
+          >
+            {decision.included ? '✓ Include' : 'Exclude'}
+          </Button>
+        )}
       </div>
 
-      {/* editable name field */}
-      {(record.flags.includes('annotation') ||
-        record.flags.includes('all_caps') ||
-        record.flags.includes('one_word')) && (
-        <div className="ml-7 space-y-0.5">
-          <p className="text-xs text-muted-foreground">Edit canonical name:</p>
-          <Input
-            value={decision.name}
-            onChange={e => onChange({ ...decision, name: e.target.value })}
-            className="h-7 text-sm"
-          />
-        </div>
+      {/* flag badges */}
+      <div className="flex gap-1 flex-wrap">
+        {record.flags.map(f => (
+          <span
+            key={f}
+            className={`text-xs px-1.5 py-0.5 rounded border font-medium ${FLAG_COLOUR[f]}`}
+          >
+            {FLAG_LABEL[f]}
+          </span>
+        ))}
+      </div>
+
+      {/* per-flag help text */}
+      {isBadEmail && (
+        <p className="text-xs text-red-600">
+          Email is invalid (contains a slash or spaces). Add this person manually via the People page.
+        </p>
+      )}
+      {isOneWord && !isBadEmail && (
+        <p className="text-xs text-amber-700">
+          Name looks incomplete — type a surname in the field above, then click <strong>Exclude → Include</strong> to add them.
+        </p>
       )}
 
-      {/* name conflict: pick alternative */}
+      {/* alt names for name_conflict */}
       {record.altNames.length > 0 && (
-        <div className="ml-7 text-xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           Also seen as:{' '}
           {record.altNames.map((n, i) => (
             <button
               key={i}
               type="button"
-              className="underline mx-1 hover:text-foreground"
+              className="underline font-medium text-foreground hover:text-primary mx-1"
               onClick={() => onChange({ ...decision, name: n })}
             >
               {n}
             </button>
           ))}
-        </div>
+          — click to use that name instead.
+        </p>
       )}
 
-      {/* dual-email warning */}
-      {record.dualEmails.length > 0 && (
-        <div className="ml-7 flex items-start gap-1 text-xs text-amber-700">
+      {/* dual-email warning — only for non-bad-email items */}
+      {!isBadEmail && record.dualEmails.length > 0 && (
+        <div className="flex items-start gap-1 text-xs text-amber-700">
           <AlertTriangle className="size-3 mt-0.5 shrink-0" />
           <span>
-            Same name also appears at:{' '}
+            This name also appears at:{' '}
             {record.dualEmails.map((e, i) => (
-              <span key={i} className="font-mono">{e}{i < record.dualEmails.length - 1 ? ', ' : ''}</span>
+              <span key={i} className="font-mono">
+                {e}
+                {i < record.dualEmails.length - 1 ? ', ' : ''}
+              </span>
             ))}
-            {' '}— keep both or exclude one.
+            {' '}— if it's the same person, click <strong>Exclude</strong> on one of them.
           </span>
-        </div>
-      )}
-
-      {/* bad email note */}
-      {isBadEmail && (
-        <div className="ml-7 text-xs text-red-600">
-          Original value: <span className="font-mono">{record.email}</span> — fix manually in People page after import.
         </div>
       )}
     </div>
