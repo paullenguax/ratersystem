@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { collection, getDocs } from 'firebase/firestore'
-import { useReactTable, getCoreRowModel, getSortedRowModel, flexRender, type ColumnDef, type SortingState } from '@tanstack/react-table'
+import { useReactTable, getCoreRowModel, getSortedRowModel, flexRender, type ColumnDef, type SortingState, type Column } from '@tanstack/react-table'
 import { Plus, Play, Square, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import type { Test } from '@/types'
@@ -11,6 +11,19 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+
+function SortBtn({ label, column }: { label: string; column: Column<Test> }) {
+  const sorted = column.getIsSorted()
+  return (
+    <button
+      className="flex items-center gap-1 hover:text-foreground transition-colors"
+      onClick={column.getToggleSortingHandler()}
+    >
+      {label}
+      {sorted === 'asc' ? <ChevronUp className="size-3" /> : sorted === 'desc' ? <ChevronDown className="size-3" /> : <ChevronsUpDown className="size-3 opacity-40" />}
+    </button>
+  )
+}
 
 async function fetchTests(): Promise<Test[]> {
   const snap = await getDocs(collection(db, 'test_bank'))
@@ -37,25 +50,10 @@ export function TestBankPage() {
     )
   }), [tests, search, typeFilter, statusFilter])
 
-  function SortHeader({ label, columnId }: { label: string; columnId: string }) {
-    const col = table.getColumn(columnId)
-    if (!col) return <>{label}</>
-    const sorted = col.getIsSorted()
-    return (
-      <button
-        className="flex items-center gap-1 hover:text-foreground transition-colors"
-        onClick={col.getToggleSortingHandler()}
-      >
-        {label}
-        {sorted === 'asc' ? <ChevronUp className="size-3" /> : sorted === 'desc' ? <ChevronDown className="size-3" /> : <ChevronsUpDown className="size-3 opacity-40" />}
-      </button>
-    )
-  }
-
   const columns: ColumnDef<Test>[] = [
     {
       accessorKey: 'testId',
-      header: () => <SortHeader label="#" columnId="testId" />,
+      header: ({ column }) => <SortBtn label="#" column={column} />,
       sortUndefined: 'last',
       cell: ({ row }) => (
         <span className="text-muted-foreground text-xs font-mono">
@@ -65,20 +63,20 @@ export function TestBankPage() {
     },
     {
       accessorKey: 'candidateName',
-      header: () => <SortHeader label="Candidate" columnId="candidateName" />,
+      header: ({ column }) => <SortBtn label="Candidate" column={column} />,
     },
     {
       accessorKey: 'candidateNationality',
-      header: () => <SortHeader label="Nationality" columnId="candidateNationality" />,
+      header: ({ column }) => <SortBtn label="Nationality" column={column} />,
     },
     {
       accessorKey: 'testType',
-      header: () => <SortHeader label="Test type" columnId="testType" />,
+      header: ({ column }) => <SortBtn label="Test type" column={column} />,
       cell: ({ row }) => <Badge variant="outline">{row.original.testType}</Badge>,
     },
     {
       accessorKey: 'status',
-      header: () => <SortHeader label="Status" columnId="status" />,
+      header: ({ column }) => <SortBtn label="Status" column={column} />,
       cell: ({ row }) => (
         <Badge variant={row.original.status === 'active' ? 'default' : 'secondary'}>
           {row.original.status}
