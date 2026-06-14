@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { collection, getDocs } from 'firebase/firestore'
-import { useReactTable, getCoreRowModel, flexRender, type ColumnDef } from '@tanstack/react-table'
-import { Plus } from 'lucide-react'
+import { useReactTable, getCoreRowModel, getSortedRowModel, flexRender, type ColumnDef, type SortingState } from '@tanstack/react-table'
+import { Plus, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import type { Person } from '@/types'
 import { PersonDrawer } from './PersonDrawer'
@@ -18,6 +18,8 @@ const ROLE_LABELS: Record<Person['role'], string> = {
   trainee: 'Trainee',
 }
 
+const ROLE_ORDER: Record<Person['role'], number> = { admin: 0, senior_rater: 1, trainee: 2 }
+
 async function fetchPeople(): Promise<Person[]> {
   const snap = await getDocs(collection(db, 'people'))
   return snap.docs.map(d => ({ id: d.id, ...d.data() }) as Person)
@@ -27,8 +29,10 @@ export function PeoplePage() {
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState<'all' | Person['role']>('all')
   const [statusFilter, setStatusFilter] = useState<'all' | Person['status']>('all')
+  const [hideTrainees, setHideTrainees] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [selectedPerson, setSelectedPerson] = useState<Person | undefined>()
+  const [sorting, setSorting] = useState<SortingState>([{ id: 'role', desc: false }])
 
   const { data: people = [], isLoading } = useQuery({ queryKey: ['people'], queryFn: fetchPeople })
 
@@ -37,25 +41,45 @@ export function PeoplePage() {
     return (
       (s === '' || p.name.toLowerCase().includes(s) || p.email.toLowerCase().includes(s)) &&
       (roleFilter === 'all' || p.role === roleFilter) &&
-      (statusFilter === 'all' || p.status === statusFilter)
+      (statusFilter === 'all' || p.status === statusFilter) &&
+      !(hideTrainees && p.role === 'trainee')
     )
-  }), [people, search, roleFilter, statusFilter])
+  }), [people, search, roleFilter, statusFilter, hideTrainees])
+
+  function SortHeader({ label, columnId }: { label: string; columnId: string }) {
+    const col = table.getColumn(columnId)
+    if (!col) return <>{label}</>
+    const sorted = col.getIsSorted()
+    return (
+      <button
+        className="flex items-center gap-1 hover:text-foreground transition-colors"
+        onClick={col.getToggleSortingHandler()}
+      >
+        {label}
+        {sorted === 'asc' ? <ChevronUp className="size-3" /> : sorted === 'desc' ? <ChevronDown className="size-3" /> : <ChevronsUpDown className="size-3 opacity-40" />}
+      </button>
+    )
+  }
 
   const columns: ColumnDef<Person>[] = [
-    { accessorKey: 'name', header: 'Name' },
+    {
+      accessorKey: 'name',
+      header: () => <SortHeader label="Name" columnId="name" />,
+    },
     {
       accessorKey: 'email',
-      header: 'Email',
+      header: () => <SortHeader label="Email" columnId="email" />,
       cell: ({ row }) => <span className="text-muted-foreground">{row.original.email}</span>,
     },
     {
       accessorKey: 'role',
-      header: 'Role',
+      header: () => <SortHeader label="Role" columnId="role" />,
+      sortingFn: (a, b) => ROLE_ORDER[a.original.role] - ROLE_ORDER[b.original.role],
       cell: ({ row }) => <Badge variant="secondary">{ROLE_LABELS[row.original.role]}</Badge>,
     },
     {
       accessorKey: 'status',
-      header: 'Status',
+      header: () => <SortHeader label="Status" columnId="status" />,
       cell: ({ row }) => {
         const colours = {
           active: 'bg-green-100 text-green-800',
@@ -83,7 +107,14 @@ export function PeoplePage() {
     },
   ]
 
-  const table = useReactTable({ data: filtered, columns, getCoreRowModel: getCoreRowModel() })
+  const table = useReactTable({
+    data: filtered,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    state: { sorting },
+    onSortingChange: setSorting,
+  })
 
   return (
     <div className="space-y-4">
@@ -94,7 +125,7 @@ export function PeoplePage() {
         </Button>
       </div>
 
-      <div className="flex gap-2 flex-wrap">
+      <div className="flex gap-2 flex-wrap items-center">
         <Input
           placeholder="Search name or email…"
           value={search}
@@ -119,6 +150,12 @@ export function PeoplePage() {
             <SelectItem value="suspended">Suspended</SelectItem>
           </SelectContent>
         </Select>
+        <button
+          onClick={() => setHideTrainees(h => !h)}
+          className={`text-sm px-3 py-1.5 rounded-md border transition-colors ${hideTrainees ? 'bg-primary text-primary-foreground border-primary' : 'border-input text-muted-foreground hover:text-foreground'}`}
+        >
+          {hideTrainees ? 'Showing seniors only' : 'Hide trainees'}
+        </button>
       </div>
 
       {isLoading ? (
