@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { collection, getDocs } from 'firebase/firestore'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { collection, getDocs, query, where, writeBatch, doc, updateDoc } from 'firebase/firestore'
 import { Plus } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import type { Assignment } from '@/types'
@@ -29,11 +29,37 @@ async function fetchAssignments(): Promise<Assignment[]> {
 export function AssignmentsPage() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [selected, setSelected] = useState<Assignment | undefined>()
+  const [publishing, setPublishing] = useState<string | null>(null)
+  const queryClient = useQueryClient()
 
   const { data: assignments = [], isLoading } = useQuery({ queryKey: ['assignments'], queryFn: fetchAssignments })
 
   function openAdd() { setSelected(undefined); setDrawerOpen(true) }
   function openEdit(a: Assignment) { setSelected(a); setDrawerOpen(true) }
+
+  async function publishAssignment(a: Assignment) {
+    if (!window.confirm(`Publish ${a.raterName}'s scores from "${a.sessionName}"?\n\nThis will add all their scores to the main pool. This cannot be undone.`)) return
+    setPublishing(a.id)
+    try {
+      // Fetch all scores for this assignment
+      const snap = await getDocs(query(collection(db, 'scores'), where('assignmentId', '==', a.id)))
+
+      // Batch-update scores to published
+      for (let i = 0; i < snap.docs.length; i += 499) {
+        const batch = writeBatch(db)
+        snap.docs.slice(i, i + 499).forEach(d => batch.update(d.ref, { published: true }))
+        await batch.commit()
+      }
+
+      // Mark assignment as published
+      await updateDoc(doc(db, 'assignments', a.id), { status: 'published' })
+
+      queryClient.invalidateQueries({ queryKey: ['assignments'] })
+      queryClient.invalidateQueries({ queryKey: ['scores'] })
+    } finally {
+      setPublishing(null)
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -74,7 +100,19 @@ export function AssignmentsPage() {
                   </TableCell>
                   <TableCell className="text-muted-foreground text-sm max-w-xs truncate">{a.notes}</TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="sm" onClick={() => openEdit(a)}>Edit</Button>
+                    <div className="flex items-center gap-2">
+                      {a.status !== 'published' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={publishing === a.id}
+                          onClick={() => publishAssignment(a)}
+                        >
+                          {publishing === a.id ? 'Publishing…' : 'Publish'}
+                        </Button>
+                      )}
+                      <Button variant="ghost" size="sm" onClick={() => openEdit(a)}>Edit</Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
