@@ -1,8 +1,37 @@
+import { Link } from 'react-router-dom'
+import { Upload } from 'lucide-react'
+
+const tools = [
+  {
+    to: '/admin/import-raters',
+    icon: Upload,
+    label: 'Import Raters',
+    description: 'Bulk-import raters from a certificate CSV file with deduplication review.',
+  },
+]
+
 export function AdminPage() {
   return (
-    <div>
-      <h1 className="text-2xl font-semibold mb-1">Admin</h1>
-      <p className="text-muted-foreground text-sm">Coming soon.</p>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold">Admin Tools</h1>
+        <p className="text-sm text-muted-foreground mt-1">Utilities for managing the system.</p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {tools.map(tool => (
+          <Link
+            key={tool.to}
+            to={tool.to}
+            className="flex items-start gap-4 p-4 rounded-lg border hover:bg-muted/50 transition-colors"
+          >
+            <tool.icon className="size-5 mt-0.5 text-muted-foreground shrink-0" />
+            <div>
+              <p className="font-medium text-sm">{tool.label}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{tool.description}</p>
+            </div>
+          </Link>
+        ))}
+      </div>
     </div>
   )
 }

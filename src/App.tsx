@@ -14,6 +14,7 @@ import { ScoringPage } from '@/features/scoring/ScoringPage'
 import { StatisticsPage } from '@/features/statistics/StatisticsPage'
 import { ReportsPage } from '@/features/reports/ReportsPage'
 import { AdminPage } from '@/features/admin/AdminPage'
+import { ImportRatersPage } from '@/features/admin/ImportRatersPage'
 
 const queryClient = new QueryClient()
 
@@ -42,6 +43,7 @@ export default function App() {
                 <Route path="statistics"  element={<ProtectedRoute allowedRoles={['admin']}><StatisticsPage /></ProtectedRoute>} />
                 <Route path="reports"     element={<ProtectedRoute allowedRoles={['admin']}><ReportsPage /></ProtectedRoute>} />
                 <Route path="admin"       element={<ProtectedRoute allowedRoles={['admin']}><AdminPage /></ProtectedRoute>} />
+                <Route path="admin/import-raters" element={<ProtectedRoute allowedRoles={['admin']}><ImportRatersPage /></ProtectedRoute>} />
               </Route>
 
               <Route path="*" element={<Navigate to="/" replace />} />
