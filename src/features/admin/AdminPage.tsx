@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Upload } from 'lucide-react'
+import { Upload, FileAudio } from 'lucide-react'
 
 const tools = [
   {
@@ -7,6 +7,12 @@ const tools = [
     icon: Upload,
     label: 'Import Raters',
     description: 'Bulk-import raters from a certificate CSV file with deduplication review.',
+  },
+  {
+    to: '/admin/import-tests',
+    icon: FileAudio,
+    label: 'Import Test Bank',
+    description: 'Import tests from the migration JSON export. Review and fix test types before committing.',
   },
 ]
 
