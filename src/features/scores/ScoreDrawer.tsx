@@ -5,7 +5,7 @@ import { z } from 'zod'
 import { collection, addDoc, doc, updateDoc, serverTimestamp, getDocs } from 'firebase/firestore'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { db } from '@/lib/firebase'
-import type { Person, Test, Score, Session } from '@/types'
+import type { Assignment, Test, Score } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -20,13 +20,11 @@ const DIMENSIONS = [
   { key: 'comprehension',  label: 'Comprehension' },
   { key: 'interactions',   label: 'Interactions' },
 ] as const
-
 type DimKey = typeof DIMENSIONS[number]['key']
 
 const dimSchema = z.number().min(1, 'Required').max(6)
 const schema = z.object({
-  sessionId:     z.string().min(1, 'Required'),
-  raterId:       z.string().min(1, 'Required'),
+  assignmentId:  z.string().min(1, 'Required'),
   testDocId:     z.string().min(1, 'Required'),
   pronunciation: dimSchema,
   structure:     dimSchema,
@@ -39,34 +37,25 @@ const schema = z.object({
 type FormData = z.infer<typeof schema>
 
 const EMPTY: FormData = {
-  sessionId: '', raterId: '', testDocId: '',
+  assignmentId: '', testDocId: '',
   pronunciation: 0 as number, structure: 0 as number, vocabulary: 0 as number,
   fluency: 0 as number, comprehension: 0 as number, interactions: 0 as number,
   notes: '',
 }
 
-async function fetchPeople(): Promise<Person[]> {
-  const snap = await getDocs(collection(db, 'people'))
+async function fetchAssignments(): Promise<Assignment[]> {
+  const snap = await getDocs(collection(db, 'assignments'))
   return snap.docs
-    .map(d => ({ id: d.id, ...d.data() }) as Person)
-    .filter(p => p.status === 'active')
-    .sort((a, b) => a.name.localeCompare(b.name))
+    .map(d => ({ id: d.id, ...d.data() }) as Assignment)
+    .filter(a => a.status !== 'published')
+    .sort((a, b) => a.sessionName.localeCompare(b.sessionName) || a.raterName.localeCompare(b.raterName))
 }
 
 async function fetchTests(): Promise<Test[]> {
   const snap = await getDocs(collection(db, 'test_bank'))
   return snap.docs
     .map(d => ({ id: d.id, ...d.data() }) as Test)
-    .filter(t => t.status === 'active')
     .sort((a, b) => (a.testId ?? 999) - (b.testId ?? 999))
-}
-
-async function fetchSessions(): Promise<Session[]> {
-  const snap = await getDocs(collection(db, 'sessions'))
-  return snap.docs
-    .map(d => ({ id: d.id, ...d.data() }) as Session)
-    .filter(s => s.status === 'open')
-    .sort((a, b) => a.name.localeCompare(b.name))
 }
 
 function levelColour(n: number) {
@@ -76,40 +65,44 @@ function levelColour(n: number) {
   return 'text-red-700 bg-red-50'
 }
 
-interface Props {
-  open: boolean
-  onClose: () => void
-  score?: Score
-}
+interface Props { open: boolean; onClose: () => void; score?: Score }
 
 export function ScoreDrawer({ open, onClose, score }: Props) {
   const queryClient = useQueryClient()
   const isEdit = !!score
 
-  const { data: people = [] } = useQuery({ queryKey: ['people'], queryFn: fetchPeople })
-  const { data: tests = [] } = useQuery({ queryKey: ['tests'], queryFn: fetchTests })
-  const { data: sessions = [] } = useQuery({ queryKey: ['sessions'], queryFn: fetchSessions })
+  const { data: assignments = [] } = useQuery({ queryKey: ['assignments'], queryFn: fetchAssignments })
+  const { data: allTests = [] } = useQuery({ queryKey: ['tests'], queryFn: fetchTests })
 
-  const { register, handleSubmit, control, reset, formState: { errors, isSubmitting } } =
+  const { register, handleSubmit, control, reset, setValue, formState: { errors, isSubmitting } } =
     useForm<FormData>({ resolver: zodResolver(schema), defaultValues: EMPTY })
 
+  const assignmentId = useWatch({ control, name: 'assignmentId' })
   const watched = useWatch({ control, name: ['pronunciation', 'structure', 'vocabulary', 'fluency', 'comprehension', 'interactions'] })
+
+  const activeAssignment = assignments.find(a => a.id === assignmentId)
+    ?? (isEdit ? { id: score!.assignmentId, sessionName: score!.sessionName, raterName: score!.raterName, testDocIds: [] } as unknown as Assignment : undefined)
+
+  // Tests available for the selected assignment
+  const assignedTests = activeAssignment?.testDocIds.length
+    ? allTests.filter(t => activeAssignment.testDocIds.includes(t.id))
+    : allTests
+
   const allSet = watched.every(v => v >= 1)
   const overallLevel = allSet ? Math.min(...watched) : null
+
+  // Clear test when assignment changes
+  useEffect(() => { setValue('testDocId', '') }, [assignmentId, setValue])
 
   useEffect(() => {
     if (!open) return
     if (score) {
       reset({
-        sessionId: score.sessionId,
-        raterId: score.raterId,
+        assignmentId: score.assignmentId,
         testDocId: score.testDocId,
-        pronunciation: score.pronunciation,
-        structure: score.structure,
-        vocabulary: score.vocabulary,
-        fluency: score.fluency,
-        comprehension: score.comprehension,
-        interactions: score.interactions,
+        pronunciation: score.pronunciation, structure: score.structure,
+        vocabulary: score.vocabulary, fluency: score.fluency,
+        comprehension: score.comprehension, interactions: score.interactions,
         notes: score.notes ?? '',
       })
     } else {
@@ -118,13 +111,12 @@ export function ScoreDrawer({ open, onClose, score }: Props) {
   }, [open, score, reset])
 
   async function onSubmit(data: FormData) {
-    const rater = people.find(p => p.id === data.raterId)
-    const test = tests.find(t => t.id === data.testDocId)
-    const session = sessions.find(s => s.id === data.sessionId)
-      ?? (isEdit && score?.sessionId === data.sessionId
-          ? { id: score.sessionId, name: score.sessionName } as Session
+    const assignment = assignments.find(a => a.id === data.assignmentId)
+      ?? (isEdit && score?.assignmentId === data.assignmentId
+          ? { id: score!.assignmentId, sessionId: score!.sessionId, sessionName: score!.sessionName, raterId: score!.raterId, raterName: score!.raterName } as Assignment
           : null)
-    if (!rater || !test || !session) return
+    const test = allTests.find(t => t.id === data.testDocId)
+    if (!assignment || !test) return
 
     const overall = Math.min(
       data.pronunciation, data.structure, data.vocabulary,
@@ -132,27 +124,25 @@ export function ScoreDrawer({ open, onClose, score }: Props) {
     )
 
     const payload = {
-      sessionId: data.sessionId,
-      sessionName: session.name,
-      raterId: data.raterId,
-      raterName: rater.name,
+      assignmentId: data.assignmentId,
+      sessionId: assignment.sessionId,
+      sessionName: assignment.sessionName,
+      raterId: assignment.raterId,
+      raterName: assignment.raterName,
       testDocId: data.testDocId,
       testNumber: test.testId ?? null,
       candidateName: test.candidateName,
       testType: test.testType,
-      pronunciation: data.pronunciation,
-      structure: data.structure,
-      vocabulary: data.vocabulary,
-      fluency: data.fluency,
-      comprehension: data.comprehension,
-      interactions: data.interactions,
+      pronunciation: data.pronunciation, structure: data.structure,
+      vocabulary: data.vocabulary, fluency: data.fluency,
+      comprehension: data.comprehension, interactions: data.interactions,
       overallLevel: overall,
       published: false,
       notes: data.notes ?? '',
     }
 
     if (isEdit) {
-      await updateDoc(doc(db, 'scores', score.id), payload)
+      await updateDoc(doc(db, 'scores', score!.id), payload)
     } else {
       await addDoc(collection(db, 'scores'), { ...payload, createdAt: serverTimestamp() })
     }
@@ -170,62 +160,45 @@ export function ScoreDrawer({ open, onClose, score }: Props) {
 
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5 py-4">
 
-          {/* Session */}
+          {/* Assignment */}
           <div className="space-y-1">
-            <Label>Session</Label>
-            <Controller name="sessionId" control={control} render={({ field }) => (
+            <Label>Assignment</Label>
+            <Controller name="assignmentId" control={control} render={({ field }) => (
               <Select value={field.value} onValueChange={field.onChange}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select session…">
-                    {sessions.find(s => s.id === field.value)?.name
-                      ?? (isEdit ? score?.sessionName : undefined)}
+                  <SelectValue placeholder="Select assignment…">
+                    {activeAssignment ? `${activeAssignment.raterName} — ${activeAssignment.sessionName}` : undefined}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent className="max-h-72">
-                  {sessions.length === 0
-                    ? <div className="px-3 py-2 text-sm text-muted-foreground">No open sessions — create one first.</div>
-                    : sessions.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)
+                  {assignments.length === 0
+                    ? <div className="px-3 py-2 text-sm text-muted-foreground">No active assignments.</div>
+                    : assignments.map(a => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.raterName} — {a.sessionName}
+                      </SelectItem>
+                    ))
                   }
                 </SelectContent>
               </Select>
             )} />
-            {errors.sessionId && <p className="text-xs text-destructive">{errors.sessionId.message}</p>}
+            {errors.assignmentId && <p className="text-xs text-destructive">{errors.assignmentId.message}</p>}
           </div>
 
-          {/* Rater */}
-          <div className="space-y-1">
-            <Label>Rater</Label>
-            <Controller name="raterId" control={control} render={({ field }) => (
-              <Select value={field.value} onValueChange={field.onChange}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select rater…">
-                    {people.find(p => p.id === field.value)?.name}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent className="max-h-72">
-                  {people.map(p => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )} />
-            {errors.raterId && <p className="text-xs text-destructive">{errors.raterId.message}</p>}
-          </div>
-
-          {/* Test */}
+          {/* Test — filtered to assignment's tests */}
           <div className="space-y-1">
             <Label>Test</Label>
             <Controller name="testDocId" control={control} render={({ field }) => {
-              const t = tests.find(t => t.id === field.value)
+              const t = allTests.find(t => t.id === field.value)
               return (
                 <Select value={field.value} onValueChange={field.onChange}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select test…">
+                    <SelectValue placeholder={assignmentId ? 'Select test…' : 'Select assignment first…'}>
                       {t ? `${t.testId ? `#${t.testId} – ` : ''}${t.candidateName} (${t.testType})` : undefined}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent className="max-h-72 w-[32rem]">
-                    {tests.map(t => (
+                    {assignedTests.map(t => (
                       <SelectItem key={t.id} value={t.id}>
                         {t.testId ? `#${t.testId} – ` : ''}{t.candidateName} ({t.testType})
                       </SelectItem>
@@ -237,7 +210,7 @@ export function ScoreDrawer({ open, onClose, score }: Props) {
             {errors.testDocId && <p className="text-xs text-destructive">{errors.testDocId.message}</p>}
           </div>
 
-          {/* ICAO dimension scores */}
+          {/* ICAO scores */}
           <div className="space-y-3">
             <Label>ICAO Scores</Label>
             {DIMENSIONS.map(dim => (
@@ -266,7 +239,7 @@ export function ScoreDrawer({ open, onClose, score }: Props) {
             ))}
           </div>
 
-          {/* Overall level */}
+          {/* Overall */}
           <div className="flex items-center gap-3 rounded-lg bg-muted/50 px-4 py-3">
             <span className="text-sm font-medium">Overall level</span>
             {overallLevel !== null

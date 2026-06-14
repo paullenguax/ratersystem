@@ -10,6 +10,18 @@ export interface Person {
   createdAt?: Timestamp
 }
 
+export interface Assignment {
+  id: string
+  sessionId: string
+  sessionName: string
+  raterId: string
+  raterName: string
+  testDocIds: string[]
+  status: 'pending' | 'submitted' | 'reviewed' | 'published'
+  notes?: string
+  createdAt?: Timestamp
+}
+
 export interface Session {
   id: string
   name: string
@@ -21,6 +33,7 @@ export interface Session {
 
 export interface Score {
   id: string
+  assignmentId: string
   sessionId: string
   sessionName: string
   raterId: string
