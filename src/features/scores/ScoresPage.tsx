@@ -86,7 +86,10 @@ export function ScoresPage() {
                     {s.overallLevel}
                   </TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="sm" onClick={() => openEdit(s)}>Edit</Button>
+                    {s.published
+                      ? <span className="text-xs text-muted-foreground px-2">Published</span>
+                      : <Button variant="ghost" size="sm" onClick={() => openEdit(s)}>Edit</Button>
+                    }
                   </TableCell>
                 </TableRow>
               ))}

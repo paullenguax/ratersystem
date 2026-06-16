@@ -174,9 +174,6 @@ export function ScoreDrawer({ open, onClose, score }: Props) {
                 {score!.testNumber ? <span className="font-mono text-xs mr-1">#{score!.testNumber}</span> : null}
                 {score!.candidateName} <span className="text-muted-foreground">({score!.testType})</span>
               </p>
-              {score!.published && (
-                <p className="text-xs text-amber-700 mt-2">⚠ This score is published. Editing the values will update the main pool.</p>
-              )}
             </div>
           ) : (
             <>
