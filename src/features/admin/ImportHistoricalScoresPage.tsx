@@ -216,6 +216,12 @@ export function ImportHistoricalScoresPage() {
   const matchedRaterNums = new Set(
     allRaters.filter(r => raterMapping[r.num] && raterMapping[r.num] !== 'skip').map(r => r.num)
   )
+  // Unique person IDs — multiple rater numbers mapping to the same person collapse to one
+  const matchedPersonIds = new Set(
+    allRaters
+      .map(r => raterMapping[r.num])
+      .filter((id): id is string => !!id && id !== 'skip')
+  )
   const scoresToImport = scoresRows.filter(
     r => matchedRaterNums.has(r.rater) && testByTestId.has(r.candidate)
   )
@@ -236,25 +242,23 @@ export function ImportHistoricalScoresPage() {
       const sessionId = sessionRef.id
       const sessionNameTrimmed = sessionName.trim()
 
-      // Group scores by rater
-      const byRater = new Map<number, ScoreRow[]>()
+      // Group scores by person ID — multiple rater numbers for the same person merge into one assignment
+      const byPerson = new Map<string, ScoreRow[]>()
       for (const row of scoresToImport) {
-        if (!byRater.has(row.rater)) byRater.set(row.rater, [])
-        byRater.get(row.rater)!.push(row)
+        const personId = raterMapping[row.rater]
+        if (!personId || personId === 'skip') continue
+        if (!byPerson.has(personId)) byPerson.set(personId, [])
+        byPerson.get(personId)!.push(row)
       }
 
-      // Create one assignment per rater, accumulate score payloads
+      // Create one assignment per person, accumulate score payloads
       const scorePayloads: Record<string, unknown>[] = []
 
-      for (const r of allRaters) {
-        const personId = raterMapping[r.num]
-        if (!personId || personId === 'skip') continue
+      for (const [personId, personScores] of byPerson) {
         const person = people.find(p => p.id === personId)
-        if (!person) continue
-        const raterScores = byRater.get(r.num) ?? []
-        if (raterScores.length === 0) continue
+        if (!person || personScores.length === 0) continue
 
-        const testDocIds = [...new Set(raterScores.map(s => testByTestId.get(s.candidate)!.id))]
+        const testDocIds = [...new Set(personScores.map(s => testByTestId.get(s.candidate)!.id))]
 
         const assignRef = await addDoc(collection(db, 'assignments'), {
           sessionId,
@@ -267,7 +271,7 @@ export function ImportHistoricalScoresPage() {
           createdAt: serverTimestamp(),
         })
 
-        for (const s of raterScores) {
+        for (const s of personScores) {
           const test = testByTestId.get(s.candidate)!
           scorePayloads.push({
             assignmentId: assignRef.id,
@@ -308,7 +312,7 @@ export function ImportHistoricalScoresPage() {
       queryClient.invalidateQueries({ queryKey: ['scores'] })
       queryClient.invalidateQueries({ queryKey: ['assignments'] })
       queryClient.invalidateQueries({ queryKey: ['sessions'] })
-      setImportResult({ scores: scorePayloads.length, raters: matchedRaterNums.size })
+      setImportResult({ scores: scorePayloads.length, raters: byPerson.size })
     } finally {
       setImporting(false)
     }
@@ -488,7 +492,7 @@ export function ImportHistoricalScoresPage() {
           </div>
 
           <p className="text-xs text-muted-foreground">
-            {matchedRaterNums.size} of {allRaters.length} raters matched ·{' '}
+            {matchedRaterNums.size} of {allRaters.length} rater numbers matched → {matchedPersonIds.size} {matchedPersonIds.size === 1 ? 'person' : 'people'} ·{' '}
             {scoresToImport.length} scores will be imported
           </p>
 
@@ -518,7 +522,14 @@ export function ImportHistoricalScoresPage() {
           <div className="rounded-lg border p-4 space-y-2 bg-muted/30">
             <p className="text-sm font-medium">What will be imported</p>
             <ul className="text-sm text-muted-foreground space-y-1">
-              <li>{matchedRaterNums.size} rater assignment{matchedRaterNums.size !== 1 ? 's' : ''}</li>
+              <li>
+                {matchedPersonIds.size} rater assignment{matchedPersonIds.size !== 1 ? 's' : ''}
+                {matchedRaterNums.size > matchedPersonIds.size && (
+                  <span className="text-muted-foreground ml-1">
+                    ({matchedRaterNums.size} rater numbers collapsed into {matchedPersonIds.size} {matchedPersonIds.size === 1 ? 'person' : 'people'})
+                  </span>
+                )}
+              </li>
               <li>{scoresToImport.length} scores · all published immediately</li>
               <li>Session type: Historical · Status: Published</li>
             </ul>
