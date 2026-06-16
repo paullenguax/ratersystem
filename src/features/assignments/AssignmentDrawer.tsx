@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { useForm, Controller } from 'react-hook-form'
+import { useForm, Controller, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { collection, addDoc, doc, updateDoc, getDocs, serverTimestamp } from 'firebase/firestore'
+import { collection, addDoc, doc, updateDoc, getDocs, query, where, serverTimestamp } from 'firebase/firestore'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { db } from '@/lib/firebase'
 import type { Assignment, Person, Test, Session } from '@/types'
@@ -65,6 +65,7 @@ export function AssignmentDrawer({ open, onClose, assignment }: Props) {
   const isEdit = !!assignment
   const [selectedTestIds, setSelectedTestIds] = useState<string[]>([])
   const [testSearch, setTestSearch] = useState('')
+  const [showRated, setShowRated] = useState(false)
 
   const { data: sessions = [] } = useQuery({ queryKey: ['sessions'], queryFn: fetchSessions })
   const { data: people = [] } = useQuery({ queryKey: ['people'], queryFn: fetchPeople })
@@ -73,7 +74,25 @@ export function AssignmentDrawer({ open, onClose, assignment }: Props) {
   const { register, handleSubmit, control, reset, formState: { errors, isSubmitting } } =
     useForm<FormData>({ resolver: zodResolver(schema), defaultValues: EMPTY })
 
+  const raterId = useWatch({ control, name: 'raterId' })
+
+  // Fetch test IDs this rater has already scored (new assignments only)
+  const { data: ratedTestIds = new Set<string>() } = useQuery({
+    queryKey: ['rater-rated-tests', raterId],
+    queryFn: async () => {
+      const snap = await getDocs(query(collection(db, 'scores'), where('raterId', '==', raterId)))
+      return new Set(snap.docs.map(d => d.data().testDocId as string))
+    },
+    enabled: !!raterId && !isEdit,
+  })
+
+  // Reset "show rated" when the rater changes
+  useEffect(() => { setShowRated(false) }, [raterId])
+
+  const alreadyRatedCount = isEdit ? 0 : tests.filter(t => ratedTestIds.has(t.id)).length
+
   const filteredTests = tests.filter(t => {
+    if (!isEdit && !showRated && ratedTestIds.has(t.id)) return false
     if (!testSearch) return true
     const q = testSearch.toLowerCase()
     return (
@@ -182,7 +201,20 @@ export function AssignmentDrawer({ open, onClose, assignment }: Props) {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label>Tests</Label>
-              <span className="text-xs text-muted-foreground">{selectedTestIds.length} selected</span>
+              <div className="flex items-center gap-3">
+                {!isEdit && alreadyRatedCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowRated(v => !v)}
+                    className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+                  >
+                    {showRated
+                      ? 'Hide already rated'
+                      : `${alreadyRatedCount} already rated — show?`}
+                  </button>
+                )}
+                <span className="text-xs text-muted-foreground">{selectedTestIds.length} selected</span>
+              </div>
             </div>
             <Input
               placeholder="Search tests…"
