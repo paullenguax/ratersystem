@@ -111,40 +111,43 @@ export function ScoreDrawer({ open, onClose, score }: Props) {
   }, [open, score, reset])
 
   async function onSubmit(data: FormData) {
-    const assignment = assignments.find(a => a.id === data.assignmentId)
-      ?? (isEdit && score?.assignmentId === data.assignmentId
-          ? { id: score!.assignmentId, sessionId: score!.sessionId, sessionName: score!.sessionName, raterId: score!.raterId, raterName: score!.raterName } as Assignment
-          : null)
-    const test = allTests.find(t => t.id === data.testDocId)
-    if (!assignment || !test) return
-
     const overall = Math.min(
       data.pronunciation, data.structure, data.vocabulary,
       data.fluency, data.comprehension, data.interactions,
     )
 
-    const payload = {
-      assignmentId: data.assignmentId,
-      sessionId: assignment.sessionId,
-      sessionName: assignment.sessionName,
-      raterId: assignment.raterId,
-      raterName: assignment.raterName,
-      testDocId: data.testDocId,
-      testNumber: test.testId ?? null,
-      candidateName: test.candidateName,
-      testType: test.testType,
-      pronunciation: data.pronunciation, structure: data.structure,
-      vocabulary: data.vocabulary, fluency: data.fluency,
-      comprehension: data.comprehension, interactions: data.interactions,
-      overallLevel: overall,
-      published: false,
-      notes: data.notes ?? '',
-    }
-
     if (isEdit) {
-      await updateDoc(doc(db, 'scores', score!.id), payload)
+      // Only update the score values and notes — never touch published or identity fields
+      await updateDoc(doc(db, 'scores', score!.id), {
+        pronunciation: data.pronunciation, structure: data.structure,
+        vocabulary: data.vocabulary, fluency: data.fluency,
+        comprehension: data.comprehension, interactions: data.interactions,
+        overallLevel: overall,
+        notes: data.notes ?? '',
+      })
     } else {
-      await addDoc(collection(db, 'scores'), { ...payload, createdAt: serverTimestamp() })
+      const assignment = assignments.find(a => a.id === data.assignmentId)
+      const test = allTests.find(t => t.id === data.testDocId)
+      if (!assignment || !test) return
+
+      await addDoc(collection(db, 'scores'), {
+        assignmentId: data.assignmentId,
+        sessionId: assignment.sessionId,
+        sessionName: assignment.sessionName,
+        raterId: assignment.raterId,
+        raterName: assignment.raterName,
+        testDocId: data.testDocId,
+        testNumber: test.testId ?? null,
+        candidateName: test.candidateName,
+        testType: test.testType,
+        pronunciation: data.pronunciation, structure: data.structure,
+        vocabulary: data.vocabulary, fluency: data.fluency,
+        comprehension: data.comprehension, interactions: data.interactions,
+        overallLevel: overall,
+        published: false,
+        notes: data.notes ?? '',
+        createdAt: serverTimestamp(),
+      })
     }
 
     queryClient.invalidateQueries({ queryKey: ['scores'] })
@@ -160,55 +163,74 @@ export function ScoreDrawer({ open, onClose, score }: Props) {
 
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5 py-4">
 
-          {/* Assignment */}
-          <div className="space-y-1">
-            <Label>Assignment</Label>
-            <Controller name="assignmentId" control={control} render={({ field }) => (
-              <Select value={field.value} onValueChange={field.onChange}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select assignment…">
-                    {activeAssignment ? `${activeAssignment.raterName} — ${activeAssignment.sessionName}` : undefined}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent className="max-h-72">
-                  {assignments.length === 0
-                    ? <div className="px-3 py-2 text-sm text-muted-foreground">No active assignments.</div>
-                    : assignments.map(a => (
-                      <SelectItem key={a.id} value={a.id}>
-                        {a.raterName} — {a.sessionName}
-                      </SelectItem>
-                    ))
-                  }
-                </SelectContent>
-              </Select>
-            )} />
-            {errors.assignmentId && <p className="text-xs text-destructive">{errors.assignmentId.message}</p>}
-          </div>
+          {/* Assignment + Test — locked when editing, selectable when adding */}
+          {isEdit ? (
+            <div className="rounded-lg bg-muted/50 px-4 py-3 space-y-1 text-sm">
+              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium mb-2">Score details (read-only)</p>
+              <p><span className="text-muted-foreground">Rater:</span> <span className="font-medium">{score!.raterName}</span></p>
+              <p><span className="text-muted-foreground">Session:</span> {score!.sessionName}</p>
+              <p>
+                <span className="text-muted-foreground">Test:</span>{' '}
+                {score!.testNumber ? <span className="font-mono text-xs mr-1">#{score!.testNumber}</span> : null}
+                {score!.candidateName} <span className="text-muted-foreground">({score!.testType})</span>
+              </p>
+              {score!.published && (
+                <p className="text-xs text-amber-700 mt-2">⚠ This score is published. Editing the values will update the main pool.</p>
+              )}
+            </div>
+          ) : (
+            <>
+              {/* Assignment */}
+              <div className="space-y-1">
+                <Label>Assignment</Label>
+                <Controller name="assignmentId" control={control} render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select assignment…">
+                        {activeAssignment ? `${activeAssignment.raterName} — ${activeAssignment.sessionName}` : undefined}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className="max-h-72">
+                      {assignments.length === 0
+                        ? <div className="px-3 py-2 text-sm text-muted-foreground">No active assignments.</div>
+                        : assignments.map(a => (
+                          <SelectItem key={a.id} value={a.id}>
+                            {a.raterName} — {a.sessionName}
+                          </SelectItem>
+                        ))
+                      }
+                    </SelectContent>
+                  </Select>
+                )} />
+                {errors.assignmentId && <p className="text-xs text-destructive">{errors.assignmentId.message}</p>}
+              </div>
 
-          {/* Test — filtered to assignment's tests */}
-          <div className="space-y-1">
-            <Label>Test</Label>
-            <Controller name="testDocId" control={control} render={({ field }) => {
-              const t = allTests.find(t => t.id === field.value)
-              return (
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger>
-                    <SelectValue placeholder={assignmentId ? 'Select test…' : 'Select assignment first…'}>
-                      {t ? `${t.testId ? `#${t.testId} – ` : ''}${t.candidateName} (${t.testType})` : undefined}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent className="max-h-72 w-[32rem]">
-                    {assignedTests.map(t => (
-                      <SelectItem key={t.id} value={t.id}>
-                        {t.testId ? `#${t.testId} – ` : ''}{t.candidateName} ({t.testType})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )
-            }} />
-            {errors.testDocId && <p className="text-xs text-destructive">{errors.testDocId.message}</p>}
-          </div>
+              {/* Test — filtered to assignment's tests */}
+              <div className="space-y-1">
+                <Label>Test</Label>
+                <Controller name="testDocId" control={control} render={({ field }) => {
+                  const t = allTests.find(t => t.id === field.value)
+                  return (
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger>
+                        <SelectValue placeholder={assignmentId ? 'Select test…' : 'Select assignment first…'}>
+                          {t ? `${t.testId ? `#${t.testId} – ` : ''}${t.candidateName} (${t.testType})` : undefined}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent className="max-h-72 w-[32rem]">
+                        {assignedTests.map(t => (
+                          <SelectItem key={t.id} value={t.id}>
+                            {t.testId ? `#${t.testId} – ` : ''}{t.candidateName} ({t.testType})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )
+                }} />
+                {errors.testDocId && <p className="text-xs text-destructive">{errors.testDocId.message}</p>}
+              </div>
+            </>
+          )}
 
           {/* ICAO scores */}
           <div className="space-y-3">
