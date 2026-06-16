@@ -153,6 +153,8 @@ export function ScoringPage() {
   const [loadingPlayer, setLoadingPlayer] = useState(false)
   const [currentIdx, setCurrentIdx] = useState(0)
   const [scores, setScores] = useState<DimScores>([null, null, null, null, null, null])
+  const [touched, setTouched] = useState<boolean[]>([false, false, false, false, false, false])
+  const [showErrors, setShowErrors] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitSuccess, setSubmitSuccess] = useState(false)
   const [playbackSpeed, setPlaybackSpeed] = useState(1)
@@ -187,10 +189,13 @@ export function ScoringPage() {
         existing.pronunciation, existing.structure, existing.vocabulary,
         existing.fluency, existing.comprehension, existing.interactions,
       ])
+      setTouched([true, true, true, true, true, true])
     } else {
       setScores([null, null, null, null, null, null])
+      setTouched([false, false, false, false, false, false])
     }
     setSubmitSuccess(false)
+    setShowErrors(false)
     if (audioRef.current) audioRef.current.load()
   }, [currentIdx, tests, existingScores])
 
@@ -208,6 +213,13 @@ export function ScoringPage() {
           if (firstNull !== -1) next[firstNull] = n
           return next
         })
+        setTouched(prev => {
+          const firstUntouched = prev.findIndex(t => !t)
+          if (firstUntouched === -1) return prev
+          const next = [...prev]
+          next[firstUntouched] = true
+          return next
+        })
       }
     }
     window.addEventListener('keydown', onKey)
@@ -217,7 +229,10 @@ export function ScoringPage() {
   async function handleSubmit() {
     const test = tests[currentIdx]
     if (!test || !assignment || !user) return
-    if (scores.some(s => s === null)) return
+    if (scores.some(s => s === null)) {
+      setShowErrors(true)
+      return
+    }
 
     const [p, st, v, fl, c, inter] = scores as number[]
     const overall = Math.min(p, st, v, fl, c, inter)
@@ -419,47 +434,68 @@ export function ScoringPage() {
           </div>
         )}
 
-        {/* ICAO score buttons */}
+        {/* ICAO sliders */}
         <div className="space-y-3">
           {DIMENSIONS.map((dim, i) => {
             const val = scores[i]
+            const isTouched = touched[i]
+            const hasError = showErrors && !isTouched
             return (
-              <div key={dim.key} className="flex items-center gap-3">
-                <div className="w-32 shrink-0 flex items-center gap-1">
-                  <span className="text-sm">{dim.label}</span>
-                  {val !== null && <DimTooltip label={dim.label} level={val} />}
+              <div
+                key={dim.key}
+                className={`rounded-lg border-2 p-3 pb-5 transition-all ${
+                  hasError ? 'border-red-400 bg-red-50' : 'border-border hover:bg-muted/30'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-1">
+                    <span className="text-sm font-medium">{dim.label}</span>
+                    {isTouched && val !== null && <DimTooltip label={dim.label} level={val} />}
+                  </div>
+                  <span className={`text-lg font-bold ${
+                    !isTouched ? 'text-muted-foreground/30'
+                    : val! <= 3 ? 'text-red-600'
+                    : val! >= 5 ? 'text-green-700'
+                    : 'text-blue-700'
+                  }`}>
+                    {isTouched && val !== null ? val : '—'}
+                  </span>
                 </div>
-                <div className="flex gap-1">
-                  {[1, 2, 3, 4, 5, 6].map(n => (
-                    <button
-                      key={n}
-                      type="button"
-                      onClick={() => setScores(prev => {
-                        const next = [...prev] as DimScores
-                        next[i] = n
-                        return next
-                      })}
-                      className={`w-9 h-9 rounded border text-sm font-medium transition-colors ${
-                        val === n
-                          ? `${levelColour(n)} border-current font-bold`
-                          : 'border-input hover:bg-muted'
-                      }`}
-                    >
-                      {n}
-                    </button>
-                  ))}
+                <div className="grid grid-cols-[1fr_auto] items-center gap-3">
+                  <input
+                    type="range"
+                    min="1"
+                    max="6"
+                    value={val ?? 4}
+                    onChange={e => {
+                      const n = parseInt(e.target.value)
+                      setScores(prev => { const next = [...prev] as DimScores; next[i] = n; return next })
+                      setTouched(prev => { const next = [...prev]; next[i] = true; return next })
+                    }}
+                    className="w-full h-2 rounded-lg cursor-pointer accent-primary"
+                  />
+                  <input
+                    type="number"
+                    min="1"
+                    max="6"
+                    value={isTouched && val !== null ? val : ''}
+                    onChange={e => {
+                      const n = Math.min(6, Math.max(1, parseInt(e.target.value) || 1))
+                      setScores(prev => { const next = [...prev] as DimScores; next[i] = n; return next })
+                      setTouched(prev => { const next = [...prev]; next[i] = true; return next })
+                    }}
+                    className="w-14 text-center border border-input rounded-md p-1 text-sm focus:ring-2 focus:ring-primary"
+                  />
                 </div>
+                <div className="flex justify-between text-[10px] text-muted-foreground mt-1 mr-[3.75rem]">
+                  {LEVEL_LABELS.map(l => <span key={l}>{l}</span>)}
+                </div>
+                {hasError && (
+                  <p className="text-red-600 text-xs mt-2">Please rate this criterion</p>
+                )}
               </div>
             )
           })}
-        </div>
-
-        {/* Level labels */}
-        <div
-          className="flex justify-between text-[10px] text-muted-foreground"
-          style={{ paddingLeft: 'calc(8rem + 0.75rem)' }}
-        >
-          {LEVEL_LABELS.map(l => <span key={l}>{l}</span>)}
         </div>
 
         {/* Overall */}
