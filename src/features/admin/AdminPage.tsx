@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Upload, FileAudio } from 'lucide-react'
+import { Upload, FileAudio, History } from 'lucide-react'
 
 const tools = [
   {
@@ -13,6 +13,12 @@ const tools = [
     icon: FileAudio,
     label: 'Import Test Bank',
     description: 'Import tests from the migration JSON export. Review and fix test types before committing.',
+  },
+  {
+    to: '/admin/import-historical-scores',
+    icon: History,
+    label: 'Import Historical Scores',
+    description: 'Import legacy scores from two CSVs: a scores sheet and a rater number-to-name map.',
   },
 ]
 
