@@ -1,4 +1,5 @@
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
+import logo from '@/assets/lenguax-logo.png'
 import { signOut } from 'firebase/auth'
 import {
   LayoutDashboard, Users, FileAudio, CalendarDays,
@@ -49,10 +50,14 @@ export function AppShell() {
     <SidebarProvider>
       <div className="flex h-screen w-full overflow-hidden">
         <Sidebar>
-          <SidebarHeader className="px-4 py-4">
-            <span className="text-sm font-semibold tracking-wide uppercase text-muted-foreground">
-              Aviation English
-            </span>
+          <SidebarHeader className="px-4 py-4 border-b border-sidebar-border">
+            <div className="flex items-center gap-3">
+              <img src={logo} alt="Lenguax" className="w-9 h-9 object-contain shrink-0" />
+              <div>
+                <p className="text-sm font-semibold leading-tight">Aviation English</p>
+                <p className="text-xs text-sidebar-foreground/60 leading-tight">Rater System</p>
+              </div>
+            </div>
           </SidebarHeader>
 
           <SidebarContent>
