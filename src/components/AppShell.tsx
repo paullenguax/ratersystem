@@ -20,7 +20,7 @@ const ALL_NAV = [
   { label: 'People',      path: '/people',      icon: Users,               roles: ['admin'] },
   { label: 'Test Bank',   path: '/test-bank',   icon: FileAudio,           roles: ['admin'] },
   { label: 'Events',      path: '/sessions',    icon: CalendarDays,        roles: ['admin'] },
-  { label: 'Assignments', path: '/assignments', icon: ClipboardList,       roles: ['admin', 'senior_rater'] },
+  { label: 'Assignments', path: '/assignments', icon: ClipboardList,       roles: ['admin'] },
   { label: 'Scoring',     path: '/scoring',     icon: SlidersHorizontal,   roles: ['admin', 'senior_rater'] },
   { label: 'Scores',      path: '/scores',      icon: Star,                roles: ['admin'] },
   { label: 'Statistics',  path: '/statistics',  icon: BarChart2,           roles: ['admin'] },
