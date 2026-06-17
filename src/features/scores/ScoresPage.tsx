@@ -51,7 +51,7 @@ function exportRaschCSV(scores: Score[], includeUnpublished: boolean) {
     `! Rater key:`,
     ...raterNames.map(name => `! ${raterNum.get(name)}\t${name}`),
     `!`,
-    [';candidate', 'rater', 'criteria', 'varPronunciation', 'varStructure',
+    ['candidate', 'rater', '1-6a', 'varPronunciation', 'varStructure',
       'varVocabulary', 'varFluency', 'varComprehension', 'varInteraction'].join('\t'),
     ...rows.map(s => [
       s.testNumber,
