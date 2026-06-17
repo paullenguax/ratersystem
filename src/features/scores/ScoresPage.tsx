@@ -33,10 +33,11 @@ function levelColour(n: number) {
 
 // ── Rasch export ───────────────────────────────────────────────────────────
 
-function exportRaschCSV(scores: Score[], includeUnpublished: boolean, people: Person[]) {
+function exportRaschCSV(scores: Score[], sessionId: string, people: Person[]) {
   const rows = scores.filter(s => {
-    if (!includeUnpublished && !s.published) return false
-    return s.testNumber != null
+    if (s.testNumber == null) return false
+    if (s.published) return true
+    return !!sessionId && s.sessionId === sessionId
   })
 
   // Use permanent rater numbers where set; fall back to alphabetical index
@@ -50,10 +51,11 @@ function exportRaschCSV(scores: Score[], includeUnpublished: boolean, people: Pe
     return [name, n] as [string, number]
   }))
 
+  const sessionName = sessionId ? (scores.find(s => s.sessionId === sessionId)?.sessionName ?? sessionId) : null
   const lines: string[] = [
     `! Rasch export — ${new Date().toISOString().split('T')[0]}`,
     `! ${rows.length} observations · ${raterNames.length} raters`,
-    `! Published only: ${!includeUnpublished}`,
+    `! ${sessionName ? `Published + unpublished from: ${sessionName}` : 'Published scores only'}`,
     `!`,
     `! Rater key:`,
     ...raterNames.map(name => `! ${raterNum.get(name)}\t${name}`),
@@ -73,7 +75,7 @@ function exportRaschCSV(scores: Score[], includeUnpublished: boolean, people: Pe
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = includeUnpublished ? 'rasch-all.csv' : 'rasch.csv'
+  a.download = sessionName ? `rasch-${sessionName}.csv` : 'rasch-published.csv'
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -94,13 +96,19 @@ export function ScoresPage() {
   const [selected, setSelected] = useState<Score | undefined>()
   const [search, setSearch] = useState('')
   const [sorting, setSorting] = useState<SortingState>([])
-  const [includeUnpublished, setIncludeUnpublished] = useState(false)
+  const [exportSessionId, setExportSessionId] = useState('')
 
   const { data: scores = [], isLoading } = useQuery({ queryKey: ['scores'], queryFn: fetchScores })
   const { data: people = [] } = useQuery({
     queryKey: ['people'],
     queryFn: async () => (await getDocs(collection(db, 'people'))).docs.map(d => ({ id: d.id, ...d.data() }) as Person),
   })
+
+  const sessions = useMemo(() => {
+    const seen = new Map<string, string>()
+    scores.forEach(s => { if (s.sessionId) seen.set(s.sessionId, s.sessionName) })
+    return [...seen.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))
+  }, [scores])
 
   function openAdd() { setSelected(undefined); setDrawerOpen(true) }
   function openEdit(s: Score) { setSelected(s); setDrawerOpen(true) }
@@ -199,7 +207,6 @@ export function ScoresPage() {
   })
 
   const publishedCount = scores.filter(s => s.published).length
-  const unpublishedCount = scores.length - publishedCount
 
   return (
     <div className="space-y-4">
@@ -209,7 +216,7 @@ export function ScoresPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => exportRaschCSV(scores, includeUnpublished, people)}
+            onClick={() => exportRaschCSV(scores, exportSessionId, people)}
             disabled={scores.length === 0}
           >
             <Download className="size-4 mr-2" />
@@ -229,19 +236,20 @@ export function ScoresPage() {
           onChange={e => setSearch(e.target.value)}
           className="max-w-sm"
         />
-        {unpublishedCount > 0 && (
-          <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={includeUnpublished}
-              onChange={e => setIncludeUnpublished(e.target.checked)}
-              className="rounded"
-            />
-            <span>
-              Include unpublished in export
-              <span className="text-muted-foreground ml-1">({unpublishedCount} scores)</span>
-            </span>
-          </label>
+        {sessions.length > 0 && (
+          <div className="flex items-center gap-2 text-sm">
+            <label className="text-muted-foreground whitespace-nowrap">Export includes:</label>
+            <select
+              value={exportSessionId}
+              onChange={e => setExportSessionId(e.target.value)}
+              className="rounded-md border border-input bg-background px-2 py-1 text-sm"
+            >
+              <option value="">Published scores only</option>
+              {sessions.map(s => (
+                <option key={s.id} value={s.id}>{s.name} (+ unpublished)</option>
+              ))}
+            </select>
+          </div>
         )}
         <span className="text-xs text-muted-foreground ml-auto">
           {filtered.length} of {scores.length} scores
