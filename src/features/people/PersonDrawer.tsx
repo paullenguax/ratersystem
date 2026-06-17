@@ -83,7 +83,14 @@ export function PersonDrawer({ open, onClose, person }: Props) {
     if (!person) return
     const newUid = uidInput.trim()
     if (!newUid) { setLinkError('Paste the Firebase UID first.'); return }
-    if (newUid === person.id) { setLinkError('That UID is already this person\'s ID.'); return }
+    if (newUid === person.id) {
+      // Already linked — just stamp linkedAt and we're done
+      await updateDoc(doc(db, 'people', person.id), { linkedAt: serverTimestamp() })
+      queryClient.invalidateQueries({ queryKey: ['people'] })
+      setLinkDone(true)
+      setTimeout(onClose, 1500)
+      return
+    }
 
     setLinkError('')
     setLinking(true)
