@@ -7,6 +7,7 @@ export interface Person {
   role: 'admin' | 'senior_rater' | 'trainee'
   status: 'active' | 'inactive' | 'suspended'
   notes?: string
+  linkedAt?: Timestamp
   createdAt?: Timestamp
 }
 

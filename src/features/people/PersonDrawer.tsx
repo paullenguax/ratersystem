@@ -96,6 +96,7 @@ export function PersonDrawer({ open, onClose, person }: Props) {
         status: person.status,
         notes: person.notes ?? '',
         createdAt: person.createdAt ?? serverTimestamp(),
+        linkedAt: serverTimestamp(),
       })
 
       // 2. Re-point all scores that belong to this person
@@ -192,33 +193,42 @@ export function PersonDrawer({ open, onClose, person }: Props) {
         {isEdit && (
           <div className="border-t pt-5 mt-2 space-y-3">
             <div>
-              <p className="text-sm font-medium">Link Firebase account</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Paste the UID from Firebase Console → Authentication. All scores and
-                assignments will be moved to the new ID so nothing is lost.
-              </p>
+              <p className="text-sm font-medium">Firebase account</p>
             </div>
-            {linkDone ? (
-              <p className="text-sm text-green-700 font-medium">✓ Account linked — all records updated.</p>
+            {person.linkedAt || linkDone ? (
+              <p className="text-sm text-green-700 font-medium">
+                ✓ Account linked
+                {person.linkedAt && (
+                  <span className="text-xs text-muted-foreground font-normal ml-2">
+                    {new Date((person.linkedAt as any).seconds * 1000).toLocaleDateString()}
+                  </span>
+                )}
+              </p>
             ) : (
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Firebase UID (e.g. abc123xyz…)"
-                  value={uidInput}
-                  onChange={e => { setUidInput(e.target.value); setLinkError('') }}
-                  className="font-mono text-xs"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={linking || !uidInput.trim()}
-                  onClick={linkAccount}
-                >
-                  {linking ? 'Linking…' : 'Link'}
-                </Button>
-              </div>
+              <>
+                <p className="text-xs text-muted-foreground">
+                  Paste the UID from Firebase Console → Authentication. All scores and
+                  assignments will be moved to the new ID so nothing is lost.
+                </p>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Firebase UID (e.g. abc123xyz…)"
+                    value={uidInput}
+                    onChange={e => { setUidInput(e.target.value); setLinkError('') }}
+                    className="font-mono text-xs"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={linking || !uidInput.trim()}
+                    onClick={linkAccount}
+                  >
+                    {linking ? 'Linking…' : 'Link'}
+                  </Button>
+                </div>
+                {linkError && <p className="text-xs text-destructive">{linkError}</p>}
+              </>
             )}
-            {linkError && <p className="text-xs text-destructive">{linkError}</p>}
           </div>
         )}
       </SheetContent>
