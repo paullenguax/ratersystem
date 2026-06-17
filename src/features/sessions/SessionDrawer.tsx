@@ -67,7 +67,7 @@ export function SessionDrawer({ open, onClose, session }: Props) {
     <Sheet open={open} onOpenChange={v => !v && onClose()}>
       <SheetContent className="w-full sm:max-w-md overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>{isEdit ? 'Edit session' : 'New session'}</SheetTitle>
+          <SheetTitle>{isEdit ? 'Edit event' : 'New event'}</SheetTitle>
         </SheetHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4 py-4">

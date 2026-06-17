@@ -6,6 +6,7 @@ export interface Person {
   email: string
   role: 'admin' | 'senior_rater' | 'trainee'
   status: 'active' | 'inactive' | 'suspended'
+  raterNumber?: number
   notes?: string
   linkedAt?: Timestamp
   createdAt?: Timestamp

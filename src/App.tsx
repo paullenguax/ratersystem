@@ -10,6 +10,7 @@ import { PeoplePage } from '@/features/people/PeoplePage'
 import { TestBankPage } from '@/features/testBank/TestBankPage'
 import { SessionsPage } from '@/features/sessions/SessionsPage'
 import { AssignmentsPage } from '@/features/assignments/AssignmentsPage'
+import { AssignmentReviewPage } from '@/features/assignments/AssignmentReviewPage'
 import { ScoringPage } from '@/features/scoring/ScoringPage'
 import { StatisticsPage } from '@/features/statistics/StatisticsPage'
 import { ReportsPage } from '@/features/reports/ReportsPage'
@@ -42,6 +43,7 @@ export default function App() {
                 <Route path="test-bank"   element={<ProtectedRoute allowedRoles={['admin']}><TestBankPage /></ProtectedRoute>} />
                 <Route path="sessions"    element={<ProtectedRoute allowedRoles={['admin']}><SessionsPage /></ProtectedRoute>} />
                 <Route path="assignments" element={<AssignmentsPage />} />
+                <Route path="assignments/:assignmentId" element={<ProtectedRoute allowedRoles={['admin']}><AssignmentReviewPage /></ProtectedRoute>} />
                 <Route path="scoring"     element={<ScoringPage />} />
                 <Route path="scores"      element={<ProtectedRoute allowedRoles={['admin']}><ScoresPage /></ProtectedRoute>} />
                 <Route path="statistics"  element={<ProtectedRoute allowedRoles={['admin']}><StatisticsPage /></ProtectedRoute>} />

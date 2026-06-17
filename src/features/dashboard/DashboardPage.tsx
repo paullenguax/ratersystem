@@ -1,8 +1,181 @@
+import { useQuery } from '@tanstack/react-query'
+import { collection, getDocs } from 'firebase/firestore'
+import { useNavigate } from 'react-router-dom'
+import { Users, FileAudio, CalendarDays, CheckCircle } from 'lucide-react'
+import { db } from '@/lib/firebase'
+import { useAuth } from '@/context/AuthContext'
+import type { Assignment, Person, Score, Session } from '@/types'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+
+const STATUS_VARIANT: Record<Assignment['status'], 'default' | 'secondary' | 'outline'> = {
+  pending: 'secondary', submitted: 'default', reviewed: 'outline', published: 'outline',
+}
+
+async function fetchAll() {
+  const [people, tests, sessions, assignments, scores] = await Promise.all([
+    getDocs(collection(db, 'people')),
+    getDocs(collection(db, 'test_bank')),
+    getDocs(collection(db, 'sessions')),
+    getDocs(collection(db, 'assignments')),
+    getDocs(collection(db, 'scores')),
+  ])
+  return {
+    people:      people.docs.map(d => ({ id: d.id, ...d.data() }) as Person),
+    testCount:   tests.docs.length,
+    sessions:    sessions.docs.map(d => ({ id: d.id, ...d.data() }) as Session),
+    assignments: assignments.docs.map(d => ({ id: d.id, ...d.data() }) as Assignment),
+    scores:      scores.docs.map(d => ({ id: d.id, ...d.data() }) as Score),
+  }
+}
+
+async function fetchMyAssignments(uid: string): Promise<Assignment[]> {
+  const snap = await getDocs(collection(db, 'assignments'))
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data() }) as Assignment)
+    .filter(a => a.raterId === uid && a.status !== 'published')
+}
+
 export function DashboardPage() {
+  const { user, role } = useAuth()
+  const navigate = useNavigate()
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['dashboard'],
+    queryFn: fetchAll,
+    enabled: role === 'admin',
+  })
+
+  const { data: myAssignments = [] } = useQuery({
+    queryKey: ['my-assignments', user?.uid],
+    queryFn: () => fetchMyAssignments(user!.uid),
+    enabled: !!user?.uid && role !== 'admin',
+  })
+
+  if (isLoading) return <p className="text-sm text-muted-foreground">Loading…</p>
+
+  // Admin view
+  if (role === 'admin' && data) {
+    const activeRaters  = data.people.filter(p => p.status === 'active' && p.role !== 'trainee').length
+    const openEvents    = data.sessions.filter(s => s.status === 'open').length
+    const publishedScores = data.scores.filter(s => s.published).length
+    const activeAssignments = data.assignments.filter(a => a.status !== 'published')
+
+    // Progress per assignment: count scored tests
+    const scoresByAssignment = new Map<string, number>()
+    data.scores.forEach(s => {
+      scoresByAssignment.set(s.assignmentId, (scoresByAssignment.get(s.assignmentId) ?? 0) + 1)
+    })
+
+    const statCards = [
+      { label: 'Active raters',    value: activeRaters,    icon: Users },
+      { label: 'Tests in bank',    value: data.testCount,  icon: FileAudio },
+      { label: 'Open events',      value: openEvents,      icon: CalendarDays },
+      { label: 'Published scores', value: publishedScores, icon: CheckCircle },
+    ]
+
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-semibold">Dashboard</h1>
+
+        {/* Stat cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {statCards.map(({ label, value, icon: Icon }) => (
+            <div key={label} className="rounded-lg border bg-card p-4 space-y-2">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Icon className="size-4" />
+                <span className="text-xs">{label}</span>
+              </div>
+              <p className="text-2xl font-bold">{value}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Active assignments */}
+        {activeAssignments.length > 0 && (
+          <div className="space-y-2">
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+              Active assignments
+            </h2>
+            <div className="rounded-md border overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/40 border-b">
+                  <tr>
+                    <th className="text-left px-4 py-2 font-medium text-muted-foreground">Event</th>
+                    <th className="text-left px-4 py-2 font-medium text-muted-foreground">Rater</th>
+                    <th className="text-left px-4 py-2 font-medium text-muted-foreground">Progress</th>
+                    <th className="text-left px-4 py-2 font-medium text-muted-foreground">Status</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {activeAssignments
+                    .sort((a, b) => a.sessionName.localeCompare(b.sessionName) || a.raterName.localeCompare(b.raterName))
+                    .map(a => {
+                      const scored = scoresByAssignment.get(a.id) ?? 0
+                      const total  = a.testDocIds.length
+                      const pct    = total ? Math.round((scored / total) * 100) : 0
+                      return (
+                        <tr key={a.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
+                          <td className="px-4 py-2 text-muted-foreground">{a.sessionName}</td>
+                          <td className="px-4 py-2 font-medium">{a.raterName}</td>
+                          <td className="px-4 py-2">
+                            <div className="flex items-center gap-2">
+                              <div className="w-20 h-1.5 rounded-full bg-muted overflow-hidden">
+                                <div className="h-full bg-primary rounded-full" style={{ width: `${pct}%` }} />
+                              </div>
+                              <span className="text-xs text-muted-foreground">{scored}/{total}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-2">
+                            <Badge variant={STATUS_VARIANT[a.status]}>
+                              {a.status.charAt(0).toUpperCase() + a.status.slice(1)}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-2 text-right">
+                            <Button variant="ghost" size="sm" onClick={() => navigate(`/assignments/${a.id}`)}>
+                              View
+                            </Button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // Senior rater view
   return (
-    <div>
-      <h1 className="text-2xl font-semibold mb-1">Dashboard</h1>
-      <p className="text-muted-foreground text-sm">Overview coming soon.</p>
+    <div className="space-y-4">
+      <h1 className="text-2xl font-semibold">My Assignments</h1>
+      {myAssignments.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No active assignments. Check back after your administrator creates one.</p>
+      ) : (
+        <div className="space-y-2">
+          {myAssignments.map(a => (
+            <button
+              key={a.id}
+              onClick={() => navigate('/scoring')}
+              className="w-full text-left rounded-lg border p-4 hover:bg-muted/50 transition-colors"
+            >
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="font-medium">{a.sessionName}</p>
+                  <p className="text-sm text-muted-foreground mt-0.5">{a.testDocIds.length} tests assigned</p>
+                </div>
+                <Badge variant={STATUS_VARIANT[a.status]}>
+                  {a.status.charAt(0).toUpperCase() + a.status.slice(1)}
+                </Badge>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

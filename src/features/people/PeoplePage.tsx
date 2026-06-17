@@ -47,6 +47,15 @@ export function PeoplePage() {
   }), [people, search, roleFilter, statusFilter, hideTrainees])
 
   const columns: ColumnDef<Person>[] = [
+    {
+      accessorKey: 'raterNumber',
+      header: '#',
+      sortingFn: 'alphanumeric',
+      cell: ({ getValue }) => {
+        const n = getValue() as number | undefined
+        return n ? <span className="font-mono text-sm text-muted-foreground">{n}</span> : null
+      },
+    },
     { accessorKey: 'name', header: 'Name' },
     {
       accessorKey: 'email',

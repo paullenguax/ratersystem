@@ -159,11 +159,11 @@ export function AssignmentDrawer({ open, onClose, assignment }: Props) {
 
           {/* Session */}
           <div className="space-y-1">
-            <Label>Session</Label>
+            <Label>Event</Label>
             <Controller name="sessionId" control={control} render={({ field }) => (
               <Select value={field.value} onValueChange={field.onChange}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select session…">
+                  <SelectValue placeholder="Select event…">
                     {sessions.find(s => s.id === field.value)?.name
                       ?? (isEdit ? assignment?.sessionName : undefined)}
                   </SelectValue>

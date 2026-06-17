@@ -42,7 +42,7 @@ export function SessionsPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Sessions</h1>
+        <h1 className="text-2xl font-semibold">Events</h1>
         <Button onClick={openAdd}>
           <Plus className="size-4 mr-2" /> New session
         </Button>
@@ -51,7 +51,7 @@ export function SessionsPage() {
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : sessions.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No sessions yet — create one to start recording scores.</p>
+        <p className="text-sm text-muted-foreground">No events yet — create one to start recording scores.</p>
       ) : (
         <div className="rounded-md border">
           <Table>

@@ -7,7 +7,7 @@ import {
 } from '@tanstack/react-table'
 import { Plus, Download, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
 import { db } from '@/lib/firebase'
-import type { Score } from '@/types'
+import type { Score, Person } from '@/types'
 import { ScoreDrawer } from './ScoreDrawer'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -33,15 +33,22 @@ function levelColour(n: number) {
 
 // ── Rasch export ───────────────────────────────────────────────────────────
 
-function exportRaschCSV(scores: Score[], includeUnpublished: boolean) {
+function exportRaschCSV(scores: Score[], includeUnpublished: boolean, people: Person[]) {
   const rows = scores.filter(s => {
     if (!includeUnpublished && !s.published) return false
-    return s.testNumber != null // can't include scores without a test number
+    return s.testNumber != null
   })
 
-  // Assign rater numbers: stable alphabetical sort of all rater names in the export
+  // Use permanent rater numbers where set; fall back to alphabetical index
+  const permanentNum = new Map(people.filter(p => p.raterNumber).map(p => [p.id, p.raterNumber!]))
   const raterNames = [...new Set(rows.map(s => s.raterName))].sort((a, b) => a.localeCompare(b))
-  const raterNum = new Map(raterNames.map((name, i) => [name, i + 1]))
+  let fallbackIdx = Math.max(0, ...permanentNum.values()) + 1
+  const raterIdByName = new Map(rows.map(s => [s.raterName, s.raterId]))
+  const raterNum = new Map(raterNames.map(name => {
+    const id = raterIdByName.get(name) ?? ''
+    const n = permanentNum.get(id) ?? fallbackIdx++
+    return [name, n] as [string, number]
+  }))
 
   const lines: string[] = [
     `! Rasch export — ${new Date().toISOString().split('T')[0]}`,
@@ -90,6 +97,10 @@ export function ScoresPage() {
   const [includeUnpublished, setIncludeUnpublished] = useState(false)
 
   const { data: scores = [], isLoading } = useQuery({ queryKey: ['scores'], queryFn: fetchScores })
+  const { data: people = [] } = useQuery({
+    queryKey: ['people'],
+    queryFn: async () => (await getDocs(collection(db, 'people'))).docs.map(d => ({ id: d.id, ...d.data() }) as Person),
+  })
 
   function openAdd() { setSelected(undefined); setDrawerOpen(true) }
   function openEdit(s: Score) { setSelected(s); setDrawerOpen(true) }
@@ -98,7 +109,7 @@ export function ScoresPage() {
     {
       id: 'sessionName',
       accessorKey: 'sessionName',
-      header: 'Session',
+      header: 'Event',
       cell: ({ getValue }) => (
         <span className="text-muted-foreground text-sm">{getValue() as string}</span>
       ),
@@ -198,7 +209,7 @@ export function ScoresPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => exportRaschCSV(scores, includeUnpublished)}
+            onClick={() => exportRaschCSV(scores, includeUnpublished, people)}
             disabled={scores.length === 0}
           >
             <Download className="size-4 mr-2" />

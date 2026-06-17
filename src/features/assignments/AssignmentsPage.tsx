@@ -6,8 +6,10 @@ import {
   flexRender, type ColumnDef, type SortingState,
 } from '@tanstack/react-table'
 import { Plus, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { db } from '@/lib/firebase'
 import type { Assignment, Person } from '@/types'
+import { useAuth } from '@/context/AuthContext'
 import { AssignmentDrawer } from './AssignmentDrawer'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -31,6 +33,8 @@ async function fetchPeople(): Promise<Person[]> {
 }
 
 export function AssignmentsPage() {
+  const { role } = useAuth()
+  const navigate = useNavigate()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [selected, setSelected] = useState<Assignment | undefined>()
   const [publishing, setPublishing] = useState<string | null>(null)
@@ -81,7 +85,7 @@ export function AssignmentsPage() {
     {
       id: 'sessionName',
       accessorKey: 'sessionName',
-      header: 'Session',
+      header: 'Event',
       cell: ({ getValue }) => <span className="text-muted-foreground text-sm">{getValue() as string}</span>,
     },
     {
@@ -146,6 +150,9 @@ export function AssignmentsPage() {
               >
                 {publishing === a.id ? 'Publishing…' : 'Publish'}
               </Button>
+            )}
+            {role === 'admin' && (
+              <Button variant="ghost" size="sm" onClick={() => navigate(`/assignments/${a.id}`)}>View</Button>
             )}
             <Button variant="ghost" size="sm" onClick={() => openEdit(a)}>Edit</Button>
           </div>

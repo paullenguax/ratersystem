@@ -35,6 +35,7 @@ export function PersonDrawer({ open, onClose, person }: Props) {
   const queryClient = useQueryClient()
   const isEdit = !!person
 
+  const [raterNumberInput, setRaterNumberInput] = useState('')
   const [uidInput, setUidInput] = useState('')
   const [linking, setLinking] = useState(false)
   const [linkError, setLinkError] = useState('')
@@ -52,6 +53,7 @@ export function PersonDrawer({ open, onClose, person }: Props) {
         ? { name: person.name, email: person.email, role: person.role, status: person.status, notes: person.notes ?? '' }
         : { name: '', email: '', role: 'senior_rater', status: 'active', notes: '' }
       )
+      setRaterNumberInput(person?.raterNumber?.toString() ?? '')
       setUidInput('')
       setLinkError('')
       setLinkDone(false)
@@ -67,7 +69,12 @@ export function PersonDrawer({ open, onClose, person }: Props) {
       return
     }
 
-    const payload = { name: data.name, email: data.email, role: data.role, status: data.status, notes: data.notes ?? '' }
+    const rn = parseInt(raterNumberInput)
+    const payload = {
+      name: data.name, email: data.email, role: data.role, status: data.status,
+      notes: data.notes ?? '',
+      raterNumber: !isNaN(rn) && rn > 0 ? rn : null,
+    }
 
     if (isEdit) {
       await updateDoc(doc(db, 'people', person.id), payload)
@@ -183,6 +190,18 @@ export function PersonDrawer({ open, onClose, person }: Props) {
                 </SelectContent>
               </Select>
             )} />
+          </div>
+
+          <div className="space-y-1">
+            <Label>Rater number</Label>
+            <Input
+              type="number"
+              min="1"
+              value={raterNumberInput}
+              onChange={e => setRaterNumberInput(e.target.value)}
+              placeholder="Optional — stable Rasch ID"
+              className="w-40"
+            />
           </div>
 
           <div className="space-y-1">
