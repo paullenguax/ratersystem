@@ -72,7 +72,7 @@ export function AssignmentsPage() {
   const filtered = useMemo(() => {
     return assignments.filter(a => {
       if (hidePublished && a.status === 'published') return false
-      if (seniorOnly && personRole.get(a.raterId) !== 'senior_rater') return false
+      if (seniorOnly && !(['senior_rater', 'admin'] as Person['role'][]).includes(personRole.get(a.raterId)!)) return false
       return true
     })
   }, [assignments, hidePublished, seniorOnly, personRole])
@@ -93,7 +93,7 @@ export function AssignmentsPage() {
         return (
           <span className="font-medium">
             {row.original.raterName}
-            {role === 'senior_rater' && (
+            {(role === 'senior_rater' || role === 'admin') && (
               <span className="ml-1.5 text-[10px] text-muted-foreground font-normal">SR</span>
             )}
           </span>
