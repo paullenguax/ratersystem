@@ -78,6 +78,26 @@ export function PersonDrawer({ open, onClose, person }: Props) {
 
     if (isEdit) {
       await updateDoc(doc(db, 'people', person.id), payload)
+
+      // If name changed, propagate to denormalized raterName on scores + assignments
+      if (data.name !== person.name) {
+        const [scoreSnap, assignSnap] = await Promise.all([
+          getDocs(query(collection(db, 'scores'), where('raterId', '==', person.id))),
+          getDocs(query(collection(db, 'assignments'), where('raterId', '==', person.id))),
+        ])
+        for (let i = 0; i < scoreSnap.docs.length; i += 499) {
+          const batch = writeBatch(db)
+          scoreSnap.docs.slice(i, i + 499).forEach(d => batch.update(d.ref, { raterName: data.name }))
+          await batch.commit()
+        }
+        for (let i = 0; i < assignSnap.docs.length; i += 499) {
+          const batch = writeBatch(db)
+          assignSnap.docs.slice(i, i + 499).forEach(d => batch.update(d.ref, { raterName: data.name }))
+          await batch.commit()
+        }
+        queryClient.invalidateQueries({ queryKey: ['assignments'] })
+        queryClient.invalidateQueries({ queryKey: ['scores'] })
+      }
     } else {
       await addDoc(collection(db, 'people'), { ...payload, createdAt: serverTimestamp() })
     }
