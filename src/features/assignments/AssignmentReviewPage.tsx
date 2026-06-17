@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { collection, getDocs, doc, getDoc, query, where } from 'firebase/firestore'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { db } from '@/lib/firebase'
-import type { Assignment, Score, Test } from '@/types'
+import type { Assignment, Person, Score, Test } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 
@@ -52,6 +52,11 @@ async function fetchTests(ids: string[]): Promise<Test[]> {
 async function fetchRaterScores(assignmentId: string): Promise<Score[]> {
   const snap = await getDocs(query(collection(db, 'scores'), where('assignmentId', '==', assignmentId)))
   return snap.docs.map(d => ({ id: d.id, ...d.data() }) as Score)
+}
+
+async function fetchPeople(): Promise<Person[]> {
+  const snap = await getDocs(collection(db, 'people'))
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }) as Person)
 }
 
 async function fetchAllTestScores(testDocIds: string[]): Promise<Score[]> {
@@ -103,19 +108,31 @@ export function AssignmentReviewPage() {
     enabled: !!assignment?.testDocIds.length,
   })
 
+  const { data: people = [] } = useQuery({ queryKey: ['people'], queryFn: fetchPeople })
+
+  const srRaterIds = useMemo(() => {
+    return new Set(
+      people
+        .filter(p => p.role === 'senior_rater' || p.role === 'admin')
+        .map(p => p.id)
+    )
+  }, [people])
+
   const raterScoreMap = useMemo(() => {
     const m = new Map<string, Score>()
     raterScores.forEach(s => m.set(s.testDocId, s))
     return m
   }, [raterScores])
 
-  // Group all scores by testDocId for expanded rows
+  // Group all scores by testDocId for expanded rows — senior raters / admins only
   const scoresByTest = useMemo(() => {
     const m = new Map<string, Score[]>()
-    allTestScores.forEach(s => {
-      if (!m.has(s.testDocId)) m.set(s.testDocId, [])
-      m.get(s.testDocId)!.push(s)
-    })
+    allTestScores
+      .filter(s => srRaterIds.has(s.raterId))
+      .forEach(s => {
+        if (!m.has(s.testDocId)) m.set(s.testDocId, [])
+        m.get(s.testDocId)!.push(s)
+      })
     // Sort each group: this rater first, then alphabetically
     for (const [testId, scores] of m) {
       const raterScore = raterScoreMap.get(testId)
