@@ -65,6 +65,7 @@ export interface Test {
   testType: 'PPL' | 'Airline Pilot' | 'Helicopter Pilot' | 'Student Pilot' | 'Aerodrome ATC' | 'Approach ATC' | 'Area ATC' | 'Student ATCO' | 'Airport Operations' | 'ADP Driver'
   durationSeconds?: number
   status: 'active' | 'retired'
+  excludeFromPool?: boolean
   canonicalDifficulty?: number | null
   canonicalSE?: number | null
   notes?: string

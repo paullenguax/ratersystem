@@ -21,6 +21,7 @@ export function TestBankPage() {
   const [search, setSearch] = useState('')
   const [typeFilter, setLicenceFilter] = useState<'all' | Test['testType']>('all')
   const [statusFilter, setStatusFilter] = useState<'all' | Test['status']>('all')
+  const [poolFilter, setPoolFilter] = useState<'all' | 'pool' | 'excluded'>('all')
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [selectedTest, setSelectedTest] = useState<Test | undefined>()
   const [playingUrl, setPlayingUrl] = useState<string | null>(null)
@@ -33,7 +34,8 @@ export function TestBankPage() {
     return (
       (s === '' || t.candidateName.toLowerCase().includes(s) || t.candidateNationality.toLowerCase().includes(s)) &&
       (typeFilter === 'all' || t.testType === typeFilter) &&
-      (statusFilter === 'all' || t.status === statusFilter)
+      (statusFilter === 'all' || t.status === statusFilter) &&
+      (poolFilter === 'all' || (poolFilter === 'excluded' ? !!t.excludeFromPool : !t.excludeFromPool))
     )
   }), [tests, search, typeFilter, statusFilter])
 
@@ -63,6 +65,15 @@ export function TestBankPage() {
           {row.original.status}
         </Badge>
       ),
+    },
+    {
+      id: 'excludeFromPool',
+      accessorKey: 'excludeFromPool',
+      header: 'Pool',
+      enableSorting: false,
+      cell: ({ row }) => row.original.excludeFromPool
+        ? <span className="text-xs text-muted-foreground">Excluded</span>
+        : <span className="text-xs text-green-700">In pool</span>,
     },
     {
       id: 'audio',
@@ -144,6 +155,14 @@ export function TestBankPage() {
             <SelectItem value="all">All statuses</SelectItem>
             <SelectItem value="active">Active</SelectItem>
             <SelectItem value="retired">Retired</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={poolFilter} onValueChange={v => setPoolFilter(v as typeof poolFilter)}>
+          <SelectTrigger className="w-36"><SelectValue placeholder="Pool status" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All tests</SelectItem>
+            <SelectItem value="pool">In pool</SelectItem>
+            <SelectItem value="excluded">Excluded</SelectItem>
           </SelectContent>
         </Select>
       </div>

@@ -43,6 +43,7 @@ export function TestDrawer({ open, onClose, test }: Props) {
   const queryClient = useQueryClient()
   const isEdit = !!test
   const [previewUrl, setPreviewUrl] = useState('')
+  const [excludeFromPool, setExcludeFromPool] = useState(false)
 
   const { register, handleSubmit, control, reset, watch, setValue, formState: { errors, isSubmitting } } =
     useForm<FormData>({ resolver: zodResolver(schema), defaultValues: EMPTY })
@@ -81,6 +82,7 @@ export function TestDrawer({ open, onClose, test }: Props) {
       } : EMPTY
       reset(vals)
       setPreviewUrl(test?.recordingUrl ?? '')
+      setExcludeFromPool(test?.excludeFromPool ?? false)
     }
   }, [open, test, reset])
 
@@ -94,6 +96,7 @@ export function TestDrawer({ open, onClose, test }: Props) {
       testType: data.testType,
       durationSeconds: data.durationSeconds ?? null,
       status: data.status,
+      excludeFromPool,
       notes: data.notes ?? '',
     }
     if (isEdit) {
@@ -193,6 +196,16 @@ export function TestDrawer({ open, onClose, test }: Props) {
               </Select>
             )} />
           </div>
+
+          <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={excludeFromPool}
+              onChange={e => setExcludeFromPool(e.target.checked)}
+              className="rounded"
+            />
+            <span>Exclude from rater course pool</span>
+          </label>
 
           <div className="space-y-1">
             <Label>Notes</Label>
