@@ -176,9 +176,16 @@ export function AssignmentsPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Assignments</h1>
-        <Button onClick={openAdd}>
-          <Plus className="size-4 mr-2" /> New assignment
-        </Button>
+        <div className="flex gap-2">
+          {role === 'admin' && (
+            <Button variant="outline" onClick={() => navigate('/assignments/quick-entry')}>
+              Quick entry
+            </Button>
+          )}
+          <Button onClick={openAdd}>
+            <Plus className="size-4 mr-2" /> New assignment
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
