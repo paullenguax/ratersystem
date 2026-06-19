@@ -1,7 +1,13 @@
 import { Link } from 'react-router-dom'
-import { Upload, FileAudio, History } from 'lucide-react'
+import { Upload, FileAudio, History, RefreshCw } from 'lucide-react'
 
 const tools = [
+  {
+    to: '/admin/canvas-sync',
+    icon: RefreshCw,
+    label: 'Canvas Sync',
+    description: 'Match Canvas course enrollments to people in RaterSystem. Add new people or link existing ones to their Canvas email.',
+  },
   {
     to: '/admin/import-raters',
     icon: Upload,
