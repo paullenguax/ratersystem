@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { doc, getDoc, setDoc, collection, getDocs, writeBatch, serverTimestamp } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
+import { httpsCallable } from 'firebase/functions'
+import { db, functions } from '@/lib/firebase'
 import type { Person } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -48,32 +49,11 @@ function nameSimilar(a: string, b: string) {
   return overlap >= 2 || (overlap >= 1 && Math.min(wa.length, wb.length) === 1)
 }
 
-async function fetchCanvasEnrollments(courseId: string, token: string): Promise<CanvasUser[]> {
-  const users: CanvasUser[] = []
-  let url: string | null =
-    `https://courses.lenguax.com/api/v1/courses/${courseId}/enrollments` +
-    `?type[]=StudentEnrollment&per_page=100&include[]=email`
+const canvasEnrollmentsFn = httpsCallable<{ courseId: string }, { users: CanvasUser[] }>(functions, 'canvasEnrollments')
 
-  while (url) {
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-    if (!res.ok) throw new Error(`Canvas API ${res.status}: ${res.statusText}`)
-    const data = await res.json()
-    for (const e of data) {
-      if (e.user) {
-        users.push({
-          canvasId: e.user.id,
-          name: e.user.name ?? '',
-          email: (e.user.login_id || e.user.email || '').toLowerCase().trim(),
-        })
-      }
-    }
-    const link = res.headers.get('Link')
-    const next = link?.match(/<([^>]+)>;\s*rel="next"/)
-    url = next ? next[1] : null
-  }
-
-  const seen = new Set<number>()
-  return users.filter(u => { if (seen.has(u.canvasId)) return false; seen.add(u.canvasId); return true })
+async function fetchCanvasEnrollments(courseId: string): Promise<CanvasUser[]> {
+  const result = await canvasEnrollmentsFn({ courseId })
+  return result.data.users
 }
 
 function buildRows(canvasUsers: CanvasUser[], people: Person[]): SyncRow[] {
@@ -150,7 +130,7 @@ export function CanvasSyncPage() {
     setApplyResult(null)
     try {
       const [canvasUsers, snap] = await Promise.all([
-        fetchCanvasEnrollments(selectedCourseId, config.apiToken),
+        fetchCanvasEnrollments(selectedCourseId),
         getDocs(collection(db, 'people')),
       ])
       const people = snap.docs.map(d => ({ id: d.id, ...d.data() } as Person))

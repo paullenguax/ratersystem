@@ -77,3 +77,47 @@ exports.canvasAuth = onCall({ secrets: [CANVAS_CLIENT_SECRET] }, async (request)
   const token = await admin.auth().createCustomToken(personId)
   return { token }
 })
+
+exports.canvasEnrollments = onCall(async (request) => {
+  const { courseId } = request.data
+  if (!courseId) throw new HttpsError('invalid-argument', 'Missing courseId')
+
+  const db = admin.firestore()
+  const configSnap = await db.doc('config/canvas').get()
+  if (!configSnap.exists) throw new HttpsError('not-found', 'Canvas config not set up')
+
+  const apiToken = configSnap.data().apiToken
+  if (!apiToken) throw new HttpsError('not-found', 'Canvas API token not configured')
+
+  const users = []
+  let url = `${CANVAS_URL}/api/v1/courses/${courseId}/enrollments?type[]=StudentEnrollment&per_page=100&include[]=email`
+
+  while (url) {
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${apiToken}` } })
+    if (!res.ok) throw new HttpsError('internal', `Canvas API error: ${res.status} ${res.statusText}`)
+
+    const data = await res.json()
+    for (const e of data) {
+      if (e.user) {
+        users.push({
+          canvasId: e.user.id,
+          name: e.user.name ?? '',
+          email: (e.user.login_id || e.user.email || '').toLowerCase().trim(),
+        })
+      }
+    }
+
+    const link = res.headers.get('Link')
+    const next = link?.match(/<([^>]+)>;\s*rel="next"/)
+    url = next ? next[1] : null
+  }
+
+  const seen = new Set()
+  return {
+    users: users.filter(u => {
+      if (seen.has(u.canvasId)) return false
+      seen.add(u.canvasId)
+      return true
+    }),
+  }
+})
