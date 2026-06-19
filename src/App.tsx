@@ -5,6 +5,7 @@ import { AuthProvider } from '@/context/AuthContext'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { AppShell } from '@/components/AppShell'
 import { LoginPage } from '@/features/auth/LoginPage'
+import { CanvasCallbackPage } from '@/features/auth/CanvasCallbackPage'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { PeoplePage } from '@/features/people/PeoplePage'
 import { TestBankPage } from '@/features/testBank/TestBankPage'
@@ -31,6 +32,7 @@ export default function App() {
           <AuthProvider>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/auth/canvas/callback" element={<CanvasCallbackPage />} />
 
               <Route
                 element={
