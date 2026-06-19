@@ -108,7 +108,7 @@ export function ScoresPage() {
 
   const sessions = useMemo(() => {
     const seen = new Map<string, string>()
-    scores.forEach(s => { if (s.sessionId) seen.set(s.sessionId, s.sessionName) })
+    scores.filter(s => s.sessionId && !s.published).forEach(s => seen.set(s.sessionId, s.sessionName))
     return [...seen.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))
   }, [scores])
 
