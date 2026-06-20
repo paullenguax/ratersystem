@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useForm, Controller, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { collection, addDoc, doc, updateDoc, getDocs, query, where, serverTimestamp } from 'firebase/firestore'
+import { collection, addDoc, doc, updateDoc, deleteDoc, getDocs, query, where, serverTimestamp } from 'firebase/firestore'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { db } from '@/lib/firebase'
 import type { Assignment, Person, Test, Session } from '@/types'
@@ -119,7 +119,15 @@ export function AssignmentDrawer({ open, onClose, assignment }: Props) {
   }
 
   async function onSubmit(data: FormData) {
-    if (selectedTestIds.length === 0) return
+    if (!isEdit && selectedTestIds.length === 0) return
+
+    // Editing with all tests unchecked → delete the assignment
+    if (isEdit && selectedTestIds.length === 0) {
+      await deleteDoc(doc(db, 'assignments', assignment!.id))
+      queryClient.invalidateQueries({ queryKey: ['assignments'] })
+      onClose()
+      return
+    }
 
     const session = sessions.find(s => s.id === data.sessionId)
       ?? (isEdit ? { id: assignment!.sessionId, name: assignment!.sessionName } as Session : null)
@@ -146,7 +154,7 @@ export function AssignmentDrawer({ open, onClose, assignment }: Props) {
     onClose()
   }
 
-  const noTests = selectedTestIds.length === 0 && !isSubmitting
+  const noTests = !isEdit && selectedTestIds.length === 0 && !isSubmitting
 
   return (
     <Sheet open={open} onOpenChange={v => !v && onClose()}>
@@ -270,8 +278,12 @@ export function AssignmentDrawer({ open, onClose, assignment }: Props) {
 
           <SheetFooter className="mt-2">
             <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-            <Button type="submit" disabled={isSubmitting || selectedTestIds.length === 0}>
-              {isSubmitting ? 'Saving…' : 'Save'}
+            <Button
+              type="submit"
+              disabled={isSubmitting || (!isEdit && selectedTestIds.length === 0)}
+              variant={isEdit && selectedTestIds.length === 0 ? 'destructive' : 'default'}
+            >
+              {isSubmitting ? 'Saving…' : isEdit && selectedTestIds.length === 0 ? 'Delete assignment' : 'Save'}
             </Button>
           </SheetFooter>
         </form>
