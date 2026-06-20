@@ -1,7 +1,7 @@
 import { Fragment, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { collection, getDocs, doc, getDoc, query, where, updateDoc, arrayRemove } from 'firebase/firestore'
+import { collection, getDocs, doc, getDoc, query, where, updateDoc, arrayRemove, deleteDoc } from 'firebase/firestore'
 import { ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import type { Assignment, Person, Score, Test } from '@/types'
@@ -78,10 +78,16 @@ export function AssignmentReviewPage() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   async function removeTest(testDocId: string) {
-    if (!assignmentId) return
-    await updateDoc(doc(db, 'assignments', assignmentId), { testDocIds: arrayRemove(testDocId) })
-    queryClient.invalidateQueries({ queryKey: ['assignment', assignmentId] })
-    queryClient.invalidateQueries({ queryKey: ['assignment-tests', assignmentId] })
+    if (!assignmentId || !assignment) return
+    const remaining = assignment.testDocIds.filter(id => id !== testDocId)
+    if (remaining.length === 0) {
+      await deleteDoc(doc(db, 'assignments', assignmentId))
+      navigate('/assignments')
+    } else {
+      await updateDoc(doc(db, 'assignments', assignmentId), { testDocIds: arrayRemove(testDocId) })
+      queryClient.invalidateQueries({ queryKey: ['assignment', assignmentId] })
+      queryClient.invalidateQueries({ queryKey: ['assignment-tests', assignmentId] })
+    }
   }
 
   function toggleExpanded(testId: string) {
