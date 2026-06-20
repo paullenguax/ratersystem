@@ -67,17 +67,17 @@ certificates/     (planned) certNumber, name, date, type, pin, createdAt, create
 | 0 | Auth & Shell | ✅ Done | Firebase Auth + role nav |
 | 1 | People & Test Bank | ✅ Done | Full CRUD with drawers |
 | 2 | Sessions | ✅ Done | Create/edit sessions |
-| 3 | Assignments | ✅ Done | Manual create, publish, review page with SR score toggle |
+| 3 | Assignments | ✅ Done | Manual create, publish, review page with SR score toggle; remove test/delete from drawer or review page |
 | 3b | Auto-assign | ✅ Done | Smart algorithm: anchor + difficulty spread + cohort overlap |
 | 3c | Quick Entry | ✅ Done | Admin manual score entry without an assignment |
 | 4 | Scoring Player | ✅ Done | GRaterSystem-style sliders, keyboard shortcuts, pre-fill, submit |
-| 5a | Statistics | ✅ Done | Distribution, dimension means, agreement rate, rater table, returnees |
-| 5b | Rasch CSV Export | ✅ Done | Occasion facet, single rater# across occasions, Assign Numbers button |
-| 5c | Rasch Import | ❌ Not built | Import Facets output; severity dot plot; misfit flagging |
-| 6a | Reports (email) | ✅ Done | Per-rater feedback email generator with score comparison |
+| 5a | Statistics | ✅ Done | Distribution, dimension means, agreement rate, rater table (SR filter), returnees |
+| 5b | Rasch CSV Export | ✅ Done | Dual-number scheme: temp# for current session (incl. returnees), permanent# for historical; no occasion column |
+| 5c | Rasch Import | ✅ Done | Paste Facets .out file → parse Table 7 + Table 6 → store in rasch_runs; personalised Wright map in Reports with PNG download |
+| 6a | Reports (email) | ✅ Done | Per-rater feedback email; score comparison; Wright map auto-populates from rasch_runs |
 | 6b | Reports (PDF) | ❌ Not built | Candidate score report PDF |
 | 6c | CAA Export | ❌ Not built | CAA-format export (schema not yet defined) |
-| 7 | Admin Tools | ✅ Done | Import raters/tests/historical scores, Canvas Sync |
+| 7 | Admin Tools | ✅ Done | Import raters/tests/historical scores, Canvas Sync, Import Rasch Results |
 | 8 | Canvas SSO | ✅ Done | OAuth2 → Firebase custom token via Cloud Function |
 | 9 | Certificates | 🔜 Placeholder | Links to existing cert_generator; full migration pending |
 
@@ -85,16 +85,15 @@ certificates/     (planned) certNumber, name, date, type, pin, createdAt, create
 
 ## What's Left to Build
 
-### Priority 1 — Rasch import (Module 5c)
+### Priority 1 — Rasch import: verify with full session file
 
-Admin uploads Facets output (JSON format TBD once we have a real Facets run).  
-App stores results in Firestore, then displays:
-- Rater severity dot plot (measure ± SE) per session
-- Infit/outfit MnSq table with traffic-light flagging: green < 1.3, amber ≥ 1.3, red ≥ 1.5
-- Run history — compare severity across sessions (rater trajectory over time)
-- Wright map — candidate difficulty vs rater severity
+The import parser and Wright map are built and working. Next step is to test
+with a full-session `.out` file (many rater rows in Table 7, not just one) and
+verify the Wright map renders correctly for different raters.
 
-**Blocked on:** having a real Facets output file to define the JSON schema from.
+Possible enhancements:
+- Infit/outfit traffic-light table in Statistics (green < 1.3, amber ≥ 1.3, red ≥ 1.5)
+- Rater severity trajectory — compare measure across multiple rasch_runs
 
 ### Priority 2 — Certificates (full migration)
 
@@ -150,4 +149,4 @@ CAA-format export of scores. Schema to be defined separately — needs input fro
 
 ---
 
-*Last updated: June 2026 — Modules 0–8 complete. Remaining: Rasch import (5c), Certificates migration, Candidate PDF reports, CAA export.*
+*Last updated: June 2026 — Modules 0–8 + 5c complete. Remaining: Rasch import verification, Certificates migration, Candidate PDF reports, CAA export.*
