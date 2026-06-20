@@ -23,6 +23,7 @@ import { ImportTestsPage } from '@/features/admin/ImportTestsPage'
 import { ImportHistoricalScoresPage } from '@/features/admin/ImportHistoricalScoresPage'
 import { CanvasSyncPage } from '@/features/admin/CanvasSyncPage'
 import { AutoAssignPage } from '@/features/admin/AutoAssignPage'
+import { CertificatesPage } from '@/features/certificates/CertificatesPage'
 
 const queryClient = new QueryClient()
 
@@ -53,7 +54,8 @@ export default function App() {
                 <Route path="scoring"     element={<ScoringPage />} />
                 <Route path="scores"      element={<ProtectedRoute allowedRoles={['admin']}><ScoresPage /></ProtectedRoute>} />
                 <Route path="statistics"  element={<ProtectedRoute allowedRoles={['admin']}><StatisticsPage /></ProtectedRoute>} />
-                <Route path="reports"     element={<ProtectedRoute allowedRoles={['admin']}><ReportsPage /></ProtectedRoute>} />
+                <Route path="reports"       element={<ProtectedRoute allowedRoles={['admin']}><ReportsPage /></ProtectedRoute>} />
+                <Route path="certificates" element={<ProtectedRoute allowedRoles={['admin']}><CertificatesPage /></ProtectedRoute>} />
                 <Route path="admin"       element={<ProtectedRoute allowedRoles={['admin']}><AdminPage /></ProtectedRoute>} />
                 <Route path="admin/import-raters" element={<ProtectedRoute allowedRoles={['admin']}><ImportRatersPage /></ProtectedRoute>} />
                 <Route path="admin/import-tests"  element={<ProtectedRoute allowedRoles={['admin']}><ImportTestsPage /></ProtectedRoute>} />
