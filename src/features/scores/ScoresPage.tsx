@@ -1,11 +1,11 @@
 import { useState, useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { collection, getDocs } from 'firebase/firestore'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { collection, getDocs, doc, updateDoc } from 'firebase/firestore'
 import {
   useReactTable, getCoreRowModel, getSortedRowModel, getFilteredRowModel,
   flexRender, type ColumnDef, type SortingState,
 } from '@tanstack/react-table'
-import { Plus, Download, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
+import { Plus, Download, ChevronUp, ChevronDown, ChevronsUpDown, Hash } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import type { Score, Person } from '@/types'
 import { ScoreDrawer } from './ScoreDrawer'
@@ -40,33 +40,60 @@ function exportRaschCSV(scores: Score[], sessionId: string, people: Person[]) {
     return !!sessionId && s.sessionId === sessionId
   })
 
-  // Use permanent rater numbers where set; fall back to alphabetical index
-  const permanentNum = new Map(people.filter(p => p.raterNumber).map(p => [p.id, p.raterNumber!]))
-  const raterNames = [...new Set(rows.map(s => s.raterName))].sort((a, b) => a.localeCompare(b))
-  let fallbackIdx = Math.max(0, ...permanentNum.values()) + 1
-  const raterIdByName = new Map(rows.map(s => [s.raterName, s.raterId]))
-  const raterNum = new Map(raterNames.map(name => {
-    const id = raterIdByName.get(name) ?? ''
-    const n = permanentNum.get(id) ?? fallbackIdx++
-    return [name, n] as [string, number]
-  }))
+  const permNumById = new Map(people.filter(p => p.raterNumber).map(p => [p.id, p.raterNumber!]))
+
+  // Published raters: use permanent number if set, else assign in-memory (alphabetical after max perm)
+  const publishedRaters = [...new Map(
+    rows.filter(s => s.published).map(s => [s.raterId, s.raterName])
+  ).entries()].sort((a, b) => a[1].localeCompare(b[1]))
+
+  let nextNum = Math.max(0, ...(permNumById.size ? permNumById.values() : [0])) + 1
+  const histNum = new Map<string, number>()
+  for (const [id] of publishedRaters) {
+    histNum.set(id, permNumById.get(id) ?? nextNum++)
+  }
+
+  // Current session raters always get a NEW sequential number (even returnees)
+  const currentRaters = sessionId ? [...new Map(
+    rows.filter(s => !s.published && s.sessionId === sessionId).map(s => [s.raterId, s.raterName])
+  ).entries()].sort((a, b) => a[1].localeCompare(b[1])) : []
+
+  const currNum = new Map<string, number>()
+  for (const [id] of currentRaters) {
+    currNum.set(id, nextNum++)
+  }
+
+  function numForRow(s: Score): number {
+    if (!s.published && sessionId && s.sessionId === sessionId) return currNum.get(s.raterId) ?? 0
+    return histNum.get(s.raterId) ?? 0
+  }
 
   const sessionName = sessionId ? (scores.find(s => s.sessionId === sessionId)?.sessionName ?? sessionId) : null
+  const totalRaters = new Set([...histNum.keys(), ...currNum.keys()]).size
+
   const lines: string[] = [
     `! Rasch export — ${new Date().toISOString().split('T')[0]}`,
-    `! ${rows.length} observations · ${raterNames.length} raters`,
+    `! ${rows.length} observations · ${totalRaters} raters`,
     `! ${sessionName ? `Published + unpublished from: ${sessionName}` : 'Published scores only'}`,
-    `! Occasion 1 = historical (all published)  ·  Occasion 2 = current event (${sessionName ?? 'all published'})`,
+    `! Occasion 1 = historical (all published)  ·  Occasion 2 = current event (${sessionName ?? 'n/a'})`,
     `!`,
-    `! Rater key:`,
-    ...raterNames.map(name => `! ${raterNum.get(name)}\t${name}`),
+    `! Historical rater key:`,
+    ...publishedRaters.map(([id, name]) => `! ${histNum.get(id)}\t${name}`),
+    ...(currentRaters.length ? [
+      `!`,
+      `! Current session rater key (temp numbers — merge to historical after publish):`,
+      ...currentRaters.map(([id, name]) => {
+        const h = histNum.get(id)
+        return `! ${currNum.get(id)}\t${name}${h != null ? `  ← returnee, compare to #${h}` : ''}`
+      }),
+    ] : []),
     `!`,
     ['candidate', 'rater', 'occasion', '1-6a', 'varPronunciation', 'varStructure',
       'varVocabulary', 'varFluency', 'varComprehension', 'varInteraction'].join('\t'),
     ...rows.map(s => [
       s.testNumber,
-      raterNum.get(s.raterName),
-      (sessionId && s.sessionId === sessionId) ? 2 : 1,
+      numForRow(s),
+      (!s.published && sessionId && s.sessionId === sessionId) ? 2 : 1,
       '1-6a',
       s.pronunciation, s.structure, s.vocabulary,
       s.fluency, s.comprehension, s.interactions,
@@ -80,6 +107,22 @@ function exportRaschCSV(scores: Score[], sessionId: string, people: Person[]) {
   a.download = sessionName ? `rasch-${sessionName}.csv` : 'rasch-published.csv'
   a.click()
   URL.revokeObjectURL(url)
+}
+
+// ── Assign permanent rater numbers ─────────────────────────────────────────
+
+async function assignPermanentRaterNumbers(scores: Score[], people: Person[]): Promise<number> {
+  const publishedRaterIds = new Set(scores.filter(s => s.published).map(s => s.raterId))
+  const permNums = new Map(people.filter(p => p.raterNumber).map(p => [p.id, p.raterNumber!]))
+  const unassigned = people
+    .filter(p => publishedRaterIds.has(p.id) && !p.raterNumber)
+    .sort((a, b) => a.name.localeCompare(b.name))
+  if (unassigned.length === 0) return 0
+  let next = Math.max(0, ...(permNums.size ? permNums.values() : [0])) + 1
+  for (const person of unassigned) {
+    await updateDoc(doc(db, 'people', person.id), { raterNumber: next++ })
+  }
+  return unassigned.length
 }
 
 // ── data ───────────────────────────────────────────────────────────────────
@@ -99,12 +142,29 @@ export function ScoresPage() {
   const [search, setSearch] = useState('')
   const [sorting, setSorting] = useState<SortingState>([])
   const [exportSessionId, setExportSessionId] = useState('')
+  const [assigning, setAssigning] = useState(false)
+  const queryClient = useQueryClient()
 
   const { data: scores = [], isLoading } = useQuery({ queryKey: ['scores'], queryFn: fetchScores })
   const { data: people = [] } = useQuery({
     queryKey: ['people'],
     queryFn: async () => (await getDocs(collection(db, 'people'))).docs.map(d => ({ id: d.id, ...d.data() }) as Person),
   })
+
+  const unassignedCount = useMemo(() => {
+    const publishedRaterIds = new Set(scores.filter(s => s.published).map(s => s.raterId))
+    return people.filter(p => publishedRaterIds.has(p.id) && !p.raterNumber).length
+  }, [scores, people])
+
+  async function handleAssignNumbers() {
+    setAssigning(true)
+    try {
+      const n = await assignPermanentRaterNumbers(scores, people)
+      if (n > 0) queryClient.invalidateQueries({ queryKey: ['people'] })
+    } finally {
+      setAssigning(false)
+    }
+  }
 
   const sessions = useMemo(() => {
     const seen = new Map<string, string>()
@@ -215,6 +275,18 @@ export function ScoresPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Scores</h1>
         <div className="flex items-center gap-2">
+          {unassignedCount > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleAssignNumbers}
+              disabled={assigning}
+              title={`${unassignedCount} rater${unassignedCount > 1 ? 's' : ''} with published scores have no permanent number`}
+            >
+              <Hash className="size-4 mr-2" />
+              {assigning ? 'Assigning…' : `Assign numbers (${unassignedCount})`}
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
