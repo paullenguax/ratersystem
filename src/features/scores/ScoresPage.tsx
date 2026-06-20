@@ -42,57 +42,45 @@ function exportRaschCSV(scores: Score[], sessionId: string, people: Person[]) {
 
   const permNumById = new Map(people.filter(p => p.raterNumber).map(p => [p.id, p.raterNumber!]))
 
-  // Published raters: use permanent number if set, else assign in-memory (alphabetical after max perm)
-  const publishedRaters = [...new Map(
-    rows.filter(s => s.published).map(s => [s.raterId, s.raterName])
-  ).entries()].sort((a, b) => a[1].localeCompare(b[1]))
+  // All raters across all rows — assign a single number per rater (permanent if set, else sequential)
+  const allRaters = [...new Map(rows.map(s => [s.raterId, s.raterName])).entries()]
+    .sort((a, b) => a[1].localeCompare(b[1]))
 
   let nextNum = Math.max(0, ...(permNumById.size ? permNumById.values() : [0])) + 1
-  const histNum = new Map<string, number>()
-  for (const [id] of publishedRaters) {
-    histNum.set(id, permNumById.get(id) ?? nextNum++)
+  const raterNum = new Map<string, number>()
+  for (const [id] of allRaters) {
+    raterNum.set(id, permNumById.get(id) ?? nextNum++)
   }
 
-  // Current session raters always get a NEW sequential number (even returnees)
-  const currentRaters = sessionId ? [...new Map(
-    rows.filter(s => !s.published && s.sessionId === sessionId).map(s => [s.raterId, s.raterName])
-  ).entries()].sort((a, b) => a[1].localeCompare(b[1])) : []
-
-  const currNum = new Map<string, number>()
-  for (const [id] of currentRaters) {
-    currNum.set(id, nextNum++)
-  }
-
-  function numForRow(s: Score): number {
-    if (!s.published && sessionId && s.sessionId === sessionId) return currNum.get(s.raterId) ?? 0
-    return histNum.get(s.raterId) ?? 0
-  }
+  // Returnees: raters who appear in both published and current-session rows
+  const publishedRaterIds  = new Set(rows.filter(s => s.published).map(s => s.raterId))
+  const currentSessionRaterIds = sessionId
+    ? new Set(rows.filter(s => !s.published && s.sessionId === sessionId).map(s => s.raterId))
+    : new Set<string>()
+  const returneeIds = new Set([...currentSessionRaterIds].filter(id => publishedRaterIds.has(id)))
 
   const sessionName = sessionId ? (scores.find(s => s.sessionId === sessionId)?.sessionName ?? sessionId) : null
-  const totalRaters = new Set([...histNum.keys(), ...currNum.keys()]).size
 
   const lines: string[] = [
     `! Rasch export — ${new Date().toISOString().split('T')[0]}`,
-    `! ${rows.length} observations · ${totalRaters} raters`,
+    `! ${rows.length} observations · ${allRaters.length} raters`,
     `! ${sessionName ? `Published + unpublished from: ${sessionName}` : 'Published scores only'}`,
     `! Occasion 1 = historical (all published)  ·  Occasion 2 = current event (${sessionName ?? 'n/a'})`,
+    `! Returnees appear in both occasions under the same rater number`,
     `!`,
-    `! Historical rater key:`,
-    ...publishedRaters.map(([id, name]) => `! ${histNum.get(id)}\t${name}`),
-    ...(currentRaters.length ? [
-      `!`,
-      `! Current session rater key (temp numbers — merge to historical after publish):`,
-      ...currentRaters.map(([id, name]) => {
-        const h = histNum.get(id)
-        return `! ${currNum.get(id)}\t${name}${h != null ? `  ← returnee, compare to #${h}` : ''}`
-      }),
-    ] : []),
+    `! Rater key:`,
+    ...allRaters.map(([id, name]) => {
+      const isReturnee = returneeIds.has(id)
+      const isNew = currentSessionRaterIds.has(id) && !publishedRaterIds.has(id)
+      const tag = isReturnee ? '  [returnee — appears in both occasions]' : isNew ? '  [new this event]' : ''
+      return `! ${raterNum.get(id)}\t${name}${tag}`
+    }),
     `!`,
     ['candidate', 'rater', 'occasion', '1-6a', 'varPronunciation', 'varStructure',
       'varVocabulary', 'varFluency', 'varComprehension', 'varInteraction'].join('\t'),
     ...rows.map(s => [
       s.testNumber,
-      numForRow(s),
+      raterNum.get(s.raterId) ?? 0,
       (!s.published && sessionId && s.sessionId === sessionId) ? 2 : 1,
       '1-6a',
       s.pronunciation, s.structure, s.vocabulary,
