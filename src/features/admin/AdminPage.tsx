@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Upload, FileAudio, History, RefreshCw } from 'lucide-react'
+import { Upload, FileAudio, History, RefreshCw, Shuffle } from 'lucide-react'
 
 const tools = [
   {
@@ -7,6 +7,12 @@ const tools = [
     icon: RefreshCw,
     label: 'Canvas Sync',
     description: 'Match Canvas course enrollments to people in RaterSystem. Add new people or link existing ones to their Canvas email.',
+  },
+  {
+    to: '/admin/auto-assign',
+    icon: Shuffle,
+    label: 'Auto-assign Tests',
+    description: 'Generate balanced test assignments: one anchor, difficulty spread, minimal overlap within cohort.',
   },
   {
     to: '/admin/import-raters',
