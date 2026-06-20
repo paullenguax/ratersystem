@@ -1,8 +1,8 @@
 import { Fragment, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { collection, getDocs, doc, getDoc, query, where } from 'firebase/firestore'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { collection, getDocs, doc, getDoc, query, where, updateDoc, arrayRemove } from 'firebase/firestore'
+import { ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import type { Assignment, Person, Score, Test } from '@/types'
 import { Button } from '@/components/ui/button'
@@ -74,7 +74,15 @@ async function fetchAllTestScores(testDocIds: string[]): Promise<Score[]> {
 export function AssignmentReviewPage() {
   const { assignmentId } = useParams<{ assignmentId: string }>()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+
+  async function removeTest(testDocId: string) {
+    if (!assignmentId) return
+    await updateDoc(doc(db, 'assignments', assignmentId), { testDocIds: arrayRemove(testDocId) })
+    queryClient.invalidateQueries({ queryKey: ['assignment', assignmentId] })
+    queryClient.invalidateQueries({ queryKey: ['assignment-tests', assignmentId] })
+  }
 
   function toggleExpanded(testId: string) {
     setExpanded(prev => {
@@ -223,6 +231,7 @@ export function AssignmentReviewPage() {
               ))}
               <th className="px-2 py-2 font-medium text-center text-xs text-muted-foreground w-10">OVL</th>
               <th className="px-2 py-2 font-medium text-center text-xs text-muted-foreground w-8">n</th>
+              {assignment.status === 'pending' && <th className="w-6" />}
             </tr>
             <tr className="border-b text-[10px] text-muted-foreground">
               <th colSpan={3} />
@@ -287,6 +296,20 @@ export function AssignmentReviewPage() {
                     <td className="px-2 py-2 text-center text-muted-foreground text-xs">
                       {means?.n ?? 0}
                     </td>
+                    {assignment.status === 'pending' && (
+                      <td className="pr-2 py-2 text-right">
+                        {!rs && (
+                          <button
+                            type="button"
+                            onClick={() => removeTest(test.id)}
+                            className="text-muted-foreground/40 hover:text-red-500 transition-colors"
+                            title="Remove from assignment"
+                          >
+                            <X className="size-3.5" />
+                          </button>
+                        )}
+                      </td>
+                    )}
                   </tr>
 
                   {/* Expanded: individual rater rows */}
@@ -344,6 +367,7 @@ export function AssignmentReviewPage() {
                 <td className="px-2 py-2 text-center text-xs text-muted-foreground">
                   {allTestScores.length}
                 </td>
+                {assignment.status === 'pending' && <td />}
               </tr>
             )}
           </tbody>
