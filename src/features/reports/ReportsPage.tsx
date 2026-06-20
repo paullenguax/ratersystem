@@ -1,29 +1,53 @@
-import { useState, useMemo } from 'react'
+import { Fragment, useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { collection, getDocs } from 'firebase/firestore'
-import { Copy, Check } from 'lucide-react'
+import { Copy, Check, ChevronRight } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import type { Score, Person } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 
+// ── helpers ────────────────────────────────────────────────────────────────
+
+const DIMS = [
+  { key: 'pronunciation' as const, abbr: 'PRO' },
+  { key: 'structure'     as const, abbr: 'STR' },
+  { key: 'vocabulary'    as const, abbr: 'VOC' },
+  { key: 'fluency'       as const, abbr: 'FLU' },
+  { key: 'comprehension' as const, abbr: 'COM' },
+  { key: 'interactions'  as const, abbr: 'INT' },
+]
+
+function mean(vals: number[]) {
+  return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null
+}
+function fmt(n: number | null) {
+  return n == null ? '—' : n % 1 === 0 ? String(n) : n.toFixed(1)
+}
+function scoreColour(n: number) {
+  if (n >= 5) return 'text-green-700'
+  if (n === 4) return 'text-blue-700'
+  if (n === 3) return 'text-amber-700'
+  return 'text-red-700'
+}
+
 // ── types ──────────────────────────────────────────────────────────────────
 
 interface CandidateStat {
-  label: string        // A, B, C…
+  label: string
   candidateName: string
   testDocId: string
   raterScore: Score
-  allScores: Score[]
+  allScores: Score[]    // ALL scores for this test across all sessions
   avgOverall: number
-  delta: number        // rater - average
+  delta: number
 }
 
 // ── per-candidate auto-paragraph ───────────────────────────────────────────
 
 function autoPara(stat: CandidateStat): string {
-  const { label, candidateName: _, raterScore, allScores, avgOverall, delta } = stat
+  const { label, raterScore, allScores, avgOverall, delta } = stat
   const avg = avgOverall.toFixed(1)
   const their = raterScore.overallLevel
   const n = allScores.length
@@ -66,7 +90,6 @@ function buildEmail(params: {
     .map(s => paraOverrides[s.label] ?? autoPara(s))
     .join('\n\n')
 
-  // overall summary sentence
   const notable = candidateStats.filter(s => Math.abs(s.delta) >= 0.5)
   let overallLine: string
   if (notable.length === 0) {
@@ -78,12 +101,10 @@ function buildEmail(params: {
     overallLine = `Overall, your scores seem very close to the general consensus in each case, although you were ${parts.join(', and ')}.`
   }
 
-  // chart placement note
   const chartNote = !isNaN(measureNum) && Math.abs(measureNum) > 0.5
     ? 'You can see you are indeed somewhat to one side of the main group of raters.'
     : 'You can see where you sit relative to the main group of raters.'
 
-  // outcome sentence
   const outcomeText =
     outcome === 'pass'     ? 'we are happy to award your certificate, with no real advisories.' :
     outcome === 'advisory' ? `we are happy to award your certificate. ${advisoryText || '[ADVISORY DETAIL]'}` :
@@ -138,14 +159,15 @@ function buildEmail(params: {
 // ── page ───────────────────────────────────────────────────────────────────
 
 export function ReportsPage() {
-  const [sessionId, setSessionId]     = useState('')
-  const [raterId, setRaterId]         = useState('')
-  const [measure, setMeasure]         = useState('')
-  const [infit, setInfit]             = useState('')
-  const [outcome, setOutcome]         = useState<'pass' | 'advisory' | 'fail'>('pass')
+  const [sessionName, setSessionName]   = useState('')   // deduplicated by name
+  const [raterId, setRaterId]           = useState('')
+  const [measure, setMeasure]           = useState('')
+  const [infit, setInfit]               = useState('')
+  const [outcome, setOutcome]           = useState<'pass' | 'advisory' | 'fail'>('pass')
   const [advisoryText, setAdvisoryText] = useState('')
   const [paraOverrides, setParaOverrides] = useState<Record<string, string>>({})
-  const [copied, setCopied]           = useState(false)
+  const [expanded, setExpanded]         = useState<Set<string>>(new Set())
+  const [copied, setCopied]             = useState(false)
 
   const { data: scores = [] } = useQuery({
     queryKey: ['scores'],
@@ -158,28 +180,53 @@ export function ReportsPage() {
       (await getDocs(collection(db, 'people'))).docs.map(d => ({ id: d.id, ...d.data() }) as Person),
   })
 
+  // Sessions deduplicated by name (multiple import runs → one entry)
   const sessions = useMemo(() => {
-    const seen = new Map<string, string>()
-    scores.forEach(s => { if (s.sessionId) seen.set(s.sessionId, s.sessionName) })
-    return [...seen.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))
+    const seen = new Map<string, Set<string>>() // name → set of sessionIds
+    scores.forEach(s => {
+      if (!s.sessionId || !s.sessionName) return
+      if (!seen.has(s.sessionName)) seen.set(s.sessionName, new Set())
+      seen.get(s.sessionName)!.add(s.sessionId)
+    })
+    return [...seen.entries()]
+      .map(([name, ids]) => ({ name, ids: [...ids] }))
+      .sort((a, b) => a.name.localeCompare(b.name))
   }, [scores])
 
+  // All sessionIds for the selected session name
+  const sessionIds = useMemo(
+    () => sessions.find(s => s.name === sessionName)?.ids ?? [],
+    [sessions, sessionName],
+  )
+
   const ratersInSession = useMemo(() => {
-    if (!sessionId) return []
+    if (!sessionIds.length) return []
     const seen = new Map<string, string>()
-    scores.filter(s => s.sessionId === sessionId).forEach(s => seen.set(s.raterId, s.raterName))
+    scores
+      .filter(s => sessionIds.includes(s.sessionId))
+      .forEach(s => seen.set(s.raterId, s.raterName))
     return [...seen.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))
-  }, [scores, sessionId])
+  }, [scores, sessionIds])
 
   const rater = useMemo(() => people.find(p => p.id === raterId), [people, raterId])
 
-  const candidateStats = useMemo((): CandidateStat[] => {
-    if (!sessionId || !raterId) return []
-    const raterScores = scores
-      .filter(s => s.sessionId === sessionId && s.raterId === raterId)
+  const srRaterIds = useMemo(
+    () => new Set(people.filter(p => p.role === 'senior_rater' || p.role === 'admin').map(p => p.id)),
+    [people],
+  )
+
+  // Scores for this rater in this session, sorted by test number
+  const raterScores = useMemo(() => {
+    if (!sessionIds.length || !raterId) return []
+    return scores
+      .filter(s => sessionIds.includes(s.sessionId) && s.raterId === raterId)
       .sort((a, b) => (a.testNumber ?? 0) - (b.testNumber ?? 0))
+  }, [scores, sessionIds, raterId])
+
+  // Per-candidate stats — allScores drawn from ALL sessions for that test
+  const candidateStats = useMemo((): CandidateStat[] => {
     return raterScores.map((rs, i) => {
-      const allScores = scores.filter(s => s.sessionId === sessionId && s.testDocId === rs.testDocId)
+      const allScores = scores.filter(s => s.testDocId === rs.testDocId)
       const avgOverall = allScores.reduce((sum, s) => sum + s.overallLevel, 0) / allScores.length
       return {
         label: String.fromCharCode(65 + i),
@@ -191,17 +238,63 @@ export function ReportsPage() {
         delta: rs.overallLevel - avgOverall,
       }
     })
-  }, [scores, sessionId, raterId])
+  }, [scores, raterScores])
+
+  // Senior-rater scores per test for expanded rows
+  const srScoresByTest = useMemo(() => {
+    const m = new Map<string, Score[]>()
+    const testDocIds = new Set(raterScores.map(s => s.testDocId))
+    scores
+      .filter(s => testDocIds.has(s.testDocId) && srRaterIds.has(s.raterId))
+      .forEach(s => {
+        if (!m.has(s.testDocId)) m.set(s.testDocId, [])
+        m.get(s.testDocId)!.push(s)
+      })
+    for (const [id, arr] of m) {
+      m.set(id, arr.sort((a, b) => {
+        // current rater first, then alphabetical
+        if (a.raterId === raterId) return -1
+        if (b.raterId === raterId) return 1
+        return a.raterName.localeCompare(b.raterName)
+      }))
+    }
+    return m
+  }, [scores, raterScores, srRaterIds, raterId])
+
+  // Summary means
+  const raterMeans = useMemo(() => {
+    if (!raterScores.length) return null
+    const dims: Record<string, number | null> = {}
+    DIMS.forEach(d => { dims[d.key] = mean(raterScores.map(s => s[d.key] as number)) })
+    return { dims, overall: mean(raterScores.map(s => s.overallLevel)) }
+  }, [raterScores])
+
+  const globalMeans = useMemo(() => {
+    const allForTests = scores.filter(s => raterScores.some(r => r.testDocId === s.testDocId))
+    if (!allForTests.length) return null
+    const dims: Record<string, number | null> = {}
+    DIMS.forEach(d => { dims[d.key] = mean(allForTests.map(s => s[d.key] as number)) })
+    return { dims, overall: mean(allForTests.map(s => s.overallLevel)), n: allForTests.length }
+  }, [scores, raterScores])
 
   const emailText = useMemo(() => {
     if (!rater || candidateStats.length === 0) return ''
     return buildEmail({ rater, candidateStats, paraOverrides, measure, infit, outcome, advisoryText })
   }, [rater, candidateStats, paraOverrides, measure, infit, outcome, advisoryText])
 
-  function changeSession(id: string) {
-    setSessionId(id)
+  function toggleExpanded(testDocId: string) {
+    setExpanded(prev => {
+      const next = new Set(prev)
+      next.has(testDocId) ? next.delete(testDocId) : next.add(testDocId)
+      return next
+    })
+  }
+
+  function changeSession(name: string) {
+    setSessionName(name)
     setRaterId('')
     setParaOverrides({})
+    setExpanded(new Set())
     setMeasure('')
     setInfit('')
     setOutcome('pass')
@@ -211,6 +304,7 @@ export function ReportsPage() {
   function changeRater(id: string) {
     setRaterId(id)
     setParaOverrides({})
+    setExpanded(new Set())
   }
 
   async function handleCopy() {
@@ -241,12 +335,12 @@ export function ReportsPage() {
             <div className="space-y-1">
               <label className="text-sm font-medium">Event</label>
               <select
-                value={sessionId}
+                value={sessionName}
                 onChange={e => changeSession(e.target.value)}
                 className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
               >
                 <option value="">Select event…</option>
-                {sessions.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                {sessions.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
               </select>
             </div>
             <div className="space-y-1">
@@ -255,7 +349,7 @@ export function ReportsPage() {
                 value={raterId}
                 onChange={e => changeRater(e.target.value)}
                 className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
-                disabled={!sessionId}
+                disabled={!sessionName}
               >
                 <option value="">Select rater…</option>
                 {ratersInSession.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
@@ -265,54 +359,155 @@ export function ReportsPage() {
 
           {candidateStats.length > 0 && (<>
 
-            {/* Score comparison table */}
+            {/* Score comparison table — AssignmentReview style */}
             <div className="space-y-1.5">
               <p className="text-sm font-medium">Score comparison</p>
               <div className="rounded-md border overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead className="bg-muted/50 text-muted-foreground">
-                    <tr>
-                      <th className="px-3 py-2 text-left font-medium">Candidate</th>
-                      <th className="px-2 py-2 text-center font-medium">OVL</th>
-                      <th className="px-2 py-2 text-center font-medium">Avg</th>
-                      <th className="px-2 py-2 text-center font-medium">Δ</th>
-                      <th className="px-2 py-2 text-center font-medium">PRO</th>
-                      <th className="px-2 py-2 text-center font-medium">STR</th>
-                      <th className="px-2 py-2 text-center font-medium">VOC</th>
-                      <th className="px-2 py-2 text-center font-medium">FLU</th>
-                      <th className="px-2 py-2 text-center font-medium">COM</th>
-                      <th className="px-2 py-2 text-center font-medium">INT</th>
+                <table className="w-full text-sm border-collapse">
+                  <thead>
+                    <tr className="border-b bg-muted/40">
+                      <th className="w-5" />
+                      <th className="text-left px-2 py-1.5 font-medium text-muted-foreground text-xs w-6">#</th>
+                      <th className="text-left px-2 py-1.5 font-medium text-muted-foreground text-xs">Candidate</th>
+                      {DIMS.map(d => (
+                        <th key={d.key} className="px-1.5 py-1.5 font-medium text-center text-xs text-muted-foreground w-8">
+                          {d.abbr}
+                        </th>
+                      ))}
+                      <th className="px-1.5 py-1.5 font-medium text-center text-xs w-8">OVL</th>
+                      <th className="px-1 py-1.5 text-center text-xs text-muted-foreground/40 w-4">|</th>
+                      {DIMS.map(d => (
+                        <th key={`m-${d.key}`} className="px-1.5 py-1.5 font-medium text-center text-xs text-muted-foreground w-8">
+                          {d.abbr}
+                        </th>
+                      ))}
+                      <th className="px-1.5 py-1.5 font-medium text-center text-xs text-muted-foreground w-8">OVL</th>
+                      <th className="px-1.5 py-1.5 font-medium text-center text-xs text-muted-foreground w-6">n</th>
+                    </tr>
+                    <tr className="border-b text-[10px] text-muted-foreground">
+                      <th colSpan={3} />
+                      <th colSpan={7} className="text-center py-0.5 font-normal">{rater?.name}</th>
+                      <th />
+                      <th colSpan={7} className="text-center py-0.5 font-normal">All raters (mean)</th>
+                      <th />
                     </tr>
                   </thead>
                   <tbody>
-                    {candidateStats.map(stat => (
-                      <tr key={stat.label} className="border-t">
-                        <td className="px-3 py-1.5">
-                          <span className="font-mono font-bold mr-1.5">{stat.label}</span>
-                          <span className="text-muted-foreground">{stat.candidateName}</span>
-                        </td>
-                        <td className="px-2 py-1.5 text-center font-mono font-bold">
-                          {stat.raterScore.overallLevel}
-                        </td>
-                        <td className="px-2 py-1.5 text-center text-muted-foreground font-mono">
-                          {stat.avgOverall.toFixed(1)}
-                        </td>
-                        <td className={`px-2 py-1.5 text-center font-mono font-medium ${
-                          stat.delta >  0.3 ? 'text-amber-600' :
-                          stat.delta < -0.3 ? 'text-blue-600'  : 'text-muted-foreground'
-                        }`}>
-                          {stat.delta > 0 ? '+' : ''}{stat.delta.toFixed(1)}
-                        </td>
-                        {(['pronunciation','structure','vocabulary','fluency','comprehension','interactions'] as const).map(dim => (
-                          <td key={dim} className="px-2 py-1.5 text-center font-mono">{stat.raterScore[dim]}</td>
+                    {candidateStats.map(stat => {
+                      const { raterScore, allScores, label, testDocId } = stat
+                      const allMeans = {
+                        dims: Object.fromEntries(DIMS.map(d => [d.key, mean(allScores.map(s => s[d.key] as number))])),
+                        overall: mean(allScores.map(s => s.overallLevel)),
+                        n: allScores.length,
+                      }
+                      const srScores = srScoresByTest.get(testDocId) ?? []
+                      const isExpanded = expanded.has(testDocId)
+
+                      return (
+                        <Fragment key={testDocId}>
+                          <tr className={`border-b transition-colors ${isExpanded ? 'bg-muted/30' : 'hover:bg-muted/20'}`}>
+                            <td className="pl-1.5 py-1.5 w-5">
+                              {srScores.length > 0 && (
+                                <button
+                                  onClick={() => toggleExpanded(testDocId)}
+                                  className="text-muted-foreground hover:text-foreground transition-colors"
+                                  title={isExpanded ? 'Collapse' : `Show ${srScores.length} senior rater score${srScores.length !== 1 ? 's' : ''}`}
+                                >
+                                  <ChevronRight className={`size-3 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                                </button>
+                              )}
+                            </td>
+                            <td className="px-2 py-1.5 font-mono text-xs text-muted-foreground">
+                              <span className="font-bold text-foreground mr-1">{label}</span>
+                              {raterScore.testNumber ?? '—'}
+                            </td>
+                            <td className="px-2 py-1.5 text-xs">{stat.candidateName}</td>
+                            {DIMS.map(d => (
+                              <td key={d.key} className="px-1.5 py-1.5 text-center font-mono text-xs">
+                                <span className={`font-semibold ${scoreColour(raterScore[d.key] as number)}`}>
+                                  {raterScore[d.key] as number}
+                                </span>
+                              </td>
+                            ))}
+                            <td className="px-1.5 py-1.5 text-center font-mono text-xs">
+                              <span className={`font-bold ${scoreColour(raterScore.overallLevel)}`}>
+                                {raterScore.overallLevel}
+                              </span>
+                            </td>
+                            <td className="px-1 py-1.5 text-center text-muted-foreground/30 text-xs">|</td>
+                            {DIMS.map(d => (
+                              <td key={`m-${d.key}`} className="px-1.5 py-1.5 text-center font-mono text-xs text-muted-foreground">
+                                {fmt(allMeans.dims[d.key] ?? null)}
+                              </td>
+                            ))}
+                            <td className={`px-1.5 py-1.5 text-center font-mono text-xs font-medium ${
+                              stat.delta >  0.3 ? 'text-amber-600' :
+                              stat.delta < -0.3 ? 'text-blue-600'  : 'text-muted-foreground'
+                            }`}>
+                              {fmt(allMeans.overall)}
+                            </td>
+                            <td className="px-1.5 py-1.5 text-center text-xs text-muted-foreground">
+                              {allMeans.n}
+                            </td>
+                          </tr>
+
+                          {isExpanded && srScores.map(s => (
+                            <tr key={s.id} className={`border-b text-xs ${s.raterId === raterId ? 'bg-blue-50/60' : 'bg-muted/10 hover:bg-muted/20'}`}>
+                              <td /><td />
+                              <td className="px-2 py-1 text-muted-foreground pl-5">
+                                {s.raterName}
+                                {s.raterId === raterId && (
+                                  <span className="ml-1.5 text-[10px] text-primary font-medium">this rater</span>
+                                )}
+                              </td>
+                              {DIMS.map(d => (
+                                <td key={d.key} className="px-1.5 py-1 text-center font-mono">
+                                  <span className={scoreColour(s[d.key] as number)}>{s[d.key] as number}</span>
+                                </td>
+                              ))}
+                              <td className="px-1.5 py-1 text-center font-mono">
+                                <span className={`font-semibold ${scoreColour(s.overallLevel)}`}>{s.overallLevel}</span>
+                              </td>
+                              <td colSpan={9} />
+                            </tr>
+                          ))}
+                        </Fragment>
+                      )
+                    })}
+
+                    {/* Summary row */}
+                    {(raterMeans || globalMeans) && (
+                      <tr className="border-t-2 bg-muted/20 font-medium">
+                        <td /><td />
+                        <td className="px-2 py-1.5 text-xs text-muted-foreground">Average</td>
+                        {DIMS.map(d => (
+                          <td key={d.key} className="px-1.5 py-1.5 text-center font-mono text-xs">
+                            {raterMeans ? fmt(raterMeans.dims[d.key] ?? null) : '—'}
+                          </td>
                         ))}
+                        <td className="px-1.5 py-1.5 text-center font-mono text-xs font-bold">
+                          {raterMeans ? fmt(raterMeans.overall) : '—'}
+                        </td>
+                        <td className="px-1 py-1.5 text-center text-muted-foreground/30 text-xs">|</td>
+                        {DIMS.map(d => (
+                          <td key={`m-${d.key}`} className="px-1.5 py-1.5 text-center font-mono text-xs text-muted-foreground">
+                            {globalMeans ? fmt(globalMeans.dims[d.key] ?? null) : '—'}
+                          </td>
+                        ))}
+                        <td className="px-1.5 py-1.5 text-center font-mono text-xs text-muted-foreground font-bold">
+                          {globalMeans ? fmt(globalMeans.overall) : '—'}
+                        </td>
+                        <td className="px-1.5 py-1.5 text-center text-xs text-muted-foreground">
+                          {globalMeans?.n ?? 0}
+                        </td>
                       </tr>
-                    ))}
+                    )}
                   </tbody>
                 </table>
               </div>
               <p className="text-xs text-muted-foreground">
-                Δ = rater vs session average · <span className="text-amber-600">amber = generous</span> · <span className="text-blue-600">blue = strict</span>
+                OVL avg: <span className="text-amber-600">amber = rater generous</span> · <span className="text-blue-600">blue = rater strict</span>
+                {' · '}chevron shows senior rater scores
               </p>
             </div>
 
@@ -346,7 +541,7 @@ export function ReportsPage() {
             <div className="space-y-3">
               <p className="text-sm font-medium">
                 Rasch results{' '}
-                <span className="text-muted-foreground font-normal text-xs">(from Facets output — leave blank for placeholders)</span>
+                <span className="text-muted-foreground font-normal text-xs">(leave blank for placeholders)</span>
               </p>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
