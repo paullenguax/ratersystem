@@ -69,6 +69,7 @@ function Bar({ value, max, colour = 'bg-primary' }: { value: number; max: number
 
 export function StatisticsPage() {
   const [sessionName, setSessionName] = useState('')
+  const [srOnly, setSrOnly] = useState(false)
 
   const { data: scores = [], isLoading } = useQuery({
     queryKey: ['scores'],
@@ -278,7 +279,18 @@ export function StatisticsPage() {
 
         {/* Rater summary table */}
         <div className="space-y-3">
-          <h2 className="text-base font-semibold">Rater summary</h2>
+          <div className="flex items-center justify-between gap-4">
+            <h2 className="text-base font-semibold">Rater summary</h2>
+            <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={srOnly}
+                onChange={e => setSrOnly(e.target.checked)}
+                className="rounded border-input"
+              />
+              Senior raters &amp; admins only
+            </label>
+          </div>
           <div className="rounded-md border overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-muted/40 border-b">
@@ -295,7 +307,7 @@ export function StatisticsPage() {
                 </tr>
               </thead>
               <tbody>
-                {raterStats.map(r => (
+                {(srOnly ? raterStats.filter(r => r.isSR) : raterStats).map(r => (
                   <tr key={r.raterId} className="border-t hover:bg-muted/20">
                     <td className="px-3 py-2">
                       {r.name}
