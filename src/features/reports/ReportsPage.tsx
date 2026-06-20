@@ -1,12 +1,14 @@
-import { Fragment, useState, useMemo } from 'react'
+import { Fragment, useState, useMemo, useRef, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { collection, getDocs } from 'firebase/firestore'
-import { Copy, Check, ChevronRight } from 'lucide-react'
+import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore'
+import { Copy, Check, ChevronRight, Download } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import type { Score, Person } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { WrightMap } from '@/components/WrightMap'
+import type { RaschRun } from '@/lib/parseFacets'
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -169,6 +171,8 @@ export function ReportsPage() {
   const [expanded, setExpanded]         = useState<Set<string>>(new Set())
   const [copied, setCopied]             = useState(false)
 
+  const svgRef = useRef<SVGSVGElement>(null)
+
   const { data: scores = [] } = useQuery({
     queryKey: ['scores'],
     queryFn: async () =>
@@ -178,6 +182,14 @@ export function ReportsPage() {
     queryKey: ['people'],
     queryFn: async () =>
       (await getDocs(collection(db, 'people'))).docs.map(d => ({ id: d.id, ...d.data() }) as Person),
+  })
+  const { data: latestRun } = useQuery({
+    queryKey: ['rasch_runs', 'latest'],
+    queryFn: async () => {
+      const snap = await getDocs(query(collection(db, 'rasch_runs'), orderBy('importedAt', 'desc'), limit(1)))
+      if (snap.empty) return null
+      return snap.docs[0].data() as RaschRun & { meanMeasure: number; reliability: number; separation: number; rmse: number }
+    },
   })
 
   // Sessions deduplicated by name (multiple import runs → one entry)
@@ -209,6 +221,17 @@ export function ReportsPage() {
   }, [scores, sessionIds])
 
   const rater = useMemo(() => people.find(p => p.id === raterId), [people, raterId])
+
+  const raschData = useMemo(() => {
+    if (!latestRun || !rater?.raterNumber) return null
+    return latestRun.raters.find(r => r.raterNumber === rater.raterNumber) ?? null
+  }, [latestRun, rater])
+
+  // Auto-fill measure/infit when rasch data is available for this rater
+  useEffect(() => {
+    if (raschData && !measure) setMeasure(String(raschData.measure))
+    if (raschData && !infit)   setInfit(String(raschData.infitMnSq))
+  }, [raschData]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const srRaterIds = useMemo(
     () => new Set(people.filter(p => p.role === 'senior_rater' || p.role === 'admin').map(p => p.id)),
@@ -305,6 +328,33 @@ export function ReportsPage() {
     setRaterId(id)
     setParaOverrides({})
     setExpanded(new Set())
+  }
+
+  function handleDownloadMap() {
+    const svg = svgRef.current
+    if (!svg) return
+    const serializer = new XMLSerializer()
+    const svgStr = serializer.serializeToString(svg)
+    const canvas = document.createElement('canvas')
+    canvas.width = 340 * 2
+    canvas.height = 520 * 2
+    const ctx = canvas.getContext('2d')!
+    const img = new Image()
+    const blob = new Blob([svgStr], { type: 'image/svg+xml' })
+    const url = URL.createObjectURL(blob)
+    img.onload = () => {
+      ctx.scale(2, 2)
+      ctx.drawImage(img, 0, 0)
+      URL.revokeObjectURL(url)
+      canvas.toBlob(png => {
+        if (!png) return
+        const a = document.createElement('a')
+        a.href = URL.createObjectURL(png)
+        a.download = `wright-map-${rater?.raterNumber ?? 'rater'}.png`
+        a.click()
+      }, 'image/png')
+    }
+    img.src = url
   }
 
   async function handleCopy() {
@@ -564,6 +614,31 @@ export function ReportsPage() {
                 </div>
               </div>
             </div>
+
+            {/* Wright map */}
+            {raschData && latestRun && rater && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium">Wright map</p>
+                  <Button size="sm" variant="outline" onClick={handleDownloadMap}>
+                    <Download className="size-4 mr-1.5" />
+                    Download PNG
+                  </Button>
+                </div>
+                <div className="border rounded-md p-2 inline-block bg-white">
+                  <WrightMap
+                    ref={svgRef}
+                    raterName={rater.name}
+                    raterNumber={rater.raterNumber!}
+                    measure={raschData.measure}
+                    se={raschData.se}
+                    meanMeasure={latestRun.meanMeasure}
+                    candidateDensity={latestRun.candidateDensity}
+                    criteria={latestRun.criteria}
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Outcome */}
             <div className="space-y-2">

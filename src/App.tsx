@@ -23,6 +23,7 @@ import { ImportTestsPage } from '@/features/admin/ImportTestsPage'
 import { ImportHistoricalScoresPage } from '@/features/admin/ImportHistoricalScoresPage'
 import { CanvasSyncPage } from '@/features/admin/CanvasSyncPage'
 import { AutoAssignPage } from '@/features/admin/AutoAssignPage'
+import { ImportRaschPage } from '@/features/admin/ImportRaschPage'
 import { CertificatesPage } from '@/features/certificates/CertificatesPage'
 
 const queryClient = new QueryClient()
@@ -62,6 +63,7 @@ export default function App() {
                 <Route path="admin/import-historical-scores" element={<ProtectedRoute allowedRoles={['admin']}><ImportHistoricalScoresPage /></ProtectedRoute>} />
                 <Route path="admin/canvas-sync"   element={<ProtectedRoute allowedRoles={['admin']}><CanvasSyncPage /></ProtectedRoute>} />
                 <Route path="admin/auto-assign"   element={<ProtectedRoute allowedRoles={['admin']}><AutoAssignPage /></ProtectedRoute>} />
+                <Route path="admin/import-rasch"  element={<ProtectedRoute allowedRoles={['admin']}><ImportRaschPage /></ProtectedRoute>} />
               </Route>
 
               <Route path="*" element={<Navigate to="/" replace />} />
