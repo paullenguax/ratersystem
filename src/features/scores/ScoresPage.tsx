@@ -42,50 +42,68 @@ function exportRaschCSV(scores: Score[], sessionId: string, people: Person[]) {
 
   const permNumById = new Map(people.filter(p => p.raterNumber).map(p => [p.id, p.raterNumber!]))
 
-  // All raters across all rows — assign a single number per rater (permanent if set, else sequential)
-  const allRaters = [...new Map(rows.map(s => [s.raterId, s.raterName])).entries()]
-    .sort((a, b) => a[1].localeCompare(b[1]))
-
-  let nextNum = Math.max(0, ...(permNumById.size ? permNumById.values() : [0])) + 1
-  const raterNum = new Map<string, number>()
-  for (const [id] of allRaters) {
-    raterNum.set(id, permNumById.get(id) ?? nextNum++)
-  }
-
-  // Returnees: raters who appear in both published and current-session rows
-  const publishedRaterIds  = new Set(rows.filter(s => s.published).map(s => s.raterId))
+  // Current session raters always get a fresh temp number — even returnees
+  // so they appear as a separate row in Facets Table 7 alongside their historical row
   const currentSessionRaterIds = sessionId
     ? new Set(rows.filter(s => !s.published && s.sessionId === sessionId).map(s => s.raterId))
     : new Set<string>()
+  const publishedRaterIds = new Set(rows.filter(s => s.published).map(s => s.raterId))
   const returneeIds = new Set([...currentSessionRaterIds].filter(id => publishedRaterIds.has(id)))
+  const newRaterIds  = new Set([...currentSessionRaterIds].filter(id => !publishedRaterIds.has(id)))
+
+  let nextNum = Math.max(0, ...(permNumById.size ? permNumById.values() : [0])) + 1
+  const tempNumById = new Map<string, number>()
+  // Assign temp numbers to all current-session raters (sorted for stability)
+  const currentRatersSorted = [...currentSessionRaterIds].sort((a, b) => {
+    const nameA = rows.find(s => s.raterId === a)?.raterName ?? ''
+    const nameB = rows.find(s => s.raterId === b)?.raterName ?? ''
+    return nameA.localeCompare(nameB)
+  })
+  for (const id of currentRatersSorted) tempNumById.set(id, nextNum++)
 
   const sessionName = sessionId ? (scores.find(s => s.sessionId === sessionId)?.sessionName ?? sessionId) : null
 
+  // Build rater key: historical raters first, then current (returnees appear twice)
+  const historicalRaters = [...new Map(
+    rows.filter(s => s.published).map(s => [s.raterId, s.raterName])
+  ).entries()].sort((a, b) => a[1].localeCompare(b[1]))
+  const currentRaters = currentRatersSorted.map(id => {
+    const name = rows.find(s => s.raterId === id)?.raterName ?? id
+    return [id, name] as [string, string]
+  })
+
   const lines: string[] = [
     `! Rasch export — ${new Date().toISOString().split('T')[0]}`,
-    `! ${rows.length} observations · ${allRaters.length} raters`,
-    `! ${sessionName ? `Published + unpublished from: ${sessionName}` : 'Published scores only'}`,
-    `! Occasion 1 = historical (all published)  ·  Occasion 2 = current event (${sessionName ?? 'n/a'})`,
-    `! Returnees appear in both occasions under the same rater number`,
+    `! ${rows.length} observations`,
+    `! ${sessionName ? `Published + current event: ${sessionName}` : 'Published scores only'}`,
+    `! Historical raters use permanent numbers · Current raters use temp numbers`,
+    `! Returnees appear twice (permanent # for history, temp # for current event)`,
     `!`,
-    `! Rater key:`,
-    ...allRaters.map(([id, name]) => {
-      const isReturnee = returneeIds.has(id)
-      const isNew = currentSessionRaterIds.has(id) && !publishedRaterIds.has(id)
-      const tag = isReturnee ? '  [returnee — appears in both occasions]' : isNew ? '  [new this event]' : ''
-      return `! ${raterNum.get(id)}\t${name}${tag}`
+    `! Rater key — historical:`,
+    ...historicalRaters.map(([id, name]) => {
+      const tag = returneeIds.has(id) ? '  [returnee — also has temp # below]' : ''
+      return `! ${permNumById.get(id)}\t${name}${tag}`
     }),
     `!`,
-    ['candidate', 'rater', 'occasion', '1-6a', 'varPronunciation', 'varStructure',
+    `! Rater key — current event (temp numbers):`,
+    ...currentRaters.map(([id, name]) => {
+      const tag = returneeIds.has(id) ? '  [returnee]' : newRaterIds.has(id) ? '  [new]' : ''
+      return `! ${tempNumById.get(id)}\t${name}${tag}`
+    }),
+    `!`,
+    ['candidate', 'rater', '1-6a', 'varPronunciation', 'varStructure',
       'varVocabulary', 'varFluency', 'varComprehension', 'varInteraction'].join('\t'),
-    ...rows.map(s => [
-      s.testNumber,
-      raterNum.get(s.raterId) ?? 0,
-      (!s.published && sessionId && s.sessionId === sessionId) ? 2 : 1,
-      '1-6a',
-      s.pronunciation, s.structure, s.vocabulary,
-      s.fluency, s.comprehension, s.interactions,
-    ].join('\t')),
+    ...rows.map(s => {
+      const isCurrent = !s.published && sessionId && s.sessionId === sessionId
+      const num = isCurrent ? (tempNumById.get(s.raterId) ?? 0) : (permNumById.get(s.raterId) ?? 0)
+      return [
+        s.testNumber,
+        num,
+        '1-6a',
+        s.pronunciation, s.structure, s.vocabulary,
+        s.fluency, s.comprehension, s.interactions,
+      ].join('\t')
+    }),
   ]
 
   const blob = new Blob([lines.join('\n')], { type: 'text/tab-separated-values;charset=utf-8;' })
