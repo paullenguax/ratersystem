@@ -127,8 +127,6 @@ export function StatisticsPage() {
     const vals = filtered.map(s => s[d.key] as number)
     return { ...d, mean: mean(vals), sd: sd(vals) }
   }), [filtered])
-  const dimMeanMax = Math.max(...dimStats.map(d => d.mean))
-
   // Agreement rate
   const agreement = useMemo(() => pairwiseAgreement(filtered), [filtered])
 

@@ -22,7 +22,7 @@ function pickTests(params: {
   assignFreq: Map<string, number>    // how many times each test is already assigned this run
   totalPerRater: number
 }): { tests: Test[]; anchorIdx: number } {
-  const { rater: _, pool, seenByRater, assignFreq, totalPerRater } = params
+  const { pool, seenByRater, assignFreq, totalPerRater } = params
   const chosen: Test[] = []
   let anchorIdx = -1
 
@@ -189,7 +189,7 @@ export function AutoAssignPage() {
   function toggleRater(id: string) {
     setSelectedRaters(prev => {
       const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
+      if (next.has(id)) { next.delete(id) } else { next.add(id) }
       return next
     })
     setPreview(null)
