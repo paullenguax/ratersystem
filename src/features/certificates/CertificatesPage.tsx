@@ -16,11 +16,9 @@ export function CertificatesPage() {
           Certificate generation is currently handled by the standalone tool at lenguax.com.
           Click below to open it.
         </p>
-        <Button asChild>
-          <a href="https://lenguax.com/cert_generator" target="_blank" rel="noreferrer">
-            <ExternalLink className="size-4 mr-2" />
-            Open Certificate Generator
-          </a>
+        <Button render={<a href="https://lenguax.com/cert_generator" target="_blank" rel="noreferrer" />}>
+          <ExternalLink className="size-4 mr-2" />
+          Open Certificate Generator
         </Button>
       </div>
     </div>
