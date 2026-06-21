@@ -76,8 +76,12 @@ function buildEmail(params: {
   infit: string
   outcome: 'pass' | 'advisory' | 'fail'
   advisoryText: string
+  isRepeater: boolean
+  prevRaterNumber: string
+  prevMeasure: string
 }): string {
-  const { rater, candidateStats, paraOverrides, measure, infit, outcome, advisoryText } = params
+  const { rater, candidateStats, paraOverrides, measure, infit, outcome, advisoryText,
+          isRepeater, prevRaterNumber, prevMeasure } = params
   const firstName = rater.name.split(' ')[0]
   const raterNum = rater.raterNumber ?? '[RATER NUMBER]'
 
@@ -112,6 +116,19 @@ function buildEmail(params: {
     outcome === 'advisory' ? `we are happy to award your certificate. ${advisoryText || '[ADVISORY DETAIL]'}` :
                              `we are not yet in a position to award your certificate. ${advisoryText || '[REASON]'}`
 
+  let repeaterSentence = ''
+  if (isRepeater && prevRaterNumber) {
+    const prevM = parseFloat(prevMeasure)
+    const currM = parseFloat(measure)
+    let severityClause = ''
+    if (!isNaN(prevM) && !isNaN(currM)) {
+      const diff = currM - prevM
+      const word = diff > 0.3 ? 'more severe (stricter)' : diff < -0.3 ? 'less severe (more generous)' : 'similarly severe'
+      severityClause = ` Your current scores are ${word} compared to that previous certification.`
+    }
+    repeaterSentence = `As a returning rater, your previous scores with us (as Rater ${prevRaterNumber}) had a severity measure of ${prevMeasure || '[PREVIOUS MEASURE]'}.${severityClause}`
+  }
+
   return [
     `Hi ${firstName}`,
     '',
@@ -139,6 +156,7 @@ function buildEmail(params: {
     '',
     `Congratulations on passing the course!`,
     '',
+    ...(repeaterSentence ? [repeaterSentence, ''] : []),
     `If possible, could you leave us some feedback?`,
     '',
     `If you wish to do this in "public", so to speak, you can do so here:`,
@@ -170,6 +188,9 @@ export function ReportsPage() {
   const [paraOverrides, setParaOverrides] = useState<Record<string, string>>({})
   const [expanded, setExpanded]         = useState<Set<string>>(new Set())
   const [copied, setCopied]             = useState(false)
+  const [isRepeater, setIsRepeater]     = useState(false)
+  const [prevRaterNumber, setPrevRaterNumber] = useState('')
+  const [prevMeasure, setPrevMeasure]   = useState('')
 
   const svgRef = useRef<SVGSVGElement>(null)
 
@@ -302,8 +323,10 @@ export function ReportsPage() {
 
   const emailText = useMemo(() => {
     if (!rater || candidateStats.length === 0) return ''
-    return buildEmail({ rater, candidateStats, paraOverrides, measure, infit, outcome, advisoryText })
-  }, [rater, candidateStats, paraOverrides, measure, infit, outcome, advisoryText])
+    return buildEmail({ rater, candidateStats, paraOverrides, measure, infit, outcome, advisoryText,
+                        isRepeater, prevRaterNumber, prevMeasure })
+  }, [rater, candidateStats, paraOverrides, measure, infit, outcome, advisoryText,
+      isRepeater, prevRaterNumber, prevMeasure])
 
   function toggleExpanded(testDocId: string) {
     setExpanded(prev => {
@@ -328,6 +351,9 @@ export function ReportsPage() {
     setRaterId(id)
     setParaOverrides({})
     setExpanded(new Set())
+    setIsRepeater(false)
+    setPrevRaterNumber('')
+    setPrevMeasure('')
   }
 
   function handleDownloadMap() {
@@ -663,6 +689,38 @@ export function ReportsPage() {
                   rows={2}
                   className="text-sm resize-none"
                 />
+              )}
+            </div>
+
+            {/* Repeater */}
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isRepeater}
+                  onChange={e => setIsRepeater(e.target.checked)}
+                />
+                Returning rater (has previous certification)
+              </label>
+              {isRepeater && (
+                <div className="grid grid-cols-2 gap-3 pl-6">
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Previous rater number</label>
+                    <Input
+                      placeholder="e.g. 12"
+                      value={prevRaterNumber}
+                      onChange={e => setPrevRaterNumber(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Previous measure (logit)</label>
+                    <Input
+                      placeholder="e.g. -0.45"
+                      value={prevMeasure}
+                      onChange={e => setPrevMeasure(e.target.value)}
+                    />
+                  </div>
+                </div>
               )}
             </div>
 

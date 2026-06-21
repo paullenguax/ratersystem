@@ -66,7 +66,7 @@ function exportRaschCSV(scores: Score[], sessionId: string, people: Person[]) {
   // Build rater key: historical raters first, then current (returnees appear twice)
   const historicalRaters = [...new Map(
     rows.filter(s => s.published).map(s => [s.raterId, s.raterName])
-  ).entries()].sort((a, b) => a[1].localeCompare(b[1]))
+  ).entries()].sort((a, b) => (permNumById.get(a[0]) ?? 0) - (permNumById.get(b[0]) ?? 0))
   const currentRaters = currentRatersSorted.map(id => {
     const name = rows.find(s => s.raterId === id)?.raterName ?? id
     return [id, name] as [string, string]
@@ -93,7 +93,13 @@ function exportRaschCSV(scores: Score[], sessionId: string, people: Person[]) {
     `!`,
     ['candidate', 'rater', '1-6a', 'varPronunciation', 'varStructure',
       'varVocabulary', 'varFluency', 'varComprehension', 'varInteraction'].join('\t'),
-    ...rows.map(s => {
+    ...[...rows].sort((a, b) => {
+      const isCurrA = !a.published && !!sessionId && a.sessionId === sessionId
+      const isCurrB = !b.published && !!sessionId && b.sessionId === sessionId
+      const numA = isCurrA ? (tempNumById.get(a.raterId) ?? 0) : (permNumById.get(a.raterId) ?? 0)
+      const numB = isCurrB ? (tempNumById.get(b.raterId) ?? 0) : (permNumById.get(b.raterId) ?? 0)
+      return numA !== numB ? numA - numB : (a.testNumber ?? 0) - (b.testNumber ?? 0)
+    }).map(s => {
       const isCurrent = !s.published && sessionId && s.sessionId === sessionId
       const num = isCurrent ? (tempNumById.get(s.raterId) ?? 0) : (permNumById.get(s.raterId) ?? 0)
       return [
