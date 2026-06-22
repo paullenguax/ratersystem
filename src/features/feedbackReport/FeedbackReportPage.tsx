@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { collection, getDocs } from 'firebase/firestore'
 import { Copy, Check, ChevronLeft, ChevronRight } from 'lucide-react'
 import { db } from '@/lib/firebase'
-import type { Score, Person } from '@/types'
+import type { Score } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { PLACEHOLDER_TEXTS, FEEDBACK_AREAS, type FeedbackArea } from './placeholderTexts'
@@ -46,11 +46,6 @@ export function FeedbackReportPage() {
     queryKey: ['scores'],
     queryFn: async () =>
       (await getDocs(collection(db, 'scores'))).docs.map(d => ({ id: d.id, ...d.data() }) as Score),
-  })
-  const { data: people = [] } = useQuery({
-    queryKey: ['people'],
-    queryFn: async () =>
-      (await getDocs(collection(db, 'people'))).docs.map(d => ({ id: d.id, ...d.data() }) as Person),
   })
 
   const sessions = useMemo(() => {
