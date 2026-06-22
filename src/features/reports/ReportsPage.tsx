@@ -79,11 +79,12 @@ function buildEmail(params: {
   isRepeater: boolean
   prevRaterNumber: string
   prevMeasure: string
+  currentRaterNumber: string
 }): string {
   const { rater, candidateStats, paraOverrides, measure, infit, outcome, advisoryText,
-          isRepeater, prevRaterNumber, prevMeasure } = params
+          isRepeater, prevRaterNumber, prevMeasure, currentRaterNumber } = params
   const firstName = rater.name.split(' ')[0]
-  const raterNum = rater.raterNumber ?? '[RATER NUMBER]'
+  const raterNum = (isRepeater && currentRaterNumber) ? currentRaterNumber : (rater.raterNumber ?? '[RATER NUMBER]')
 
   const measureVal = measure || '[MEASURE]'
   const infitVal   = infit   || '[INFIT MNSQ]'
@@ -189,6 +190,7 @@ export function ReportsPage() {
   const [expanded, setExpanded]         = useState<Set<string>>(new Set())
   const [copied, setCopied]             = useState(false)
   const [isRepeater, setIsRepeater]     = useState(false)
+  const [currentRaterNumber, setCurrentRaterNumber] = useState('')
   const [prevRaterNumber, setPrevRaterNumber] = useState('')
   const [prevMeasure, setPrevMeasure]   = useState('')
 
@@ -259,12 +261,12 @@ export function ReportsPage() {
     [people],
   )
 
-  // Scores for this rater in this session, sorted by test number
+  // Scores for this rater in this session, sorted by entry order so A/B/C matches the rater's test sequence
   const raterScores = useMemo(() => {
     if (!sessionIds.length || !raterId) return []
     return scores
       .filter(s => sessionIds.includes(s.sessionId) && s.raterId === raterId)
-      .sort((a, b) => (a.testNumber ?? 0) - (b.testNumber ?? 0))
+      .sort((a, b) => ((a.createdAt as any)?.seconds ?? 0) - ((b.createdAt as any)?.seconds ?? 0))
   }, [scores, sessionIds, raterId])
 
   // Per-candidate stats — allScores drawn from ALL sessions for that test
@@ -324,9 +326,9 @@ export function ReportsPage() {
   const emailText = useMemo(() => {
     if (!rater || candidateStats.length === 0) return ''
     return buildEmail({ rater, candidateStats, paraOverrides, measure, infit, outcome, advisoryText,
-                        isRepeater, prevRaterNumber, prevMeasure })
+                        isRepeater, currentRaterNumber, prevRaterNumber, prevMeasure })
   }, [rater, candidateStats, paraOverrides, measure, infit, outcome, advisoryText,
-      isRepeater, prevRaterNumber, prevMeasure])
+      isRepeater, currentRaterNumber, prevRaterNumber, prevMeasure])
 
   function toggleExpanded(testDocId: string) {
     setExpanded(prev => {
@@ -352,6 +354,7 @@ export function ReportsPage() {
     setParaOverrides({})
     setExpanded(new Set())
     setIsRepeater(false)
+    setCurrentRaterNumber('')
     setPrevRaterNumber('')
     setPrevMeasure('')
   }
@@ -703,11 +706,19 @@ export function ReportsPage() {
                 Returning rater (has previous certification)
               </label>
               {isRepeater && (
-                <div className="grid grid-cols-2 gap-3 pl-6">
+                <div className="grid grid-cols-3 gap-3 pl-6">
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Current rater number <span className="text-foreground">(this event)</span></label>
+                    <Input
+                      placeholder="e.g. 48"
+                      value={currentRaterNumber}
+                      onChange={e => setCurrentRaterNumber(e.target.value)}
+                    />
+                  </div>
                   <div className="space-y-1">
                     <label className="text-xs text-muted-foreground">Previous rater number</label>
                     <Input
-                      placeholder="e.g. 12"
+                      placeholder="e.g. 5"
                       value={prevRaterNumber}
                       onChange={e => setPrevRaterNumber(e.target.value)}
                     />
