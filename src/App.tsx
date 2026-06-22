@@ -25,6 +25,7 @@ import { CanvasSyncPage } from '@/features/admin/CanvasSyncPage'
 import { AutoAssignPage } from '@/features/admin/AutoAssignPage'
 import { ImportRaschPage } from '@/features/admin/ImportRaschPage'
 import { CertificatesPage } from '@/features/certificates/CertificatesPage'
+import { ValidatePage } from '@/features/certificates/ValidatePage'
 import { FeedbackReportPage } from '@/features/feedbackReport/FeedbackReportPage'
 
 const queryClient = new QueryClient()
@@ -37,6 +38,8 @@ export default function App() {
           <AuthProvider>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/validate/:certNumber" element={<ValidatePage />} />
+              <Route path="/validate" element={<ValidatePage />} />
               <Route path="/auth/canvas/callback" element={<CanvasCallbackPage />} />
 
               <Route
