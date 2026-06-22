@@ -1,128 +1,97 @@
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { collection, getDocs } from 'firebase/firestore'
-import { Copy, Check, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Copy, Check } from 'lucide-react'
 import { db } from '@/lib/firebase'
-import type { Score } from '@/types'
+import type { Test } from '@/types'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { PLACEHOLDER_TEXTS, FEEDBACK_AREAS, type FeedbackArea } from './placeholderTexts'
 
-// ── types ──────────────────────────────────────────────────────────────────
+type TestSource = 'bank' | 'manual'
 
-type Overrides = Record<string, Partial<Record<FeedbackArea, string>>>
-
-// ── compile ────────────────────────────────────────────────────────────────
-
-function compileReport(
-  candidateName: string,
-  testNumber: number | null,
-  raterScore: Score,
-  overrides: Partial<Record<FeedbackArea, string>>,
-): string {
-  const sections = FEEDBACK_AREAS.map(({ key, label }) => {
-    const score = raterScore[key] as number
-    const text = overrides[key] ?? PLACEHOLDER_TEXTS[key][score] ?? `[No placeholder for ${label} Level ${score}]`
-    return `${label.toUpperCase()} (Level ${score})\n\n${text}`
-  })
-
-  return [
-    `${candidateName}${testNumber ? ` — Test ${testNumber}` : ''}`,
-    '',
-    sections.join('\n\n---\n\n'),
-  ].join('\n')
+const SCORE_COLOURS: Record<number, string> = {
+  1: 'bg-red-600 text-white border-red-600',
+  2: 'bg-red-600 text-white border-red-600',
+  3: 'bg-amber-500 text-white border-amber-500',
+  4: 'bg-blue-600 text-white border-blue-600',
+  5: 'bg-green-600 text-white border-green-600',
+  6: 'bg-green-600 text-white border-green-600',
 }
 
-// ── page ───────────────────────────────────────────────────────────────────
-
 export function FeedbackReportPage() {
-  const [sessionName, setSessionName] = useState('')
-  const [raterId, setRaterId]         = useState('')
-  const [candidateIdx, setCandidateIdx] = useState(0)
-  const [overrides, setOverrides]     = useState<Overrides>({})
-  const [copied, setCopied]           = useState(false)
+  const [testSource, setTestSource]               = useState<TestSource>('bank')
+  const [testDocId, setTestDocId]                 = useState('')
+  const [manualCandidateName, setManualCandidateName] = useState('')
+  const [manualTestNumber, setManualTestNumber]   = useState('')
+  const [activeArea, setActiveArea]               = useState<FeedbackArea>('pronunciation')
+  const [scores, setScores]                       = useState<Partial<Record<FeedbackArea, number>>>({})
+  const [texts, setTexts]                         = useState<Partial<Record<FeedbackArea, string>>>({})
+  const [copied, setCopied]                       = useState(false)
 
-  const { data: scores = [] } = useQuery({
-    queryKey: ['scores'],
+  const { data: tests = [] } = useQuery({
+    queryKey: ['tests'],
     queryFn: async () =>
-      (await getDocs(collection(db, 'scores'))).docs.map(d => ({ id: d.id, ...d.data() }) as Score),
+      (await getDocs(collection(db, 'test_bank'))).docs.map(d => ({ id: d.id, ...d.data() }) as Test),
   })
 
-  const sessions = useMemo(() => {
-    const seen = new Map<string, Set<string>>()
-    scores.forEach(s => {
-      if (!s.sessionId || !s.sessionName) return
-      if (!seen.has(s.sessionName)) seen.set(s.sessionName, new Set())
-      seen.get(s.sessionName)!.add(s.sessionId)
-    })
-    return [...seen.entries()]
-      .map(([name, ids]) => ({ name, ids: [...ids] }))
-      .sort((a, b) => a.name.localeCompare(b.name))
-  }, [scores])
-
-  const sessionIds = useMemo(
-    () => sessions.find(s => s.name === sessionName)?.ids ?? [],
-    [sessions, sessionName],
+  const sortedTests = useMemo(
+    () => [...tests].filter(t => t.status === 'active').sort((a, b) => (a.testId ?? 0) - (b.testId ?? 0)),
+    [tests],
   )
 
-  const ratersInSession = useMemo(() => {
-    if (!sessionIds.length) return []
-    const seen = new Map<string, string>()
-    scores.filter(s => sessionIds.includes(s.sessionId)).forEach(s => seen.set(s.raterId, s.raterName))
-    return [...seen.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))
-  }, [scores, sessionIds])
+  const selectedTest = useMemo(() => tests.find(t => t.id === testDocId) ?? null, [tests, testDocId])
 
-  const raterScores = useMemo(() => {
-    if (!sessionIds.length || !raterId) return []
-    return scores
-      .filter(s => sessionIds.includes(s.sessionId) && s.raterId === raterId)
-      .sort((a, b) => (a.testNumber ?? 0) - (b.testNumber ?? 0))
-  }, [scores, sessionIds, raterId])
+  const candidateName = testSource === 'bank' ? (selectedTest?.candidateName ?? '') : manualCandidateName
+  const testNumber    = testSource === 'bank'
+    ? (selectedTest?.testId ?? null)
+    : (manualTestNumber ? parseInt(manualTestNumber) || null : null)
 
-  const candidate = raterScores[candidateIdx] ?? null
-  const label = String.fromCharCode(65 + candidateIdx)
+  const testReady = testSource === 'bank' ? !!testDocId : !!manualCandidateName
 
-  const candidateOverrides = candidate ? (overrides[candidate.testDocId] ?? {}) : {}
+  function switchSource(src: TestSource) {
+    setTestSource(src)
+    setTestDocId('')
+    setManualCandidateName('')
+    setManualTestNumber('')
+    setScores({})
+    setTexts({})
+    setActiveArea('pronunciation')
+  }
+
+  function selectTest(id: string) {
+    setTestDocId(id)
+    setScores({})
+    setTexts({})
+    setActiveArea('pronunciation')
+  }
+
+  function setScore(area: FeedbackArea, score: number) {
+    setScores(prev => ({ ...prev, [area]: score }))
+    setTexts(prev => { const n = { ...prev }; delete n[area]; return n })
+  }
 
   function getAreaText(area: FeedbackArea): string {
-    if (!candidate) return ''
-    return candidateOverrides[area] ?? PLACEHOLDER_TEXTS[area][candidate[area] as number] ?? ''
+    if (texts[area] !== undefined) return texts[area]!
+    const score = scores[area]
+    return score ? (PLACEHOLDER_TEXTS[area][score] ?? '') : ''
   }
 
-  function setAreaText(area: FeedbackArea, text: string) {
-    if (!candidate) return
-    setOverrides(prev => ({
-      ...prev,
-      [candidate.testDocId]: { ...prev[candidate.testDocId], [area]: text },
-    }))
-  }
-
-  function resetArea(area: FeedbackArea) {
-    if (!candidate) return
-    setOverrides(prev => {
-      const next = { ...prev[candidate.testDocId] }
-      delete next[area]
-      return { ...prev, [candidate.testDocId]: next }
-    })
-  }
-
-  function changeSession(name: string) {
-    setSessionName(name)
-    setRaterId('')
-    setCandidateIdx(0)
-    setOverrides({})
-  }
-
-  function changeRater(id: string) {
-    setRaterId(id)
-    setCandidateIdx(0)
-    setOverrides({})
-  }
+  const completedCount = FEEDBACK_AREAS.filter(a => scores[a.key] != null).length
 
   const reportText = useMemo(() => {
-    if (!candidate) return ''
-    return compileReport(candidate.candidateName, candidate.testNumber ?? null, candidate, candidateOverrides)
-  }, [candidate, candidateOverrides])
+    if (!candidateName || completedCount === 0) return ''
+    const header = `${candidateName}${testNumber != null ? ` — Test ${testNumber}` : ''}`
+    const sections = FEEDBACK_AREAS
+      .filter(({ key }) => scores[key] != null)
+      .map(({ key, label }) => {
+        const score = scores[key]!
+        const text  = texts[key] ?? PLACEHOLDER_TEXTS[key][score] ?? ''
+        return `${label.toUpperCase()} (Level ${score})\n\n${text}`
+      })
+    return [header, '', sections.join('\n\n---\n\n')].join('\n')
+  }, [candidateName, testNumber, scores, texts, completedCount])
 
   async function handleCopy() {
     await navigator.clipboard.writeText(reportText)
@@ -130,129 +99,148 @@ export function FeedbackReportPage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  const activeScore = scores[activeArea]
+  const activeText  = getAreaText(activeArea)
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Feedback Reports</h1>
-        <p className="text-muted-foreground text-sm mt-1">Write per-candidate ICAO feedback using auto-generated placeholder text.</p>
+        <p className="text-muted-foreground text-sm mt-1">Write per-candidate ICAO feedback with auto-generated placeholder text.</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
 
         {/* ── LEFT ───────────────────────────────────────────────────────── */}
-        <div className="space-y-6">
+        <div className="space-y-5">
 
-          {/* Event + Rater */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Event</label>
+          {/* Source toggle + test selector */}
+          <div className="space-y-3">
+            <div className="flex gap-2">
+              {(['bank', 'manual'] as TestSource[]).map(src => (
+                <button
+                  key={src}
+                  onClick={() => switchSource(src)}
+                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                    testSource === src
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                  }`}
+                >
+                  {src === 'bank' ? 'From test bank' : 'Manual entry'}
+                </button>
+              ))}
+            </div>
+
+            {testSource === 'bank' ? (
               <select
-                value={sessionName}
-                onChange={e => changeSession(e.target.value)}
+                value={testDocId}
+                onChange={e => selectTest(e.target.value)}
                 className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
               >
-                <option value="">Select event…</option>
-                {sessions.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
+                <option value="">Select test…</option>
+                {sortedTests.map(t => (
+                  <option key={t.id} value={t.id}>#{t.testId} — {t.candidateName}</option>
+                ))}
               </select>
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Rater</label>
-              <select
-                value={raterId}
-                onChange={e => changeRater(e.target.value)}
-                className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
-                disabled={!sessionName}
-              >
-                <option value="">Select rater…</option>
-                {ratersInSession.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-              </select>
-            </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Candidate name</label>
+                  <Input
+                    placeholder="e.g. Jane Smith"
+                    value={manualCandidateName}
+                    onChange={e => setManualCandidateName(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Test number (optional)</label>
+                  <Input
+                    placeholder="e.g. 23"
+                    value={manualTestNumber}
+                    onChange={e => setManualTestNumber(e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
-          {raterScores.length > 0 && (<>
+          {testReady && (<>
 
-            {/* Candidate navigation */}
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm" variant="outline"
-                disabled={candidateIdx === 0}
-                onClick={() => setCandidateIdx(i => i - 1)}
-              >
-                <ChevronLeft className="size-4" />
-              </Button>
-              <div className="flex gap-1.5 flex-wrap">
-                {raterScores.map((s, i) => (
+            {/* Area tabs */}
+            <div className="flex gap-1.5">
+              {FEEDBACK_AREAS.map(({ key, label }) => {
+                const isComplete = scores[key] != null
+                const isActive   = activeArea === key
+                return (
                   <button
-                    key={s.id}
-                    onClick={() => setCandidateIdx(i)}
-                    className={`px-2.5 py-0.5 rounded text-sm font-medium transition-colors ${
-                      i === candidateIdx
+                    key={key}
+                    onClick={() => setActiveArea(key)}
+                    title={label}
+                    className={`flex-1 py-1.5 rounded text-xs font-semibold transition-colors ${
+                      isActive
                         ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted hover:bg-muted/80 text-muted-foreground'
+                        : isComplete
+                        ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                        : 'bg-muted text-muted-foreground hover:bg-muted/80'
                     }`}
                   >
-                    {String.fromCharCode(65 + i)}
+                    {isComplete && !isActive ? '✓' : label.slice(0, 3).toUpperCase()}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Score buttons */}
+            <div className="space-y-2">
+              <p className="text-sm font-medium">
+                {FEEDBACK_AREAS.find(a => a.key === activeArea)?.label}
+                {activeScore != null && (
+                  <span className={`ml-2 text-xs px-1.5 py-0.5 rounded font-mono ${SCORE_COLOURS[activeScore]}`}>
+                    Level {activeScore}
+                  </span>
+                )}
+              </p>
+              <div className="flex gap-2">
+                {[1, 2, 3, 4, 5, 6].map(n => (
+                  <button
+                    key={n}
+                    onClick={() => setScore(activeArea, n)}
+                    className={`w-10 h-10 rounded border text-sm font-semibold transition-colors ${
+                      activeScore === n
+                        ? SCORE_COLOURS[n]
+                        : 'bg-background border-input hover:bg-muted'
+                    }`}
+                  >
+                    {n}
                   </button>
                 ))}
               </div>
-              <Button
-                size="sm" variant="outline"
-                disabled={candidateIdx === raterScores.length - 1}
-                onClick={() => setCandidateIdx(i => i + 1)}
-              >
-                <ChevronRight className="size-4" />
-              </Button>
             </div>
 
-            {candidate && (
+            {/* Editable textarea */}
+            {activeScore != null && (
               <div className="space-y-1">
-                <p className="text-sm font-medium">
-                  Candidate {label} — {candidate.candidateName}
-                  {candidate.testNumber != null && (
-                    <span className="text-muted-foreground font-normal ml-1.5">Test {candidate.testNumber}</span>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs text-muted-foreground">Feedback text</label>
+                  {texts[activeArea] !== undefined && (
+                    <button
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                      onClick={() => setTexts(prev => { const n = { ...prev }; delete n[activeArea]; return n })}
+                    >
+                      ↺ Reset to placeholder
+                    </button>
                   )}
-                </p>
+                </div>
+                <Textarea
+                  key={`${activeArea}-${activeScore}`}
+                  rows={13}
+                  value={activeText}
+                  onChange={e => setTexts(prev => ({ ...prev, [activeArea]: e.target.value }))}
+                  className="text-sm resize-none font-mono"
+                />
               </div>
             )}
-
-            {/* Per-area textareas */}
-            {FEEDBACK_AREAS.map(({ key, label: areaLabel }) => {
-              const score = candidate ? candidate[key] as number : null
-              const isOverridden = key in candidateOverrides
-              return (
-                <div key={key} className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <label className="text-sm font-medium">
-                      {areaLabel}
-                      {score != null && (
-                        <span className={`ml-2 text-xs px-1.5 py-0.5 rounded font-mono font-normal ${
-                          score >= 5 ? 'bg-green-100 text-green-700' :
-                          score === 4 ? 'bg-blue-100 text-blue-700' :
-                          score === 3 ? 'bg-amber-100 text-amber-700' :
-                          'bg-red-100 text-red-700'
-                        }`}>
-                          Level {score}
-                        </span>
-                      )}
-                    </label>
-                    {isOverridden && (
-                      <button
-                        className="text-xs text-muted-foreground hover:text-foreground"
-                        onClick={() => resetArea(key)}
-                      >
-                        ↺ Reset
-                      </button>
-                    )}
-                  </div>
-                  <Textarea
-                    rows={7}
-                    value={getAreaText(key)}
-                    onChange={e => setAreaText(key, e.target.value)}
-                    className="text-sm resize-none font-mono"
-                  />
-                </div>
-              )
-            })}
 
           </>)}
         </div>
@@ -262,7 +250,9 @@ export function FeedbackReportPage() {
           <div className="flex items-center justify-between">
             <p className="text-sm font-medium">
               Compiled report
-              {candidate && <span className="text-muted-foreground font-normal ml-1.5">— Candidate {label}</span>}
+              {completedCount > 0 && (
+                <span className="text-muted-foreground font-normal ml-1.5">({completedCount}/6)</span>
+              )}
             </p>
             {reportText && (
               <Button size="sm" variant="outline" onClick={handleCopy}>
@@ -281,7 +271,7 @@ export function FeedbackReportPage() {
             />
           ) : (
             <div className="rounded-md border border-dashed p-12 text-center text-sm text-muted-foreground">
-              Select an event and rater to generate feedback.
+              Select a test and score at least one area to see the report.
             </div>
           )}
         </div>

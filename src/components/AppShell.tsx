@@ -25,7 +25,7 @@ const ALL_NAV = [
   { label: 'Scores',      path: '/scores',      icon: Star,                roles: ['admin'] },
   { label: 'Statistics',  path: '/statistics',  icon: BarChart2,           roles: ['admin'] },
   { label: 'Reports',         path: '/reports',         icon: FileText,       roles: ['admin'] },
-  { label: 'Feedback',        path: '/feedback-report', icon: MessageSquare,  roles: ['admin'] },
+  { label: 'Feedback',        path: '/feedback-report', icon: MessageSquare,  roles: ['admin', 'senior_rater'] },
   { label: 'Certificates',    path: '/certificates',    icon: Award,          roles: ['admin'] },
   { label: 'Admin',        path: '/admin',        icon: Settings,            roles: ['admin'] },
 ] as const
