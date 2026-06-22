@@ -108,7 +108,7 @@ export function QuickEntryPage() {
         createdAt: serverTimestamp(),
       })
 
-      await Promise.all(entries.map(e => {
+      await Promise.all(entries.map((e, idx) => {
         const test = tests.find(t => t.id === e.testDocId)!
         const [pronunciation, structure, vocabulary, fluency, comprehension, interactions] = e.scores as number[]
         return addDoc(collection(db, 'scores'), {
@@ -125,6 +125,7 @@ export function QuickEntryPage() {
           overallLevel: Math.min(...(e.scores as number[])),
           published: false,
           notes: '',
+          sequence: idx,
           createdAt: serverTimestamp(),
         })
       }))

@@ -266,7 +266,12 @@ export function ReportsPage() {
     if (!sessionIds.length || !raterId) return []
     return scores
       .filter(s => sessionIds.includes(s.sessionId) && s.raterId === raterId)
-      .sort((a, b) => ((a.createdAt as any)?.seconds ?? 0) - ((b.createdAt as any)?.seconds ?? 0))
+      .sort((a, b) => {
+        const aSeq = (a as any).sequence
+        const bSeq = (b as any).sequence
+        if (aSeq != null && bSeq != null) return aSeq - bSeq
+        return ((a.createdAt as any)?.seconds ?? 0) - ((b.createdAt as any)?.seconds ?? 0)
+      })
   }, [scores, sessionIds, raterId])
 
   // Per-candidate stats — allScores drawn from ALL sessions for that test
