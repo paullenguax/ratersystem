@@ -57,8 +57,8 @@ export function AppShell() {
             <div className="flex items-center gap-3">
               <img src={logo} alt="Lenguax" className="w-9 h-9 object-contain shrink-0" />
               <div>
-                <p className="text-sm font-semibold leading-tight">Aviation English</p>
-                <p className="text-xs text-sidebar-foreground/60 leading-tight">Rater System</p>
+                <p className="text-sm font-semibold leading-tight">Lenguax Aviation English</p>
+                <p className="text-xs text-sidebar-foreground/60 leading-tight">Rater Admin System</p>
               </div>
             </div>
           </SidebarHeader>
