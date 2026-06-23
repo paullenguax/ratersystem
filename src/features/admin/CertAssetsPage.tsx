@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ref, uploadBytes, uploadBytesResumable, getDownloadURL, listAll } from 'firebase/storage'
+import { ref, uploadBytes, getDownloadURL, listAll } from 'firebase/storage'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { storage, db } from '@/lib/firebase'
@@ -18,27 +18,26 @@ interface AssetRow {
 }
 
 async function loadAssets(): Promise<AssetRow[]> {
-  const [overridesSnap, storageItems] = await Promise.all([
-    getDoc(doc(db, 'cert_config', 'templates')),
-    Promise.all(
-      CERT_TYPES.map(async ct => {
-        const psdRef = ref(storage, `cert-psd/${ct.value}`)
-        const displayRef = ref(storage, `cert-display/${ct.value}`)
-        const [psdList, displayList] = await Promise.all([
-          listAll(psdRef).catch(() => ({ items: [] })),
-          listAll(displayRef).catch(() => ({ items: [] })),
-        ])
-        const psd    = psdList.items[0]
-        const disp   = displayList.items[0]
-        const [psdUrl, displayUrl] = await Promise.all([
-          psd   ? getDownloadURL(psd)  : Promise.resolve(null),
-          disp  ? getDownloadURL(disp) : Promise.resolve(null),
-        ])
-        return { certType: ct.value as CertTypeValue, psdUrl, psdName: psd?.name ?? null, displayUrl }
-      })
-    ),
-  ])
-  const overrides = overridesSnap.exists() ? (overridesSnap.data() as Record<string, string>) : {}
+  const overridesSnap = await getDoc(doc(db, 'cert_config', 'templates')).catch(() => null)
+  const overrides = overridesSnap?.exists() ? (overridesSnap.data() as Record<string, string>) : {}
+
+  const storageItems = await Promise.all(
+    CERT_TYPES.map(async ct => {
+      const empty = { items: [] as ReturnType<typeof ref>[] }
+      const [psdList, displayList] = await Promise.all([
+        listAll(ref(storage, `cert-psd/${ct.value}`)).catch(() => empty),
+        listAll(ref(storage, `cert-display/${ct.value}`)).catch(() => empty),
+      ])
+      const psd  = psdList.items[0]
+      const disp = displayList.items[0]
+      const [psdUrl, displayUrl] = await Promise.all([
+        psd  ? getDownloadURL(psd).catch(() => null)  : null,
+        disp ? getDownloadURL(disp).catch(() => null) : null,
+      ])
+      return { certType: ct.value as CertTypeValue, psdUrl, psdName: psd?.name ?? null, displayUrl }
+    })
+  )
+
   return CERT_TYPES.map((ct, i) => ({
     certType: ct.value as CertTypeValue,
     label: ct.label,
@@ -53,11 +52,11 @@ async function loadAssets(): Promise<AssetRow[]> {
 export function CertAssetsPage() {
   const queryClient = useQueryClient()
   const [uploading, setUploading] = useState<Record<string, boolean>>({})
-  const [psdProgress, setPsdProgress] = useState<Record<string, number>>({})
 
-  const { data: rows = [], isLoading } = useQuery({
+  const { data: rows = [], isLoading, error } = useQuery({
     queryKey: ['cert-assets'],
     queryFn: loadAssets,
+    retry: false,
   })
 
   function setUploadingKey(key: string, val: boolean) {
@@ -96,29 +95,18 @@ export function CertAssetsPage() {
     }
   }
 
-  function handlePsdUpload(certType: CertTypeValue, file: File) {
+  async function handlePsdUpload(certType: CertTypeValue, file: File) {
     const key = `psd-${certType}`
     setUploadingKey(key, true)
-    setPsdProgress(p => ({ ...p, [certType]: 0 }))
-    const storageRef = ref(storage, `cert-psd/${certType}/${file.name}`)
-    const task = uploadBytesResumable(storageRef, file)
-    task.on(
-      'state_changed',
-      snap => {
-        const pct = Math.round((snap.bytesTransferred / snap.totalBytes) * 100)
-        setPsdProgress(p => ({ ...p, [certType]: pct }))
-      },
-      err => {
-        alert(`PSD upload failed: ${err.message}`)
-        setUploadingKey(key, false)
-        setPsdProgress(p => ({ ...p, [certType]: 0 }))
-      },
-      () => {
-        queryClient.invalidateQueries({ queryKey: ['cert-assets'] })
-        setUploadingKey(key, false)
-        setPsdProgress(p => ({ ...p, [certType]: 0 }))
-      },
-    )
+    try {
+      const storageRef = ref(storage, `cert-psd/${certType}/${file.name}`)
+      await uploadBytes(storageRef, file)
+      queryClient.invalidateQueries({ queryKey: ['cert-assets'] })
+    } catch (err) {
+      alert(`PSD upload failed: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setUploadingKey(key, false)
+    }
   }
 
   function pickFile(accept: string, onFile: (f: File) => void) {
@@ -135,6 +123,7 @@ export function CertAssetsPage() {
   }
 
   if (isLoading) return <p className="text-sm text-muted-foreground">Loading assets…</p>
+  if (error) return <p className="text-sm text-red-600">Failed to load assets: {error instanceof Error ? error.message : 'Unknown error'}</p>
 
   return (
     <div className="space-y-6">
@@ -252,9 +241,7 @@ export function CertAssetsPage() {
                   onClick={() => pickFile('.psd,.psb,.ai,.pdf,.zip', f => handlePsdUpload(row.certType, f))}
                 >
                   <Upload className="size-3.5 mr-1.5" />
-                  {uploading[`psd-${row.certType}`]
-                    ? `Uploading… ${psdProgress[row.certType] ?? 0}%`
-                    : 'Upload source file'}
+                  {uploading[`psd-${row.certType}`] ? 'Uploading…' : 'Upload source file'}
                 </Button>
               </div>
 
