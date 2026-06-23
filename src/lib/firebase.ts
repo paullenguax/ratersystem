@@ -8,7 +8,7 @@ const firebaseConfig = {
   apiKey: 'AIzaSyDBVB-gdCCd4iLlq7oIRtxWKAjPXGfK3tc',
   authDomain: 'ratersystem.firebaseapp.com',
   projectId: 'ratersystem',
-  storageBucket: 'ratersystem.firebasestorage.app',
+  storageBucket: 'ratersystem.appspot.com',
   messagingSenderId: '6406948731',
   appId: '1:6406948731:web:7b269951ffe2fe57d61fde',
 }
