@@ -97,28 +97,31 @@ export async function buildDgac87iPDF(p: Dgac87iParams): Promise<Uint8Array> {
   const sigImg  = await pdfDoc.embedPng(sigBytes)
   const stamImg = await pdfDoc.embedPng(stampBytes)
 
+  const F = 10  // default font size for all fields
+  const FA = 8  // address field — slightly smaller to fit longer value
+
   // ── Fixed / LPO fields ────────────────────────────────────────────────────
-  safeTextField(form, 'Name of the person in charge',       'BEN RIMRON')
-  safeTextField(form, 'Quality',                            'HEAD OF TESTING')
-  safeTextField(form, 'Full name LPO',                      'LENGUAX EUROPE, SRO')
-  safeTextField(form, 'Approval number',                    'SVK.LAB.006')
-  safeTextField(form, 'Approval number_2',                  'SVK.LAB.006')
-  safeTextField(form, 'Authority that issued the approval', 'SK CAA')
-  safeTextField(form, 'Expiry date if applicable_2',        'N/A')
-  safeTextField(form, 'Adress_2',                           'Tolstého 5, Bratislava', 6)
-  safeTextField(form, 'Postal code_2',                      '811 06')
-  safeTextField(form, 'Country_2',                          'Slovakia')
-  safeTextField(form, 'Mail_2',                             'teac@lenguax.com')
-  safeTextField(form, 'I the undersigned Mr Mrs',           'BEN RIMRON')
-  safeTextField(form, 'N LPO_2',                            'SVK.LAB.006')
+  safeTextField(form, 'Name of the person in charge',       'BEN RIMRON',               F)
+  safeTextField(form, 'Quality',                            'HEAD OF TESTING',           F)
+  safeTextField(form, 'Full name LPO',                      'LENGUAX EUROPE, SRO',       F)
+  safeTextField(form, 'Approval number',                    'SVK.LAB.006',               F)
+  safeTextField(form, 'Approval number_2',                  'SVK.LAB.006',               F)
+  safeTextField(form, 'Authority that issued the approval', 'SK CAA',                    F)
+  safeTextField(form, 'Expiry date if applicable_2',        'N/A',                       F)
+  safeTextField(form, 'Adress_2',                           'Tolstého 5, Bratislava',   FA)
+  safeTextField(form, 'Postal code_2',                      '811 06',                    F)
+  safeTextField(form, 'Country_2',                          'Slovakia',                  F)
+  safeTextField(form, 'Mail_2',                             'teac@lenguax.com',          F)
+  safeTextField(form, 'I the undersigned Mr Mrs',           'BEN RIMRON',               F)
+  safeTextField(form, 'N LPO_2',                            'SVK.LAB.006',              F)
 
   // ── Variable / candidate fields ───────────────────────────────────────────
-  safeTextField(form, 'certifies that the candidate Mr Mrs', name)
-  safeTextField(form, 'Date of the test',                    testDate)
-  safeTextField(form, 'Done at',                             city)
-  safeTextField(form, 'On the',                              testDate)
-  safeTextField(form, 'Done at_2',                           'BRATISLAVA')
-  safeTextField(form, 'On the_2',                            todayDate)
+  safeTextField(form, 'certifies that the candidate Mr Mrs', name,      F)
+  safeTextField(form, 'Date of the test',                    testDate,  F)
+  safeTextField(form, 'Done at',                             city,      F)
+  safeTextField(form, 'On the',                              testDate,  F)
+  safeTextField(form, 'Done at_2',                           'BRATISLAVA', F)
+  safeTextField(form, 'On the_2',                            todayDate, F)
 
   // ── Checkboxes / radio buttons ────────────────────────────────────────────
   safeCheck(form, 'If evaluated by an LPE  Please provide a copy of your LPE agreement certificate', false)
