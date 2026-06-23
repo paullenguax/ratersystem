@@ -74,6 +74,8 @@ export function CertAssetsPage() {
       const current = snap.exists() ? snap.data() : {}
       await setDoc(doc(db, 'cert_config', 'templates'), { ...current, [certType]: url })
       queryClient.invalidateQueries({ queryKey: ['cert-assets'] })
+    } catch (err) {
+      alert(`Template upload failed: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
       setUploadingKey(key, false)
     }
@@ -86,6 +88,8 @@ export function CertAssetsPage() {
       const storageRef = ref(storage, `cert-display/${certType}/${file.name}`)
       await uploadBytes(storageRef, file)
       queryClient.invalidateQueries({ queryKey: ['cert-assets'] })
+    } catch (err) {
+      alert(`Display upload failed: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
       setUploadingKey(key, false)
     }
@@ -98,6 +102,8 @@ export function CertAssetsPage() {
       const storageRef = ref(storage, `cert-psd/${certType}/${file.name}`)
       await uploadBytes(storageRef, file)
       queryClient.invalidateQueries({ queryKey: ['cert-assets'] })
+    } catch (err) {
+      alert(`PSD upload failed: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
       setUploadingKey(key, false)
     }
@@ -107,7 +113,12 @@ export function CertAssetsPage() {
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = accept
-    input.onchange = () => { if (input.files?.[0]) onFile(input.files[0]) }
+    input.style.display = 'none'
+    document.body.appendChild(input)
+    input.onchange = () => {
+      document.body.removeChild(input)
+      if (input.files?.[0]) onFile(input.files[0])
+    }
     input.click()
   }
 
