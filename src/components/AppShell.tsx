@@ -16,12 +16,12 @@ import { auth } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
 
 const ALL_NAV = [
-  { label: 'Dashboard',   path: '/',            icon: LayoutDashboard,    roles: ['admin', 'senior_rater'] },
+  { label: 'Dashboard',   path: '/',            icon: LayoutDashboard,    roles: ['admin', 'senior_rater', 'trainee'] },
   { label: 'People',      path: '/people',      icon: Users,               roles: ['admin'] },
   { label: 'Test Bank',   path: '/test-bank',   icon: FileAudio,           roles: ['admin'] },
   { label: 'Events',      path: '/sessions',    icon: CalendarDays,        roles: ['admin'] },
   { label: 'Assignments', path: '/assignments', icon: ClipboardList,       roles: ['admin'] },
-  { label: 'Scoring',     path: '/scoring',     icon: SlidersHorizontal,   roles: ['admin', 'senior_rater'] },
+  { label: 'Scoring',     path: '/scoring',     icon: SlidersHorizontal,   roles: ['admin', 'senior_rater', 'trainee'] },
   { label: 'Scores',      path: '/scores',      icon: Star,                roles: ['admin'] },
   { label: 'Statistics',  path: '/statistics',  icon: BarChart2,           roles: ['admin'] },
   { label: 'Reports',         path: '/reports',         icon: FileText,       roles: ['admin'] },
