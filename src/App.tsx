@@ -18,9 +18,6 @@ import { StatisticsPage } from '@/features/statistics/StatisticsPage'
 import { ReportsPage } from '@/features/reports/ReportsPage'
 import { ScoresPage } from '@/features/scores/ScoresPage'
 import { AdminPage } from '@/features/admin/AdminPage'
-import { ImportRatersPage } from '@/features/admin/ImportRatersPage'
-import { ImportTestsPage } from '@/features/admin/ImportTestsPage'
-import { ImportHistoricalScoresPage } from '@/features/admin/ImportHistoricalScoresPage'
 import { CanvasSyncPage } from '@/features/admin/CanvasSyncPage'
 import { AutoAssignPage } from '@/features/admin/AutoAssignPage'
 import { ImportRaschPage } from '@/features/admin/ImportRaschPage'
@@ -66,9 +63,6 @@ export default function App() {
                 <Route path="certificates"   element={<ProtectedRoute allowedRoles={['admin']}><CertificatesPage /></ProtectedRoute>} />
                 <Route path="official-forms" element={<ProtectedRoute allowedRoles={['admin']}><OfficialFormsPage /></ProtectedRoute>} />
                 <Route path="admin"       element={<ProtectedRoute allowedRoles={['admin']}><AdminPage /></ProtectedRoute>} />
-                <Route path="admin/import-raters" element={<ProtectedRoute allowedRoles={['admin']}><ImportRatersPage /></ProtectedRoute>} />
-                <Route path="admin/import-tests"  element={<ProtectedRoute allowedRoles={['admin']}><ImportTestsPage /></ProtectedRoute>} />
-                <Route path="admin/import-historical-scores" element={<ProtectedRoute allowedRoles={['admin']}><ImportHistoricalScoresPage /></ProtectedRoute>} />
                 <Route path="admin/canvas-sync"   element={<ProtectedRoute allowedRoles={['admin']}><CanvasSyncPage /></ProtectedRoute>} />
                 <Route path="admin/auto-assign"   element={<ProtectedRoute allowedRoles={['admin']}><AutoAssignPage /></ProtectedRoute>} />
                 <Route path="admin/import-rasch"  element={<ProtectedRoute allowedRoles={['admin']}><ImportRaschPage /></ProtectedRoute>} />
