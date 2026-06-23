@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { collection, getDocs } from 'firebase/firestore'
+import { collection, getDocs, query, where } from 'firebase/firestore'
 import { useNavigate } from 'react-router-dom'
 import { Users, FileAudio, CalendarDays, CheckCircle } from 'lucide-react'
 import { db } from '@/lib/firebase'
@@ -29,11 +29,20 @@ async function fetchAll() {
   }
 }
 
-async function fetchMyAssignments(uid: string): Promise<Assignment[]> {
-  const snap = await getDocs(collection(db, 'assignments'))
-  return snap.docs
+async function fetchMyData(uid: string): Promise<{ assignments: Assignment[]; scoresByAssignment: Map<string, number> }> {
+  const [assignSnap, scoreSnap] = await Promise.all([
+    getDocs(collection(db, 'assignments')),
+    getDocs(query(collection(db, 'scores'), where('raterId', '==', uid))),
+  ])
+  const assignments = assignSnap.docs
     .map(d => ({ id: d.id, ...d.data() }) as Assignment)
     .filter(a => a.raterId === uid && a.status !== 'published')
+  const scoresByAssignment = new Map<string, number>()
+  scoreSnap.docs.forEach(d => {
+    const s = d.data() as Score
+    scoresByAssignment.set(s.assignmentId, (scoresByAssignment.get(s.assignmentId) ?? 0) + 1)
+  })
+  return { assignments, scoresByAssignment }
 }
 
 export function DashboardPage() {
@@ -46,11 +55,13 @@ export function DashboardPage() {
     enabled: role === 'admin',
   })
 
-  const { data: myAssignments = [] } = useQuery({
+  const { data: myData } = useQuery({
     queryKey: ['my-assignments', user?.uid],
-    queryFn: () => fetchMyAssignments(user!.uid),
+    queryFn: () => fetchMyData(user!.uid),
     enabled: !!user?.uid && role !== 'admin',
   })
+  const myAssignments = myData?.assignments ?? []
+  const myScoresByAssignment = myData?.scoresByAssignment ?? new Map()
 
   if (isLoading) return <p className="text-sm text-muted-foreground">Loading…</p>
 
@@ -166,7 +177,19 @@ export function DashboardPage() {
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <p className="font-medium">{a.sessionName}</p>
-                  <p className="text-sm text-muted-foreground mt-0.5">{a.testDocIds.length} tests assigned</p>
+                  <div className="flex items-center gap-3 mt-1">
+                    <div className="flex items-center gap-2">
+                      <div className="w-24 h-1.5 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className="h-full bg-primary rounded-full"
+                          style={{ width: `${a.testDocIds.length ? Math.round((myScoresByAssignment.get(a.id) ?? 0) / a.testDocIds.length * 100) : 0}%` }}
+                        />
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {myScoresByAssignment.get(a.id) ?? 0}/{a.testDocIds.length} scored
+                      </span>
+                    </div>
+                  </div>
                 </div>
                 <Badge variant={STATUS_VARIANT[a.status]}>
                   {a.status.charAt(0).toUpperCase() + a.status.slice(1)}
