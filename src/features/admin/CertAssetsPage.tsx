@@ -99,10 +99,13 @@ export function CertAssetsPage() {
     const key = `psd-${certType}`
     setUploadingKey(key, true)
     try {
+      console.log('[PSD upload] starting', file.name, Math.round(file.size / 1024 / 1024) + 'MB', file.type)
       const storageRef = ref(storage, `cert-psd/${certType}/${file.name}`)
-      await uploadBytes(storageRef, file)
+      const result = await uploadBytes(storageRef, file)
+      console.log('[PSD upload] done', result.metadata.fullPath)
       queryClient.invalidateQueries({ queryKey: ['cert-assets'] })
     } catch (err) {
+      console.error('[PSD upload] error', err)
       alert(`PSD upload failed: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
       setUploadingKey(key, false)
