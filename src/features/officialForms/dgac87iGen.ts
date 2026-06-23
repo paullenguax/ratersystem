@@ -22,8 +22,12 @@ function todayDDMMYYYY(): string {
   return new Date().toLocaleDateString('en-GB')
 }
 
-function safeTextField(form: ReturnType<PDFDocument['getForm']>, name: string, value: string) {
-  try { form.getTextField(name).setText(value) } catch { /* field missing or wrong type */ }
+function safeTextField(form: ReturnType<PDFDocument['getForm']>, name: string, value: string, fontSize?: number) {
+  try {
+    const field = form.getTextField(name)
+    field.setText(value)
+    if (fontSize !== undefined) field.setFontSize(fontSize)
+  } catch { /* field missing or wrong type */ }
 }
 
 function safeCheck(form: ReturnType<PDFDocument['getForm']>, name: string, on: boolean) {
@@ -101,7 +105,7 @@ export async function buildDgac87iPDF(p: Dgac87iParams): Promise<Uint8Array> {
   safeTextField(form, 'Approval number_2',                  'SVK.LAB.006')
   safeTextField(form, 'Authority that issued the approval', 'SK CAA')
   safeTextField(form, 'Expiry date if applicable_2',        'N/A')
-  safeTextField(form, 'Adress_2',                           'Tolstého 5, Bratislava')
+  safeTextField(form, 'Adress_2',                           'Tolstého 5, Bratislava', 6)
   safeTextField(form, 'Postal code_2',                      '811 06')
   safeTextField(form, 'Country_2',                          'Slovakia')
   safeTextField(form, 'Mail_2',                             'teac@lenguax.com')
