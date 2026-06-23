@@ -65,24 +65,24 @@ export async function buildCaa5012PDF(raw: Omit<Caa5012Params, 'forenames' | 'su
 
   // tFPDF coords → jsPDF: add +5 for 10mm cell centering, then -3 for missing background offset = +2
   // Coordinates from generate_CAA_5012_utf-8.php SetXY(x, y) + Cell(0, 10, text)
-  pdf.text(p.forenames, 60,  97.5)   // SetXY(60, 89)
-  pdf.text(p.surname,  129,  97.5)   // SetXY(129, 89)
+  pdf.text(p.forenames, 60,  99)   // SetXY(60, 89)
+  pdf.text(p.surname,  129,  99)   // SetXY(129, 89)
 
-  pdf.text(`${p.forenames} ${p.surname}`,  45, 168.5)  // SetXY(45, 160)
-  pdf.text(p.evaluator,                    15, 176.5)  // SetXY(15, 168)
-  pdf.text(p.dateOfAssessment,             65, 183.5)  // SetXY(65, 175)
+  pdf.text(`${p.forenames} ${p.surname}`,  45, 170)  // SetXY(45, 160)
+  pdf.text(p.evaluator,                    15, 178)  // SetXY(15, 168)
+  pdf.text(p.dateOfAssessment,             65, 185)  // SetXY(65, 175)
 
   // Level tick — X mark in the appropriate column
   const levelX: Record<string, number> = { '4': 31, '5': 78, '6': 119 }
-  pdf.text('X', levelX[p.level], 202.5)  // SetXY(lx, 194)
+  pdf.text('X', levelX[p.level], 204)  // SetXY(lx, 194)
 
-  pdf.text('TYRONE BISHOP', 71, 245.5)  // SetXY(71, 237)
-  pdf.text('GBR-LTB-0002',  93, 253.5)  // SetXY(93, 245)
-  pdf.text('BEN RIMRON',    78, 260.5)  // SetXY(78, 252)
-  pdf.text(p.dateOfIssue,  148, 274.5)  // SetXY(148, 266)
+  pdf.text('TYRONE BISHOP', 71, 247)  // SetXY(71, 237)
+  pdf.text('GBR-LTB-0002',  93, 255)  // SetXY(93, 245)
+  pdf.text('BEN RIMRON',    78, 262)  // SetXY(78, 252)
+  pdf.text(p.dateOfIssue,  148, 276)  // SetXY(148, 266)
 
-  pdf.addImage(sigData,   'PNG', 70, 256.5, 50, 25)
-  pdf.addImage(stampData, 'PNG', 120, 218.5, 28, 43)
+  pdf.addImage(sigData,   'PNG', 70, 258, 50, 25)
+  pdf.addImage(stampData, 'PNG', 120, 223, 28, 43)
 
   return pdf
 }
