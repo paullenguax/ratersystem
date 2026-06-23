@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ref, uploadBytes, getDownloadURL, listAll } from 'firebase/storage'
+import { ref, uploadBytes, uploadBytesResumable, getDownloadURL, listAll } from 'firebase/storage'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { storage, db } from '@/lib/firebase'
@@ -53,6 +53,7 @@ async function loadAssets(): Promise<AssetRow[]> {
 export function CertAssetsPage() {
   const queryClient = useQueryClient()
   const [uploading, setUploading] = useState<Record<string, boolean>>({})
+  const [psdProgress, setPsdProgress] = useState<Record<string, number>>({})
 
   const { data: rows = [], isLoading } = useQuery({
     queryKey: ['cert-assets'],
@@ -95,18 +96,29 @@ export function CertAssetsPage() {
     }
   }
 
-  async function handlePsdUpload(certType: CertTypeValue, file: File) {
+  function handlePsdUpload(certType: CertTypeValue, file: File) {
     const key = `psd-${certType}`
     setUploadingKey(key, true)
-    try {
-      const storageRef = ref(storage, `cert-psd/${certType}/${file.name}`)
-      await uploadBytes(storageRef, file)
-      queryClient.invalidateQueries({ queryKey: ['cert-assets'] })
-    } catch (err) {
-      alert(`PSD upload failed: ${err instanceof Error ? err.message : String(err)}`)
-    } finally {
-      setUploadingKey(key, false)
-    }
+    setPsdProgress(p => ({ ...p, [certType]: 0 }))
+    const storageRef = ref(storage, `cert-psd/${certType}/${file.name}`)
+    const task = uploadBytesResumable(storageRef, file)
+    task.on(
+      'state_changed',
+      snap => {
+        const pct = Math.round((snap.bytesTransferred / snap.totalBytes) * 100)
+        setPsdProgress(p => ({ ...p, [certType]: pct }))
+      },
+      err => {
+        alert(`PSD upload failed: ${err.message}`)
+        setUploadingKey(key, false)
+        setPsdProgress(p => ({ ...p, [certType]: 0 }))
+      },
+      () => {
+        queryClient.invalidateQueries({ queryKey: ['cert-assets'] })
+        setUploadingKey(key, false)
+        setPsdProgress(p => ({ ...p, [certType]: 0 }))
+      },
+    )
   }
 
   function pickFile(accept: string, onFile: (f: File) => void) {
@@ -240,7 +252,9 @@ export function CertAssetsPage() {
                   onClick={() => pickFile('.psd,.psb,.ai,.pdf,.zip', f => handlePsdUpload(row.certType, f))}
                 >
                   <Upload className="size-3.5 mr-1.5" />
-                  {uploading[`psd-${row.certType}`] ? 'Uploading…' : 'Upload source file'}
+                  {uploading[`psd-${row.certType}`]
+                    ? `Uploading… ${psdProgress[row.certType] ?? 0}%`
+                    : 'Upload source file'}
                 </Button>
               </div>
 
