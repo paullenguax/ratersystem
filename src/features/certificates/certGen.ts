@@ -70,11 +70,11 @@ export async function buildCertPDF(params: {
   pdf.text(date, 14, certDef.dateY)
 
   pdf.setFontSize(7)
-  pdf.text(certNumber, 172, 239.5)
-  pdf.text(pin, 155.5, 242.5)
+  pdf.text(certNumber, 171, 238.5)
+  pdf.text(pin, 154.5, 241.5)
 
-  pdf.addImage(qrData, 'PNG', 122, 229, 18, 18)
-  pdf.link(122, 229, 17, 17, { url: validationUrl })
+  pdf.addImage(qrData, 'PNG', 120, 227, 18, 18)
+  pdf.link(120, 227, 17, 17, { url: validationUrl })
 
   return pdf
 }
