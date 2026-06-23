@@ -22,6 +22,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setState({ user: null, role: null, loading: false })
         return
       }
+      setState({ user: null, role: null, loading: true })
       const snap = await getDoc(doc(db, 'people', user.uid))
       const role = (snap.data()?.role ?? null) as Role | null
       setState({ user, role, loading: false })
