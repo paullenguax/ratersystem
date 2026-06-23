@@ -26,6 +26,7 @@ import { CertificatesPage } from '@/features/certificates/CertificatesPage'
 import { OfficialFormsPage } from '@/features/officialForms/OfficialFormsPage'
 import { ValidatePage } from '@/features/certificates/ValidatePage'
 import { FeedbackReportPage } from '@/features/feedbackReport/FeedbackReportPage'
+import { BenchmarkPage } from '@/features/benchmark/BenchmarkPage'
 
 const queryClient = new QueryClient()
 
@@ -62,6 +63,7 @@ export default function App() {
                 <Route path="feedback-report" element={<ProtectedRoute allowedRoles={['admin', 'senior_rater']}><FeedbackReportPage /></ProtectedRoute>} />
                 <Route path="certificates"   element={<ProtectedRoute allowedRoles={['admin']}><CertificatesPage /></ProtectedRoute>} />
                 <Route path="official-forms" element={<ProtectedRoute allowedRoles={['admin']}><OfficialFormsPage /></ProtectedRoute>} />
+                <Route path="benchmark"   element={<ProtectedRoute allowedRoles={['admin']}><BenchmarkPage /></ProtectedRoute>} />
                 <Route path="admin"       element={<ProtectedRoute allowedRoles={['admin']}><AdminPage /></ProtectedRoute>} />
                 <Route path="admin/canvas-sync"   element={<ProtectedRoute allowedRoles={['admin']}><CanvasSyncPage /></ProtectedRoute>} />
                 <Route path="admin/auto-assign"   element={<ProtectedRoute allowedRoles={['admin']}><AutoAssignPage /></ProtectedRoute>} />
