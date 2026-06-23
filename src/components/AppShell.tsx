@@ -4,7 +4,7 @@ import { signOut } from 'firebase/auth'
 import {
   LayoutDashboard, Users, FileAudio, CalendarDays,
   ClipboardList, SlidersHorizontal, Star, BarChart2,
-  FileText, Award, Settings, LogOut, MessageSquare,
+  FileText, Award, Settings, LogOut, MessageSquare, FileCheck,
 } from 'lucide-react'
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup,
@@ -27,6 +27,7 @@ const ALL_NAV = [
   { label: 'Reports',         path: '/reports',         icon: FileText,       roles: ['admin'] },
   { label: 'Feedback',        path: '/feedback-report', icon: MessageSquare,  roles: ['admin', 'senior_rater'] },
   { label: 'Certificates',    path: '/certificates',    icon: Award,          roles: ['admin'] },
+  { label: 'Official Forms',  path: '/official-forms',  icon: FileCheck,      roles: ['admin'] },
   { label: 'Admin',        path: '/admin',        icon: Settings,            roles: ['admin'] },
 ] as const
 
