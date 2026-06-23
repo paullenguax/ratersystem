@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import { collection, getDocs, query, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { CERT_TYPES, type CertTypeValue } from './certGen'
+import { type CertTypeValue, buildCertPDF, resolveTemplateUrl } from './certGen'
+import { Download } from 'lucide-react'
 
 interface CertRecord {
   certNumber: string
@@ -17,6 +18,9 @@ interface CertRecord {
 
 type Result = { status: 'valid'; cert: CertRecord } | { status: 'invalid' } | null
 
+const TEMPLATE_BASE   = '/ratersystem'
+const VALIDATION_BASE = 'https://lenguax.com/ratersystem/validate'
+
 export function ValidatePage() {
   const { certNumber: paramCertNumber } = useParams<{ certNumber: string }>()
 
@@ -24,6 +28,34 @@ export function ValidatePage() {
   const [pin, setPin]               = useState('')
   const [checking, setChecking]     = useState(false)
   const [result, setResult]         = useState<Result>(null)
+  const [certBlobUrl, setCertBlobUrl] = useState<string | null>(null)
+  const [rendering, setRendering]   = useState(false)
+
+  // Render the actual cert PDF whenever we get a valid result
+  useEffect(() => {
+    if (result?.status !== 'valid') {
+      if (certBlobUrl) { URL.revokeObjectURL(certBlobUrl); setCertBlobUrl(null) }
+      return
+    }
+    setRendering(true)
+    const cert = result.cert
+    resolveTemplateUrl(cert.certType, TEMPLATE_BASE)
+      .then(templateUrl => buildCertPDF({
+        name: cert.name,
+        date: cert.date,
+        pin: cert.pin,
+        certNumber: cert.certNumber,
+        certType: cert.certType,
+        validationUrl: `${VALIDATION_BASE}/${cert.certNumber}`,
+        basePath: TEMPLATE_BASE,
+        templateUrl,
+      }))
+      .then(pdf => {
+        const blob = pdf.output('blob')
+        setCertBlobUrl(URL.createObjectURL(blob))
+      })
+      .finally(() => setRendering(false))
+  }, [result]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleVerify(e: React.FormEvent) {
     e.preventDefault()
@@ -34,36 +66,32 @@ export function ValidatePage() {
       const snap = await getDocs(
         query(collection(db, 'certificates'), where('certNumber', '==', certNumber.trim().toUpperCase()))
       )
-      if (snap.empty) {
-        setResult({ status: 'invalid' })
-        return
-      }
+      if (snap.empty) { setResult({ status: 'invalid' }); return }
       const cert = snap.docs[0].data() as CertRecord
-      if (cert.pin !== pin.trim()) {
-        setResult({ status: 'invalid' })
-        return
-      }
+      if (cert.pin !== pin.trim()) { setResult({ status: 'invalid' }); return }
       setResult({ status: 'valid', cert })
     } finally {
       setChecking(false)
     }
   }
 
-  const certDef = result?.status === 'valid'
-    ? CERT_TYPES.find(t => t.value === result.cert.certType)
-    : null
+  function handleDownload() {
+    if (!certBlobUrl || result?.status !== 'valid') return
+    const a = document.createElement('a')
+    a.href = certBlobUrl
+    a.download = `${result.cert.certTypeName} - ${result.cert.name} - ${result.cert.certNumber}.pdf`
+    a.click()
+  }
 
   return (
     <div className="min-h-screen bg-[#f5f7f9] flex flex-col items-center justify-center p-6">
-      <div className="w-full max-w-md space-y-6">
+      <div className="w-full max-w-lg space-y-6">
 
-        {/* Header */}
         <div className="text-center space-y-1">
           <h1 className="text-2xl font-semibold text-[#00528C]">Lenguax</h1>
           <p className="text-sm text-muted-foreground">Certificate Validation</p>
         </div>
 
-        {/* Form */}
         <div className="bg-white rounded-lg border shadow-sm p-6 space-y-4">
           <p className="text-sm text-muted-foreground">
             Enter the certificate number and PIN printed on your certificate to verify its authenticity.
@@ -72,7 +100,7 @@ export function ValidatePage() {
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Certificate number</label>
               <Input
-                placeholder="e.g. LX-A3X7K2"
+                placeholder="e.g. LA3X7K2"
                 value={certNumber}
                 onChange={e => { setCertNumber(e.target.value); setResult(null) }}
                 className="font-mono"
@@ -94,13 +122,21 @@ export function ValidatePage() {
           </form>
         </div>
 
-        {/* Result */}
         {result?.status === 'valid' && (
-          <div className="bg-white rounded-lg border border-green-200 shadow-sm p-6 space-y-3">
-            <div className="flex items-center gap-2 text-green-700">
-              <span className="text-lg">✓</span>
-              <span className="font-semibold">Valid certificate</span>
+          <div className="bg-white rounded-lg border border-green-200 shadow-sm p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-green-700">
+                <span className="text-lg">✓</span>
+                <span className="font-semibold">Valid certificate</span>
+              </div>
+              {certBlobUrl && (
+                <Button size="sm" variant="outline" onClick={handleDownload}>
+                  <Download className="size-4 mr-1.5" />
+                  Download PDF
+                </Button>
+              )}
             </div>
+
             <div className="space-y-1.5 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Holder</span>
@@ -119,14 +155,17 @@ export function ValidatePage() {
                 <span className="font-mono">{result.cert.certNumber}</span>
               </div>
             </div>
-            {certDef && (
-              <div className="pt-2 border-t">
-                <img
-                  src={`/ratersystem/${certDef.template}`}
-                  alt={certDef.label}
-                  className="w-full rounded opacity-80"
-                />
-              </div>
+
+            {rendering && (
+              <p className="text-xs text-muted-foreground">Rendering certificate…</p>
+            )}
+            {certBlobUrl && (
+              <iframe
+                src={certBlobUrl}
+                title="Certificate"
+                className="w-full rounded border"
+                style={{ height: '520px' }}
+              />
             )}
           </div>
         )}

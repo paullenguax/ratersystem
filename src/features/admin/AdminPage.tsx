@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Upload, FileAudio, History, RefreshCw, Shuffle, BarChart2 } from 'lucide-react'
+import { Upload, FileAudio, History, RefreshCw, Shuffle, BarChart2, Award } from 'lucide-react'
 
 const tools = [
   {
@@ -37,6 +37,12 @@ const tools = [
     icon: History,
     label: 'Import Historical Scores',
     description: 'Import legacy scores from two CSVs: a scores sheet and a rater number-to-name map.',
+  },
+  {
+    to: '/admin/cert-assets',
+    icon: Award,
+    label: 'Certificate Assets',
+    description: 'Upload and manage certificate templates, display images, and PSD source files per cert type.',
   },
 ]
 

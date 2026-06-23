@@ -1,5 +1,7 @@
 import jsPDF from 'jspdf'
 import QRCode from 'qrcode'
+import { doc, getDoc } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
 
 export const CERT_TYPES = [
   { value: '1', label: 'Full Rater Certificate',          template: 'Certificate_Rater_Course_Generic.jpg',      dateY: 132 },
@@ -29,6 +31,18 @@ export function generatePIN(): string {
   return String(Math.floor(Math.random() * (9999 - 1111 + 1)) + 1111)
 }
 
+export async function resolveTemplateUrl(certType: CertTypeValue, basePath: string): Promise<string> {
+  try {
+    const snap = await getDoc(doc(db, 'cert_config', 'templates'))
+    if (snap.exists()) {
+      const overrides = snap.data() as Record<string, string>
+      if (overrides[certType]) return overrides[certType]
+    }
+  } catch { /* fall through */ }
+  const certDef = CERT_TYPES.find(t => t.value === certType)!
+  return `${basePath}/${certDef.template}`
+}
+
 async function loadImage(src: string): Promise<string> {
   const resp = await fetch(src)
   const blob = await resp.blob()
@@ -47,13 +61,14 @@ export async function buildCertPDF(params: {
   certType: CertTypeValue
   validationUrl: string
   basePath: string
+  templateUrl?: string
 }): Promise<jsPDF> {
-  const { name, date, pin, certNumber, certType, validationUrl, basePath } = params
+  const { name, date, pin, certNumber, certType, validationUrl, basePath, templateUrl } = params
 
   const certDef = CERT_TYPES.find(t => t.value === certType)!
 
   const [templateData, qrData] = await Promise.all([
-    loadImage(`${basePath}/${certDef.template}`),
+    loadImage(templateUrl ?? `${basePath}/${certDef.template}`),
     QRCode.toDataURL(validationUrl, { errorCorrectionLevel: 'L', width: 200 }),
   ])
 

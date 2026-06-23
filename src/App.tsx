@@ -24,6 +24,7 @@ import { ImportHistoricalScoresPage } from '@/features/admin/ImportHistoricalSco
 import { CanvasSyncPage } from '@/features/admin/CanvasSyncPage'
 import { AutoAssignPage } from '@/features/admin/AutoAssignPage'
 import { ImportRaschPage } from '@/features/admin/ImportRaschPage'
+import { CertAssetsPage } from '@/features/admin/CertAssetsPage'
 import { CertificatesPage } from '@/features/certificates/CertificatesPage'
 import { ValidatePage } from '@/features/certificates/ValidatePage'
 import { FeedbackReportPage } from '@/features/feedbackReport/FeedbackReportPage'
@@ -69,6 +70,7 @@ export default function App() {
                 <Route path="admin/canvas-sync"   element={<ProtectedRoute allowedRoles={['admin']}><CanvasSyncPage /></ProtectedRoute>} />
                 <Route path="admin/auto-assign"   element={<ProtectedRoute allowedRoles={['admin']}><AutoAssignPage /></ProtectedRoute>} />
                 <Route path="admin/import-rasch"  element={<ProtectedRoute allowedRoles={['admin']}><ImportRaschPage /></ProtectedRoute>} />
+                <Route path="admin/cert-assets"   element={<ProtectedRoute allowedRoles={['admin']}><CertAssetsPage /></ProtectedRoute>} />
               </Route>
 
               <Route path="*" element={<Navigate to="/" replace />} />

@@ -1,14 +1,14 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { collection, getDocs, addDoc, query, where, serverTimestamp } from 'firebase/firestore'
-import { Copy, Check, ExternalLink, Download } from 'lucide-react'
+import { collection, getDocs, addDoc, deleteDoc, doc, query, where, serverTimestamp } from 'firebase/firestore'
+import { Copy, Check, ExternalLink, Download, Trash2 } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
   CERT_TYPES, type CertTypeValue,
-  generateCertNumber, generatePIN, buildCertPDF,
+  generateCertNumber, generatePIN, buildCertPDF, resolveTemplateUrl,
 } from './certGen'
 
 interface CertRecord {
@@ -57,6 +57,7 @@ export function CertificatesPage() {
     if (!name.trim() || !date.trim()) return
     setGenerating(true)
     try {
+      const templateUrl = await resolveTemplateUrl(certType, TEMPLATE_BASE)
       const pdf = await buildCertPDF({
         name: name.trim(),
         date: date.trim(),
@@ -65,6 +66,7 @@ export function CertificatesPage() {
         certType,
         validationUrl: validationUrl(certNumber),
         basePath: TEMPLATE_BASE,
+        templateUrl,
       })
 
       await addDoc(collection(db, 'certificates'), {
@@ -87,6 +89,7 @@ export function CertificatesPage() {
   }
 
   async function handleRegenerate(rec: CertRecord) {
+    const templateUrl = await resolveTemplateUrl(rec.certType, TEMPLATE_BASE)
     const pdf = await buildCertPDF({
       name: rec.name,
       date: rec.date,
@@ -95,8 +98,15 @@ export function CertificatesPage() {
       certType: rec.certType,
       validationUrl: validationUrl(rec.certNumber),
       basePath: TEMPLATE_BASE,
+      templateUrl,
     })
     pdf.save(`${rec.certTypeName} - ${rec.name} - ${rec.certNumber}.pdf`)
+  }
+
+  async function handleDelete(rec: CertRecord) {
+    if (!confirm(`Delete certificate ${rec.certNumber} for ${rec.name}?`)) return
+    await deleteDoc(doc(db, 'certificates', rec.id))
+    queryClient.invalidateQueries({ queryKey: ['certificates'] })
   }
 
   async function copyText(text: string, key: string) {
@@ -230,13 +240,14 @@ export function CertificatesPage() {
                         <td className="px-2 py-1.5 text-muted-foreground">{rec.certTypeName}</td>
                         <td className="px-2 py-1.5 text-muted-foreground">{rec.date}</td>
                         <td className="px-2 py-1.5">
-                          <button
-                            title="Re-download PDF"
-                            onClick={() => handleRegenerate(rec)}
-                            className="text-muted-foreground hover:text-foreground"
-                          >
-                            <Download className="size-3.5" />
-                          </button>
+                          <div className="flex gap-2">
+                            <button title="Re-download PDF" onClick={() => handleRegenerate(rec)} className="text-muted-foreground hover:text-foreground">
+                              <Download className="size-3.5" />
+                            </button>
+                            <button title="Delete record" onClick={() => handleDelete(rec)} className="text-muted-foreground hover:text-red-600">
+                              <Trash2 className="size-3.5" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
