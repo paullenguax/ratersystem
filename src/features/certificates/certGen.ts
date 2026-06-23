@@ -22,7 +22,7 @@ export function generateCertNumber(): string {
     const j = Math.floor(Math.random() * (i + 1));
     [parts[i], parts[j]] = [parts[j], parts[i]]
   }
-  return 'LX-' + parts.join('')
+  return 'L' + parts.join('')
 }
 
 export function generatePIN(): string {
@@ -62,28 +62,19 @@ export async function buildCertPDF(params: {
   // Background template
   pdf.addImage(templateData, 'JPEG', 0, 0, 210, 297)
 
-  // Name — LiberationSans Bold 16pt equiv → Helvetica Bold 16pt
-  // Original: SetXY(12, 78), Cell(40, 10) → baseline ≈ y + cell/2 = 83
   pdf.setFont('helvetica', 'bold')
   pdf.setFontSize(16)
-  pdf.text(name, 12, 83)
+  pdf.text(name, 14, 85)
 
-  // Date — Arial Bold 10pt, y varies by cert type
   pdf.setFontSize(10)
-  pdf.text(date, 12, certDef.dateY)
+  pdf.text(date, 14, certDef.dateY)
 
-  // Certificate number — Arial Bold 7pt, original SetXY(170, 232.5)
   pdf.setFontSize(7)
-  pdf.text(certNumber, 170, 237.5)
+  pdf.text(certNumber, 172, 239.5)
+  pdf.text(pin, 155.5, 242.5)
 
-  // PIN — Arial Bold 7pt, original SetXY(153.5, 235.5)
-  pdf.text(pin, 153.5, 240.5)
-
-  // QR code — original x=120, y=227, w=18
-  pdf.addImage(qrData, 'PNG', 120, 227, 18, 18)
-
-  // Clickable link over QR
-  pdf.link(120, 227, 17, 17, { url: validationUrl })
+  pdf.addImage(qrData, 'PNG', 122, 229, 18, 18)
+  pdf.link(122, 229, 17, 17, { url: validationUrl })
 
   return pdf
 }

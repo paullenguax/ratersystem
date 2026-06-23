@@ -45,7 +45,7 @@ export function CertificatesPage() {
   const { data: records = [] } = useQuery({
     queryKey: ['certificates'],
     queryFn: async () => {
-      const snap = await getDocs(query(collection(db, 'certificates'), where('certNumber', '>=', 'LX-')))
+      const snap = await getDocs(query(collection(db, 'certificates'), where('certNumber', '>=', 'L')))
       return snap.docs.map(d => ({ id: d.id, ...d.data() }) as CertRecord)
         .sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0))
     },
