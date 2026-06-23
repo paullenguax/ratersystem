@@ -97,8 +97,7 @@ export async function buildDgac87iPDF(p: Dgac87iParams): Promise<Uint8Array> {
   const sigImg  = await pdfDoc.embedPng(sigBytes)
   const stamImg = await pdfDoc.embedPng(stampBytes)
 
-  const F = 10  // default font size for all fields
-  const FA = 8  // address field — slightly smaller to fit longer value
+  const F = 10  // font size for all fields
 
   // ── Fixed / LPO fields ────────────────────────────────────────────────────
   safeTextField(form, 'Name of the person in charge',       'BEN RIMRON',               F)
@@ -108,7 +107,7 @@ export async function buildDgac87iPDF(p: Dgac87iParams): Promise<Uint8Array> {
   safeTextField(form, 'Approval number_2',                  'SVK.LAB.006',               F)
   safeTextField(form, 'Authority that issued the approval', 'SK CAA',                    F)
   safeTextField(form, 'Expiry date if applicable_2',        'N/A',                       F)
-  safeTextField(form, 'Adress_2',                           'Tolstého 5, Bratislava',   FA)
+  safeTextField(form, 'Adress_2',                           'Tolstého 5, Bratislava',    F)
   safeTextField(form, 'Postal code_2',                      '811 06',                    F)
   safeTextField(form, 'Country_2',                          'Slovakia',                  F)
   safeTextField(form, 'Mail_2',                             'teac@lenguax.com',          F)
