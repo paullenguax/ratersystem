@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { collection, getDocs, addDoc, query, where, serverTimestamp } from 'firebase/firestore'
-import { Copy, Check, ExternalLink, Download, RefreshCw } from 'lucide-react'
+import { Copy, Check, ExternalLink, Download } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
 import { Button } from '@/components/ui/button'

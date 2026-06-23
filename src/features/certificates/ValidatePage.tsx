@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { collection, getDocs, query, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { Button } from '@/components/ui/button'
@@ -19,7 +19,6 @@ type Result = { status: 'valid'; cert: CertRecord } | { status: 'invalid' } | nu
 
 export function ValidatePage() {
   const { certNumber: paramCertNumber } = useParams<{ certNumber: string }>()
-  const navigate = useNavigate()
 
   const [certNumber, setCertNumber] = useState(paramCertNumber ?? '')
   const [pin, setPin]               = useState('')
