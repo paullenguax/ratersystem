@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ref, uploadBytes, getDownloadURL, listAll } from 'firebase/storage'
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { storage, db } from '@/lib/firebase'
@@ -13,7 +13,6 @@ interface AssetRow {
   defaultTemplate: string
   templateOverrideUrl: string | null
   psdUrl: string | null
-  psdName: string | null
   displayUrl: string | null
 }
 
@@ -23,18 +22,11 @@ async function loadAssets(): Promise<AssetRow[]> {
 
   const storageItems = await Promise.all(
     CERT_TYPES.map(async ct => {
-      const empty = { items: [] as ReturnType<typeof ref>[] }
-      const [psdList, displayList] = await Promise.all([
-        listAll(ref(storage, `cert-psd/${ct.value}`)).catch(() => empty),
-        listAll(ref(storage, `cert-display/${ct.value}`)).catch(() => empty),
-      ])
-      const psd  = psdList.items[0]
-      const disp = displayList.items[0]
       const [psdUrl, displayUrl] = await Promise.all([
-        psd  ? getDownloadURL(psd).catch(() => null)  : null,
-        disp ? getDownloadURL(disp).catch(() => null) : null,
+        getDownloadURL(ref(storage, `cert-psd/${ct.value}/source.psd`)).catch(() => null),
+        getDownloadURL(ref(storage, `cert-display/${ct.value}/display.jpg`)).catch(() => null),
       ])
-      return { certType: ct.value as CertTypeValue, psdUrl, psdName: psd?.name ?? null, displayUrl }
+      return { certType: ct.value as CertTypeValue, psdUrl, displayUrl }
     })
   )
 
@@ -44,7 +36,6 @@ async function loadAssets(): Promise<AssetRow[]> {
     defaultTemplate: ct.template,
     templateOverrideUrl: overrides[ct.value] ?? null,
     psdUrl: storageItems[i].psdUrl,
-    psdName: storageItems[i].psdName,
     displayUrl: storageItems[i].displayUrl,
   }))
 }
@@ -85,8 +76,7 @@ export function CertAssetsPage() {
     const key = `display-${certType}`
     setUploadingKey(key, true)
     try {
-      const storageRef = ref(storage, `cert-display/${certType}/${file.name}`)
-      await uploadBytes(storageRef, file)
+      await uploadBytes(ref(storage, `cert-display/${certType}/display.jpg`), file)
       queryClient.invalidateQueries({ queryKey: ['cert-assets'] })
     } catch (err) {
       alert(`Display upload failed: ${err instanceof Error ? err.message : String(err)}`)
@@ -99,13 +89,9 @@ export function CertAssetsPage() {
     const key = `psd-${certType}`
     setUploadingKey(key, true)
     try {
-      console.log('[PSD upload] starting', file.name, Math.round(file.size / 1024 / 1024) + 'MB', file.type)
-      const storageRef = ref(storage, `cert-psd/${certType}/${file.name}`)
-      const result = await uploadBytes(storageRef, file)
-      console.log('[PSD upload] done', result.metadata.fullPath)
+      await uploadBytes(ref(storage, `cert-psd/${certType}/source.psd`), file)
       queryClient.invalidateQueries({ queryKey: ['cert-assets'] })
     } catch (err) {
-      console.error('[PSD upload] error', err)
       alert(`PSD upload failed: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
       setUploadingKey(key, false)
@@ -224,7 +210,7 @@ export function CertAssetsPage() {
                   {row.psdUrl ? (
                     <>
                       <FileText className="size-8 opacity-30" />
-                      <p className="text-xs px-2 text-center break-all">{row.psdName}</p>
+                      <p className="text-xs px-2 text-center break-all">source.psd</p>
                       <a href={row.psdUrl} target="_blank" rel="noreferrer" download>
                         <Button size="sm" variant="outline" className="text-xs">
                           <Download className="size-3.5 mr-1.5" />
