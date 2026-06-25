@@ -15,6 +15,11 @@ let initialised = false
 async function ensureInit() {
   if (!initialised) {
     await msalInstance.initialize()
+    // When our app is loaded inside the auth popup, process the hash and
+    // send the token back to the parent window. Skip on normal page loads.
+    if (window.opener) {
+      await msalInstance.handleRedirectPromise()
+    }
     initialised = true
   }
 }
