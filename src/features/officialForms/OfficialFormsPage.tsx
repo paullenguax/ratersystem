@@ -1,13 +1,15 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { collection, getDocs, addDoc, deleteDoc, doc, orderBy, query, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { Copy, Check, Download, Trash2, ExternalLink } from 'lucide-react'
+import { Copy, Check, Download, Trash2, ExternalLink, CloudUpload, LogOut } from 'lucide-react'
 import { buildCaa5012PDF, buildCaa5012Filename, buildCaa5012DisplayName } from './caa5012Gen'
 import { buildDgac87iPDF, buildDgac87iFilename, buildDgac87iEmail, buildDgac87iDisplayName } from './dgac87iGen'
+import { msSignIn, msSignOut, getMsAccount } from '@/lib/msal'
+import { uploadCaaToOneDrive } from '@/lib/oneDrive'
 
 const BASE = '/ratersystem'
 
@@ -46,6 +48,23 @@ export function OfficialFormsPage() {
   const [caaIssueDate, setCaaIssueDate]     = useState('')
   const [caaGenerating, setCaaGenerating]   = useState(false)
   const [caaBlobUrl, setCaaBlobUrl]         = useState<string | null>(null)
+  const [caaOneDriveUrl, setCaaOneDriveUrl] = useState<string | null>(null)
+  const [caaOneDriveErr, setCaaOneDriveErr] = useState<string | null>(null)
+
+  // ── Microsoft / OneDrive state ───────────────────────────────────────────
+  const [msAccount, setMsAccount]           = useState(() => getMsAccount())
+
+  useEffect(() => { setMsAccount(getMsAccount()) }, [])
+
+  async function handleMsSignIn() {
+    const account = await msSignIn()
+    setMsAccount(account)
+  }
+
+  async function handleMsSignOut() {
+    await msSignOut()
+    setMsAccount(null)
+  }
 
   // ── DGAC 87i state ──────────────────────────────────────────────────────
   const [dgacTitle, setDgacTitle]           = useState<'Mr'|'Mrs'>('Mr')
@@ -80,6 +99,8 @@ export function OfficialFormsPage() {
     e.preventDefault()
     if (!caaForenames || !caaSurname || !caaAssessDate || !caaIssueDate) return
     setCaaGenerating(true)
+    setCaaOneDriveUrl(null)
+    setCaaOneDriveErr(null)
     if (caaBlobUrl) URL.revokeObjectURL(caaBlobUrl)
     try {
       const pdf = await buildCaa5012PDF({
@@ -88,14 +109,25 @@ export function OfficialFormsPage() {
         evaluator: caaEvaluator, dateOfIssue: caaIssueDate,
         basePath: BASE,
       })
-      const blob = pdf.output('blob')
-      const url  = URL.createObjectURL(blob)
-      setCaaBlobUrl(url)
-      pdf.save(buildCaa5012Filename({
+      const filename = buildCaa5012Filename({
         forenames: caaForenames.toUpperCase(), surname: caaSurname.toUpperCase(),
         dateOfAssessment: caaAssessDate, level: caaLevel,
         evaluator: caaEvaluator, dateOfIssue: caaIssueDate, basePath: BASE,
-      }))
+      })
+      const blob = pdf.output('blob')
+      const url  = URL.createObjectURL(blob)
+      setCaaBlobUrl(url)
+      pdf.save(filename)
+
+      if (msAccount) {
+        try {
+          const odUrl = await uploadCaaToOneDrive(blob, filename)
+          setCaaOneDriveUrl(odUrl)
+        } catch (err) {
+          setCaaOneDriveErr(err instanceof Error ? err.message : 'OneDrive upload failed')
+        }
+      }
+
       await addDoc(collection(db, 'official_forms'), {
         formType: 'caa5012',
         name: buildCaa5012DisplayName({ forenames: caaForenames, surname: caaSurname }),
@@ -200,6 +232,26 @@ export function OfficialFormsPage() {
       {tab === 'caa5012' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
           <form onSubmit={handleCaaGenerate} className="space-y-4">
+            {/* OneDrive connection */}
+            <div className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
+              {msAccount ? (
+                <>
+                  <span className="text-muted-foreground">
+                    OneDrive: <span className="text-foreground font-medium">{msAccount.username}</span>
+                  </span>
+                  <button type="button" onClick={handleMsSignOut} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+                    <LogOut className="size-3" /> Disconnect
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className="text-muted-foreground">Auto-save to OneDrive</span>
+                  <button type="button" onClick={handleMsSignIn} className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline">
+                    <CloudUpload className="size-3.5" /> Connect
+                  </button>
+                </>
+              )}
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="text-xs text-muted-foreground">Candidate Forenames</label>
@@ -258,6 +310,14 @@ export function OfficialFormsPage() {
                     </Button>
                   </a>
                 </div>
+                {caaOneDriveUrl && (
+                  <a href={caaOneDriveUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-xs text-green-700 font-medium hover:underline">
+                    <CloudUpload className="size-3.5" /> Saved to OneDrive
+                  </a>
+                )}
+                {caaOneDriveErr && (
+                  <p className="text-xs text-red-600">{caaOneDriveErr}</p>
+                )}
                 <iframe src={caaBlobUrl} title="CAA 5012 preview" className="w-full border rounded" style={{ height: '600px' }} />
               </>
             )}
