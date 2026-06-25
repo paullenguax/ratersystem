@@ -63,10 +63,8 @@ export function OfficialFormsPage() {
     setMsSignInErr(null)
     try {
       const account = await msSignIn()
-      console.log('[OneDrive] signed in as:', account.username)
       setMsAccount(account)
     } catch (err) {
-      console.error('[OneDrive] sign-in error:', err)
       setMsSignInErr(err instanceof Error ? err.message : 'Microsoft sign-in failed')
     }
   }
@@ -130,15 +128,11 @@ export function OfficialFormsPage() {
       pdf.save(filename)
 
       let odUrl: string | null = null
-      console.log('[OneDrive] msAccount:', msAccount?.username ?? 'null — not connected')
       if (msAccount) {
         try {
-          console.log('[OneDrive] uploading', filename)
           odUrl = await uploadCaaToOneDrive(blob, filename)
-          console.log('[OneDrive] success:', odUrl)
           setCaaOneDriveUrl(odUrl)
         } catch (err) {
-          console.error('[OneDrive] upload error:', err)
           setCaaOneDriveErr(err instanceof Error ? err.message : 'OneDrive upload failed')
         }
       }
