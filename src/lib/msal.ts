@@ -26,6 +26,10 @@ let tokenCache: { token: string; expiry: number } | null = null
 
 export async function msSignIn(): Promise<AccountInfo> {
   await ensureInit()
+  // Clear any stuck interaction lock left by previous failed/timed-out attempts
+  for (const key of Object.keys(sessionStorage)) {
+    if (key.includes('interaction')) sessionStorage.removeItem(key)
+  }
   const result = await msalInstance.loginPopup({ scopes: GRAPH_SCOPES })
   tokenCache = { token: result.accessToken, expiry: result.expiresOn?.getTime() ?? 0 }
   return result.account
