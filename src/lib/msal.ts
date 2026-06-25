@@ -19,7 +19,7 @@ async function ensureInit() {
   }
 }
 
-export const GRAPH_SCOPES = ['Files.ReadWrite']
+export const GRAPH_SCOPES = ['Files.ReadWrite.All']
 
 // Cache the token in memory so we never need a hidden iframe
 let tokenCache: { token: string; expiry: number } | null = null

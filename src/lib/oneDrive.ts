@@ -1,12 +1,13 @@
 import { getGraphToken } from './msal'
 
-const ONEDRIVE_FOLDER = 'SUPER ADMIN/UKCAA Candidates/Completed CAA5012 Forms'
+const SHAREPOINT_SITE   = 'lxuk.sharepoint.com:/sites/SUPERADMIN'
+const SHAREPOINT_FOLDER = 'UKCAA Candidates/Completed CAA5012 Forms'
 
 export async function uploadCaaToOneDrive(blob: Blob, filename: string): Promise<string> {
   const token = await getGraphToken()
-  const fullPath = `${ONEDRIVE_FOLDER}/${filename}`
+  const fullPath = `${SHAREPOINT_FOLDER}/${filename}`
   const encodedPath = fullPath.split('/').map(encodeURIComponent).join('/')
-  const url = `https://graph.microsoft.com/v1.0/me/drive/root:/${encodedPath}:/content`
+  const url = `https://graph.microsoft.com/v1.0/sites/${SHAREPOINT_SITE}:/drive/root:/${encodedPath}:/content`
 
   const res = await fetch(url, {
     method: 'PUT',
@@ -19,7 +20,7 @@ export async function uploadCaaToOneDrive(blob: Blob, filename: string): Promise
 
   if (!res.ok) {
     const msg = await res.text()
-    throw new Error(`OneDrive upload failed (${res.status}): ${msg}`)
+    throw new Error(`SharePoint upload failed (${res.status}): ${msg}`)
   }
 
   const data = await res.json()
