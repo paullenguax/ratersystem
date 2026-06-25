@@ -4,7 +4,7 @@ const msalConfig = {
   auth: {
     clientId: '3df1715f-f75b-412b-ae50-f8a2ac488fe4',
     authority: 'https://login.microsoftonline.com/afd620ce-eaf4-42f0-814f-4f8b48490c4f',
-    redirectUri: (window.location.origin + import.meta.env.BASE_URL).replace(/\/$/, ''),
+    redirectUri: window.location.origin + import.meta.env.BASE_URL + 'auth-redirect.html',
   },
   cache: { cacheLocation: 'sessionStorage' as const },
 }
@@ -15,11 +15,6 @@ let initialised = false
 async function ensureInit() {
   if (!initialised) {
     await msalInstance.initialize()
-    // When our app is loaded inside the auth popup, process the hash and
-    // send the token back to the parent window. Skip on normal page loads.
-    if (window.opener) {
-      await msalInstance.handleRedirectPromise()
-    }
     initialised = true
   }
 }
