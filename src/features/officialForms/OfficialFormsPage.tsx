@@ -57,9 +57,16 @@ export function OfficialFormsPage() {
 
   useEffect(() => { setMsAccount(getMsAccount()) }, [])
 
+  const [msSignInErr, setMsSignInErr] = useState<string | null>(null)
+
   async function handleMsSignIn() {
-    const account = await msSignIn()
-    setMsAccount(account)
+    setMsSignInErr(null)
+    try {
+      const account = await msSignIn()
+      setMsAccount(account)
+    } catch (err) {
+      setMsSignInErr(err instanceof Error ? err.message : 'Microsoft sign-in failed')
+    }
   }
 
   async function handleMsSignOut() {
@@ -236,6 +243,7 @@ export function OfficialFormsPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
           <form onSubmit={handleCaaGenerate} className="space-y-4">
             {/* OneDrive connection */}
+            {msSignInErr && <p className="text-xs text-red-600">{msSignInErr}</p>}
             <div className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
               {msAccount ? (
                 <>

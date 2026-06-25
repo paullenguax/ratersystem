@@ -21,14 +21,19 @@ async function ensureInit() {
 
 export const GRAPH_SCOPES = ['Files.ReadWrite']
 
+// Cache the token in memory so we never need a hidden iframe
+let tokenCache: { token: string; expiry: number } | null = null
+
 export async function msSignIn(): Promise<AccountInfo> {
   await ensureInit()
   const result = await msalInstance.loginPopup({ scopes: GRAPH_SCOPES })
+  tokenCache = { token: result.accessToken, expiry: result.expiresOn?.getTime() ?? 0 }
   return result.account
 }
 
 export async function msSignOut(): Promise<void> {
   await ensureInit()
+  tokenCache = null
   const account = msalInstance.getAllAccounts()[0]
   if (account) await msalInstance.logoutPopup({ account })
 }
@@ -38,15 +43,10 @@ export function getMsAccount(): AccountInfo | null {
 }
 
 export async function getGraphToken(): Promise<string> {
-  await ensureInit()
-  const account = msalInstance.getAllAccounts()[0]
-  if (!account) throw new Error('Not signed in to Microsoft')
-  try {
-    const result = await msalInstance.acquireTokenSilent({ scopes: GRAPH_SCOPES, account })
-    return result.accessToken
-  } catch {
-    // Silent acquisition fails when a browser extension blocks the hidden iframe — fall back to popup
-    const result = await msalInstance.acquireTokenPopup({ scopes: GRAPH_SCOPES, account })
-    return result.accessToken
+  // Use cached token if valid for at least another 5 minutes
+  if (tokenCache && tokenCache.expiry > Date.now() + 5 * 60 * 1000) {
+    return tokenCache.token
   }
+  // Token expired — ask the user to reconnect (avoids iframe-based silent refresh)
+  throw new Error('OneDrive session expired — please disconnect and reconnect.')
 }
