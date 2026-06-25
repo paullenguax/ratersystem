@@ -15,7 +15,6 @@ let initialised = false
 async function ensureInit() {
   if (!initialised) {
     await msalInstance.initialize()
-    await msalInstance.handleRedirectPromise()
     initialised = true
   }
 }
@@ -42,6 +41,12 @@ export async function getGraphToken(): Promise<string> {
   await ensureInit()
   const account = msalInstance.getAllAccounts()[0]
   if (!account) throw new Error('Not signed in to Microsoft')
-  const result = await msalInstance.acquireTokenSilent({ scopes: GRAPH_SCOPES, account })
-  return result.accessToken
+  try {
+    const result = await msalInstance.acquireTokenSilent({ scopes: GRAPH_SCOPES, account })
+    return result.accessToken
+  } catch {
+    // Silent acquisition fails when a browser extension blocks the hidden iframe — fall back to popup
+    const result = await msalInstance.acquireTokenPopup({ scopes: GRAPH_SCOPES, account })
+    return result.accessToken
+  }
 }

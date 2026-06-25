@@ -65,11 +65,11 @@ export async function buildCaa5012PDF(raw: Omit<Caa5012Params, 'forenames' | 'su
 
   // tFPDF coords → jsPDF: add +5 for 10mm cell centering, then -3 for missing background offset = +2
   // Coordinates from generate_CAA_5012_utf-8.php SetXY(x, y) + Cell(0, 10, text)
-  pdf.text(p.forenames, 60,  98.8)   // SetXY(60, 89)
-  pdf.text(p.surname,  129,  98.8)   // SetXY(129, 89)
+  pdf.text(p.forenames, 60,  98.6)   // SetXY(60, 89)
+  pdf.text(p.surname,  129,  98.6)   // SetXY(129, 89)
 
-  pdf.text(`${p.forenames} ${p.surname}`,  45, 169.8)  // SetXY(45, 160)
-  pdf.text(p.evaluator,                    15, 177.8)  // SetXY(15, 168)
+  pdf.text(`${p.forenames} ${p.surname}`,  45, 169.6)  // SetXY(45, 160)
+  pdf.text(p.evaluator,                    15, 177.6)  // SetXY(15, 168)
   pdf.text(p.dateOfAssessment,             65, 185)  // SetXY(65, 175)
 
   // Level tick — X mark in the appropriate column
