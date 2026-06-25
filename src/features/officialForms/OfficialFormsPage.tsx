@@ -27,6 +27,7 @@ interface FormRecord {
   dateOfAssessment?: string
   evaluator?: string
   dateOfIssue?: string
+  oneDriveUrl?: string
   // dgac fields
   candidateTitle?: string
   candidateName?: string
@@ -119,9 +120,10 @@ export function OfficialFormsPage() {
       setCaaBlobUrl(url)
       pdf.save(filename)
 
+      let odUrl: string | null = null
       if (msAccount) {
         try {
-          const odUrl = await uploadCaaToOneDrive(blob, filename)
+          odUrl = await uploadCaaToOneDrive(blob, filename)
           setCaaOneDriveUrl(odUrl)
         } catch (err) {
           setCaaOneDriveErr(err instanceof Error ? err.message : 'OneDrive upload failed')
@@ -136,6 +138,7 @@ export function OfficialFormsPage() {
         surname: caaSurname.trim().toUpperCase(),
         dateOfAssessment: caaAssessDate, evaluator: caaEvaluator,
         dateOfIssue: caaIssueDate,
+        ...(odUrl ? { oneDriveUrl: odUrl } : {}),
         createdAt: serverTimestamp(),
       })
       queryClient.invalidateQueries({ queryKey: ['official_forms'] })
@@ -459,13 +462,20 @@ export function OfficialFormsPage() {
                             {rec.createdAt ? new Date(rec.createdAt.seconds * 1000).toLocaleDateString() : '—'}
                           </td>
                           <td className="px-2 py-1.5">
-                            <button
-                              title="Delete record"
-                              onClick={() => handleDeleteRecord(rec.id)}
-                              className="text-muted-foreground hover:text-red-600"
-                            >
-                              <Trash2 className="size-3.5" />
-                            </button>
+                            <div className="flex items-center gap-2">
+                              {rec.oneDriveUrl && (
+                                <a href={rec.oneDriveUrl} target="_blank" rel="noreferrer" title="Open in OneDrive" className="text-muted-foreground hover:text-primary">
+                                  <CloudUpload className="size-3.5" />
+                                </a>
+                              )}
+                              <button
+                                title="Delete record"
+                                onClick={() => handleDeleteRecord(rec.id)}
+                                className="text-muted-foreground hover:text-red-600"
+                              >
+                                <Trash2 className="size-3.5" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
