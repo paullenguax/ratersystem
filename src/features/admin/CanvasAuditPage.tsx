@@ -20,17 +20,8 @@ interface CanvasSection {
   courseDate: string
 }
 
-interface SectionEnrollment {
-  sectionId: number
-  sectionName: string
-  courseId: number
-  courseName: string
-  enrollmentId: number
-}
-
 // ── firebase callables ────────────────────────────────────────────────────────
 
-const searchFn = httpsCallable<{ name: string }, { users: CanvasUser[] }>(functions, 'canvasUserSearch')
 const sectionsFn = httpsCallable<Record<string, never>, { sections: CanvasSection[] }>(functions, 'canvasSections')
 const enrollmentsFn = httpsCallable<{ courseId: string }, { users: CanvasUser[] }>(functions, 'canvasEnrollments')
 

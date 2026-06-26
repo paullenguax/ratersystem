@@ -537,7 +537,7 @@ export function CanvasEnrollPage() {
       canvasEmail: user.email,
     }
     setPerson(resolved)
-    setStep({ id: 'section_pick' })
+    setStep({ id: 'section_pick', person: resolved })
   }
 
   // Email not found — move to name search
@@ -554,7 +554,7 @@ export function CanvasEnrollPage() {
       canvasEmail: user.email,
     }
     setPerson(resolved)
-    setStep({ id: 'section_pick' })
+    setStep({ id: 'section_pick', person: resolved })
   }
 
   // Confirmed this is a new person — create a new account
@@ -565,7 +565,7 @@ export function CanvasEnrollPage() {
       inputEmail,
     }
     setPerson(resolved)
-    setStep({ id: 'section_pick' })
+    setStep({ id: 'section_pick', person: resolved })
   }
 
   function handleSectionConfirm(section: CanvasSection, updateEmail: boolean, concludeOldSection: boolean) {
@@ -618,7 +618,7 @@ export function CanvasEnrollPage() {
           updateEmail={step.updateEmail}
           concludeOldSection={step.concludeOldSection}
           onConfirm={handleEnrolled}
-          onBack={() => person && setStep({ id: 'section_pick' })}
+          onBack={() => person && setStep({ id: 'section_pick', person })}
         />
       )}
 
