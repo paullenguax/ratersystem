@@ -19,6 +19,9 @@ import { ReportsPage } from '@/features/reports/ReportsPage'
 import { ScoresPage } from '@/features/scores/ScoresPage'
 import { AdminPage } from '@/features/admin/AdminPage'
 import { CanvasSyncPage } from '@/features/admin/CanvasSyncPage'
+import { CanvasEnrollPage } from '@/features/admin/CanvasEnrollPage'
+import { CanvasAuditPage } from '@/features/admin/CanvasAuditPage'
+import { EnrollmentLogPage } from '@/features/admin/EnrollmentLogPage'
 import { AutoAssignPage } from '@/features/admin/AutoAssignPage'
 import { ImportRaschPage } from '@/features/admin/ImportRaschPage'
 import { CertAssetsPage } from '@/features/admin/CertAssetsPage'
@@ -65,10 +68,13 @@ export default function App() {
                 <Route path="official-forms" element={<ProtectedRoute allowedRoles={['admin']}><OfficialFormsPage /></ProtectedRoute>} />
                 <Route path="benchmark"   element={<ProtectedRoute allowedRoles={['admin']}><BenchmarkPage /></ProtectedRoute>} />
                 <Route path="admin"       element={<ProtectedRoute allowedRoles={['admin']}><AdminPage /></ProtectedRoute>} />
-                <Route path="admin/canvas-sync"   element={<ProtectedRoute allowedRoles={['admin']}><CanvasSyncPage /></ProtectedRoute>} />
-                <Route path="admin/auto-assign"   element={<ProtectedRoute allowedRoles={['admin']}><AutoAssignPage /></ProtectedRoute>} />
-                <Route path="admin/import-rasch"  element={<ProtectedRoute allowedRoles={['admin']}><ImportRaschPage /></ProtectedRoute>} />
-                <Route path="admin/cert-assets"   element={<ProtectedRoute allowedRoles={['admin']}><CertAssetsPage /></ProtectedRoute>} />
+                <Route path="admin/canvas-sync"    element={<ProtectedRoute allowedRoles={['admin']}><CanvasSyncPage /></ProtectedRoute>} />
+                <Route path="admin/canvas-enroll"  element={<ProtectedRoute allowedRoles={['admin']}><CanvasEnrollPage /></ProtectedRoute>} />
+                <Route path="admin/canvas-audit"   element={<ProtectedRoute allowedRoles={['admin']}><CanvasAuditPage /></ProtectedRoute>} />
+                <Route path="admin/enrollment-log" element={<ProtectedRoute allowedRoles={['admin']}><EnrollmentLogPage /></ProtectedRoute>} />
+                <Route path="admin/auto-assign"    element={<ProtectedRoute allowedRoles={['admin']}><AutoAssignPage /></ProtectedRoute>} />
+                <Route path="admin/import-rasch"   element={<ProtectedRoute allowedRoles={['admin']}><ImportRaschPage /></ProtectedRoute>} />
+                <Route path="admin/cert-assets"    element={<ProtectedRoute allowedRoles={['admin']}><CertAssetsPage /></ProtectedRoute>} />
               </Route>
 
               <Route path="*" element={<Navigate to="/" replace />} />

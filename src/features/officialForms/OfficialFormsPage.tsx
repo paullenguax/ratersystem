@@ -5,11 +5,11 @@ import { db } from '@/lib/firebase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { Copy, Check, Download, Trash2, ExternalLink, CloudUpload, LogOut } from 'lucide-react'
+import { Copy, Check, Download, Trash2, ExternalLink, CloudUpload, LogOut, Link } from 'lucide-react'
 import { buildCaa5012PDF, buildCaa5012Filename, buildCaa5012DisplayName } from './caa5012Gen'
 import { buildDgac87iPDF, buildDgac87iFilename, buildDgac87iEmail, buildDgac87iDisplayName } from './dgac87iGen'
 import { msSignIn, msSignOut, getMsAccount } from '@/lib/msal'
-import { uploadCaaToOneDrive } from '@/lib/oneDrive'
+import { uploadToSharePoint, SP_FOLDER_CAA, SP_FOLDER_DGAC } from '@/lib/oneDrive'
 
 const BASE = '/ratersystem'
 
@@ -41,22 +41,20 @@ export function OfficialFormsPage() {
   const [tab, setTab] = useState<FormTab>('caa5012')
 
   // ── CAA 5012 state ──────────────────────────────────────────────────────
-  const [caaForenames, setCaaForenames]     = useState('')
-  const [caaSurname, setCaaSurname]         = useState('')
-  const [caaAssessDate, setCaaAssessDate]   = useState('')
-  const [caaLevel, setCaaLevel]             = useState<'4'|'5'|'6'>('4')
-  const [caaEvaluator, setCaaEvaluator]     = useState('BEN RIMRON')
-  const [caaIssueDate, setCaaIssueDate]     = useState('')
-  const [caaGenerating, setCaaGenerating]   = useState(false)
-  const [caaBlobUrl, setCaaBlobUrl]         = useState<string | null>(null)
-  const [caaOneDriveUrl, setCaaOneDriveUrl] = useState<string | null>(null)
-  const [caaOneDriveErr, setCaaOneDriveErr] = useState<string | null>(null)
+  const [caaForenames, setCaaForenames]         = useState('')
+  const [caaSurname, setCaaSurname]             = useState('')
+  const [caaAssessDate, setCaaAssessDate]       = useState('')
+  const [caaLevel, setCaaLevel]                 = useState<'4'|'5'|'6'>('4')
+  const [caaEvaluator, setCaaEvaluator]         = useState('BEN RIMRON')
+  const [caaIssueDate, setCaaIssueDate]         = useState('')
+  const [caaGenerating, setCaaGenerating]       = useState(false)
+  const [caaBlobUrl, setCaaBlobUrl]             = useState<string | null>(null)
+  const [caaSharePointUrl, setCaaSharePointUrl] = useState<string | null>(null)
+  const [caaSharePointErr, setCaaSharePointErr] = useState<string | null>(null)
 
-  // ── Microsoft / OneDrive state ───────────────────────────────────────────
-  const [msAccount, setMsAccount]           = useState(() => getMsAccount())
-
+  // ── Microsoft / SharePoint state ─────────────────────────────────────────
+  const [msAccount, setMsAccount]   = useState(() => getMsAccount())
   useEffect(() => { setMsAccount(getMsAccount()) }, [])
-
   const [msSignInErr, setMsSignInErr] = useState<string | null>(null)
 
   async function handleMsSignIn() {
@@ -75,19 +73,23 @@ export function OfficialFormsPage() {
   }
 
   // ── DGAC 87i state ──────────────────────────────────────────────────────
-  const [dgacTitle, setDgacTitle]           = useState<'Mr'|'Mrs'>('Mr')
-  const [dgacName, setDgacName]             = useState('')
-  const [dgacTestDate, setDgacTestDate]     = useState('')
-  const [dgacCity, setDgacCity]             = useState('')
-  const [dgacLevel, setDgacLevel]           = useState<'4'|'5'|'6'>('4')
-  const [dgacEmail, setDgacEmail]           = useState('')
-  const [dgacGenerating, setDgacGenerating] = useState(false)
-  const [dgacBlobUrl, setDgacBlobUrl]       = useState<string | null>(null)
-  const [dgacEmailText, setDgacEmailText]   = useState('')
-  const [dgacFilename, setDgacFilename]     = useState('')
-  const [copiedEmail, setCopiedEmail]       = useState(false)
+  const [dgacTitle, setDgacTitle]               = useState<'Mr'|'Mrs'>('Mr')
+  const [dgacName, setDgacName]                 = useState('')
+  const [dgacTestDate, setDgacTestDate]         = useState('')
+  const [dgacCity, setDgacCity]                 = useState('')
+  const [dgacLevel, setDgacLevel]               = useState<'4'|'5'|'6'>('4')
+  const [dgacEmail, setDgacEmail]               = useState('')
+  const [dgacGenerating, setDgacGenerating]     = useState(false)
+  const [dgacBlobUrl, setDgacBlobUrl]           = useState<string | null>(null)
+  const [dgacEmailText, setDgacEmailText]       = useState('')
+  const [dgacFilename, setDgacFilename]         = useState('')
+  const [copiedEmail, setCopiedEmail]           = useState(false)
+  const [dgacSharePointUrl, setDgacSharePointUrl] = useState<string | null>(null)
+  const [dgacSharePointErr, setDgacSharePointErr] = useState<string | null>(null)
 
   // ── Records ─────────────────────────────────────────────────────────────
+  const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null)
+
   const { data: records = [] } = useQuery({
     queryKey: ['official_forms'],
     queryFn: async () => {
@@ -102,13 +104,19 @@ export function OfficialFormsPage() {
     queryClient.invalidateQueries({ queryKey: ['official_forms'] })
   }
 
+  async function copyLink(url: string, id: string) {
+    await navigator.clipboard.writeText(url)
+    setCopiedLinkId(id)
+    setTimeout(() => setCopiedLinkId(null), 2000)
+  }
+
   // ── CAA generate ────────────────────────────────────────────────────────
   async function handleCaaGenerate(e: React.FormEvent) {
     e.preventDefault()
     if (!caaForenames || !caaSurname || !caaAssessDate || !caaIssueDate) return
     setCaaGenerating(true)
-    setCaaOneDriveUrl(null)
-    setCaaOneDriveErr(null)
+    setCaaSharePointUrl(null)
+    setCaaSharePointErr(null)
     if (caaBlobUrl) URL.revokeObjectURL(caaBlobUrl)
     try {
       const pdf = await buildCaa5012PDF({
@@ -127,13 +135,13 @@ export function OfficialFormsPage() {
       setCaaBlobUrl(url)
       pdf.save(filename)
 
-      let odUrl: string | null = null
+      let spUrl: string | null = null
       if (msAccount) {
         try {
-          odUrl = await uploadCaaToOneDrive(blob, filename)
-          setCaaOneDriveUrl(odUrl)
+          spUrl = await uploadToSharePoint(blob, filename, SP_FOLDER_CAA)
+          setCaaSharePointUrl(spUrl)
         } catch (err) {
-          setCaaOneDriveErr(err instanceof Error ? err.message : 'OneDrive upload failed')
+          setCaaSharePointErr(err instanceof Error ? err.message : 'SharePoint upload failed')
         }
       }
 
@@ -145,7 +153,7 @@ export function OfficialFormsPage() {
         surname: caaSurname.trim().toUpperCase(),
         dateOfAssessment: caaAssessDate, evaluator: caaEvaluator,
         dateOfIssue: caaIssueDate,
-        ...(odUrl ? { oneDriveUrl: odUrl } : {}),
+        ...(spUrl ? { oneDriveUrl: spUrl } : {}),
         createdAt: serverTimestamp(),
       })
       queryClient.invalidateQueries({ queryKey: ['official_forms'] })
@@ -159,6 +167,8 @@ export function OfficialFormsPage() {
     e.preventDefault()
     if (!dgacName || !dgacTestDate || !dgacCity || !dgacEmail) return
     setDgacGenerating(true)
+    setDgacSharePointUrl(null)
+    setDgacSharePointErr(null)
     if (dgacBlobUrl) URL.revokeObjectURL(dgacBlobUrl)
     try {
       const pdfBytes = await buildDgac87iPDF({
@@ -178,12 +188,21 @@ export function OfficialFormsPage() {
       })
       setDgacFilename(filename)
 
-      // Trigger download
       const a = document.createElement('a')
       a.href = url; a.download = filename; a.click()
 
       const emailText = buildDgac87iEmail(`(see attachment)`)
       setDgacEmailText(emailText)
+
+      let spUrl: string | null = null
+      if (msAccount) {
+        try {
+          spUrl = await uploadToSharePoint(blob, filename, SP_FOLDER_DGAC)
+          setDgacSharePointUrl(spUrl)
+        } catch (err) {
+          setDgacSharePointErr(err instanceof Error ? err.message : 'SharePoint upload failed')
+        }
+      }
 
       await addDoc(collection(db, 'official_forms'), {
         formType: 'dgac87i',
@@ -192,6 +211,7 @@ export function OfficialFormsPage() {
         candidateTitle: dgacTitle, candidateName: dgacName.trim().toUpperCase(),
         dateOfTest: dgacTestDate, teacCity: dgacCity.trim().toUpperCase(),
         candidateEmail: dgacEmail,
+        ...(spUrl ? { oneDriveUrl: spUrl } : {}),
         createdAt: serverTimestamp(),
       })
       queryClient.invalidateQueries({ queryKey: ['official_forms'] })
@@ -223,6 +243,28 @@ export function OfficialFormsPage() {
         <p className="text-sm text-muted-foreground mt-1">Generate UK CAA 5012 and DGAC 87i-Formlic forms.</p>
       </div>
 
+      {/* SharePoint connection bar */}
+      {msSignInErr && <p className="text-xs text-red-600">{msSignInErr}</p>}
+      <div className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
+        {msAccount ? (
+          <>
+            <span className="text-muted-foreground">
+              SharePoint: <span className="text-foreground font-medium">{msAccount.username}</span>
+            </span>
+            <button type="button" onClick={handleMsSignOut} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+              <LogOut className="size-3" /> Disconnect
+            </button>
+          </>
+        ) : (
+          <>
+            <span className="text-muted-foreground">Auto-save to SharePoint</span>
+            <button type="button" onClick={handleMsSignIn} className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline">
+              <CloudUpload className="size-3.5" /> Connect
+            </button>
+          </>
+        )}
+      </div>
+
       {/* Tab selector */}
       <div className="flex gap-2 border-b pb-1">
         {(['caa5012', 'dgac87i'] as FormTab[]).map(t => (
@@ -242,27 +284,6 @@ export function OfficialFormsPage() {
       {tab === 'caa5012' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
           <form onSubmit={handleCaaGenerate} className="space-y-4">
-            {/* OneDrive connection */}
-            {msSignInErr && <p className="text-xs text-red-600">{msSignInErr}</p>}
-            <div className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
-              {msAccount ? (
-                <>
-                  <span className="text-muted-foreground">
-                    OneDrive: <span className="text-foreground font-medium">{msAccount.username}</span>
-                  </span>
-                  <button type="button" onClick={handleMsSignOut} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-                    <LogOut className="size-3" /> Disconnect
-                  </button>
-                </>
-              ) : (
-                <>
-                  <span className="text-muted-foreground">Auto-save to OneDrive</span>
-                  <button type="button" onClick={handleMsSignIn} className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline">
-                    <CloudUpload className="size-3.5" /> Connect
-                  </button>
-                </>
-              )}
-            </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="text-xs text-muted-foreground">Candidate Forenames</label>
@@ -321,14 +342,12 @@ export function OfficialFormsPage() {
                     </Button>
                   </a>
                 </div>
-                {caaOneDriveUrl && (
-                  <a href={caaOneDriveUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-xs text-green-700 font-medium hover:underline">
-                    <CloudUpload className="size-3.5" /> Saved to OneDrive
+                {caaSharePointUrl && (
+                  <a href={caaSharePointUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-xs text-green-700 font-medium hover:underline">
+                    <CloudUpload className="size-3.5" /> Saved to SharePoint
                   </a>
                 )}
-                {caaOneDriveErr && (
-                  <p className="text-xs text-red-600">{caaOneDriveErr}</p>
-                )}
+                {caaSharePointErr && <p className="text-xs text-red-600">{caaSharePointErr}</p>}
                 <iframe src={caaBlobUrl} title="CAA 5012 preview" className="w-full border rounded" style={{ height: '600px' }} />
               </>
             )}
@@ -403,6 +422,12 @@ export function OfficialFormsPage() {
                     <Button variant="outline" size="sm"><ExternalLink className="size-4 mr-1.5" />86iFORMLIC blank</Button>
                   </a>
                 </div>
+                {dgacSharePointUrl && (
+                  <a href={dgacSharePointUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-xs text-green-700 font-medium hover:underline">
+                    <CloudUpload className="size-3.5" /> Saved to SharePoint
+                  </a>
+                )}
+                {dgacSharePointErr && <p className="text-xs text-red-600">{dgacSharePointErr}</p>}
 
                 {dgacEmailText && (
                   <div className="space-y-2">
@@ -472,9 +497,18 @@ export function OfficialFormsPage() {
                           <td className="px-2 py-1.5">
                             <div className="flex items-center gap-2">
                               {rec.oneDriveUrl && (
-                                <a href={rec.oneDriveUrl} target="_blank" rel="noreferrer" title="Open in OneDrive" className="text-muted-foreground hover:text-primary">
-                                  <CloudUpload className="size-3.5" />
-                                </a>
+                                <>
+                                  <a href={rec.oneDriveUrl} target="_blank" rel="noreferrer" title="Open in SharePoint" className="text-muted-foreground hover:text-primary">
+                                    <CloudUpload className="size-3.5" />
+                                  </a>
+                                  <button
+                                    title="Copy SharePoint link"
+                                    onClick={() => copyLink(rec.oneDriveUrl!, rec.id)}
+                                    className="text-muted-foreground hover:text-primary"
+                                  >
+                                    {copiedLinkId === rec.id ? <Check className="size-3.5 text-green-600" /> : <Link className="size-3.5" />}
+                                  </button>
+                                </>
                               )}
                               <button
                                 title="Delete record"

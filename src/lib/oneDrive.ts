@@ -1,6 +1,14 @@
 import { getGraphToken } from './msal'
 
-const SHAREPOINT_FOLDER = 'UKCAA Candidates/Completed CAA5012 Forms'
+export const SP_FOLDER_CAA  = 'UKCAA Candidates/Completed CAA5012 Forms'
+export const SP_FOLDER_DGAC = 'DGAC France Candidates/Completed DGAC Forms'
+export const SP_FOLDERS_CERT: Record<string, string> = {
+  '1': 'Course Certificates/Rater',
+  '2': 'Course Certificates/RaterInt',
+  '3': 'Course Certificates/Refresher',
+  '4': 'Course Certificates/Teacher',
+  '6': 'Course Certificates/RefresherInt',
+}
 
 let cachedDriveId: string | null = null
 
@@ -8,7 +16,6 @@ async function getDriveId(token: string): Promise<string> {
   if (cachedDriveId) return cachedDriveId
   const headers = { Authorization: `Bearer ${token}` }
 
-  // Resolve site to get its stable GUID-based ID
   const siteRes = await fetch(
     'https://graph.microsoft.com/v1.0/sites/lxuk.sharepoint.com:/sites/SUPERADMIN',
     { headers }
@@ -16,7 +23,6 @@ async function getDriveId(token: string): Promise<string> {
   if (!siteRes.ok) throw new Error(`Could not find SharePoint site (${siteRes.status})`)
   const { id: siteId } = await siteRes.json()
 
-  // Get the default document library drive for that site
   const driveRes = await fetch(
     `https://graph.microsoft.com/v1.0/sites/${siteId}/drive`,
     { headers }
@@ -28,11 +34,11 @@ async function getDriveId(token: string): Promise<string> {
   return driveId
 }
 
-export async function uploadCaaToOneDrive(blob: Blob, filename: string): Promise<string> {
+export async function uploadToSharePoint(blob: Blob, filename: string, folder: string): Promise<string> {
   const token = await getGraphToken()
   const driveId = await getDriveId(token)
 
-  const fullPath = `${SHAREPOINT_FOLDER}/${filename}`
+  const fullPath = `${folder}/${filename}`
   const encodedPath = fullPath.split('/').map(encodeURIComponent).join('/')
   const url = `https://graph.microsoft.com/v1.0/drives/${driveId}/root:/${encodedPath}:/content`
 

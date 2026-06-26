@@ -1,12 +1,30 @@
 import { Link } from 'react-router-dom'
-import { RefreshCw, Shuffle, BarChart2, Award } from 'lucide-react'
+import { RefreshCw, Shuffle, BarChart2, Award, UserPlus, ClipboardList, Search } from 'lucide-react'
 
 const tools = [
+  {
+    to: '/admin/canvas-enroll',
+    icon: UserPlus,
+    label: 'Enrol in Canvas',
+    description: 'Add someone to a Canvas course section. Looks up existing accounts, detects duplicates, and optionally moves them from a previous section.',
+  },
+  {
+    to: '/admin/enrollment-log',
+    icon: ClipboardList,
+    label: 'Enrolment Log',
+    description: 'Unified log of all Canvas enrolments — WooCommerce purchases and manual enrolments. Flags probable duplicates and name-matched accounts for review.',
+  },
   {
     to: '/admin/canvas-sync',
     icon: RefreshCw,
     label: 'Canvas Sync',
-    description: 'Match Canvas course enrollments to people in RaterSystem. Add new people or link existing ones to their Canvas email.',
+    description: 'Match Canvas course enrolments to people in RaterSystem. Add new people or link existing ones to their Canvas email.',
+  },
+  {
+    to: '/admin/canvas-audit',
+    icon: Search,
+    label: 'Canvas Audit',
+    description: 'Health checks: scan for probable duplicate Canvas accounts and students enrolled in multiple sections of the same course.',
   },
   {
     to: '/admin/auto-assign',

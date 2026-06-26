@@ -1,0 +1,84 @@
+rules_version = '2';
+
+// NOTE: These rules were generated to add the canvasEnrollmentLog collection.
+// Before deploying, merge any existing rules from the Firebase console into this file.
+// Deploy with: firebase deploy --only firestore:rules
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── helpers ──────────────────────────────────────────────────────────────
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/people/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isSelf(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // ── people ────────────────────────────────────────────────────────────────
+    // Admins can read/write all. Authenticated users can read their own record.
+
+    match /people/{personId} {
+      allow read: if isAdmin() || isSelf(personId);
+      allow write: if isAdmin();
+    }
+
+    // ── config ────────────────────────────────────────────────────────────────
+    // Admin read/write only. Contains Canvas API token — do not expose to non-admins.
+
+    match /config/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ── sessions ──────────────────────────────────────────────────────────────
+
+    match /sessions/{sessionId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ── assignments ───────────────────────────────────────────────────────────
+    // Raters can read their own assignments and update status/notes.
+    // Admins can read/write all.
+
+    match /assignments/{assignmentId} {
+      allow read: if isAdmin() ||
+        (isSignedIn() && resource.data.raterId == request.auth.uid);
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() ||
+        (isSignedIn() && resource.data.raterId == request.auth.uid);
+    }
+
+    // ── scores ────────────────────────────────────────────────────────────────
+
+    match /scores/{scoreId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() ||
+        (isSignedIn() && resource.data.raterId == request.auth.uid);
+    }
+
+    // ── testBank ──────────────────────────────────────────────────────────────
+
+    match /testBank/{testId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ── canvasEnrollmentLog ───────────────────────────────────────────────────
+    // Written only by Firebase Functions (admin SDK bypasses rules).
+    // Readable by admins only.
+
+    match /canvasEnrollmentLog/{logId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+  }
+}

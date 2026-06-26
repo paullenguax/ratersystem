@@ -25,11 +25,19 @@
 **Key decisions:**
 - Firebase project: `ratersystem` (clean slate; old project is `raterscores`)
 - Auth: Firebase Auth, email/password + Canvas OAuth SSO (via Cloud Function)
-- No backend server: all data via Firebase SDK. Cloud Functions for Canvas OAuth only.
+- No backend server: all data via Firebase SDK. Cloud Functions for Canvas OAuth and Canvas enrolment.
 - Rasch engine: admin exports Facets-compatible CSV, runs Facets externally, imports results manually. Cloud Function replacement is Phase 2.
 - Audio: recording URLs only — old tests point to `raterscores.firebasestorage.app` (still valid); new uploads go to `ratersystem.firebasestorage.app`.
 - Candidates: embedded in `test_bank` docs — no separate candidates collection.
 - Deployed to: `lenguax.com/ratersystem` via GitHub Actions FTP on push to `main`.
+
+**Canvas enrolment architecture:**
+- WooCommerce purchase → WordPress plugin (`CanvasCohortEnrollment`) → Canvas API (automated, no human in loop). Does email lookup, then name fuzzy-match fallback, then creates new account if genuinely new. Sends a webhook event to `enrollmentWebhook` Cloud Function on every outcome.
+- Manual enrolment → RaterAdmin `/admin/canvas-enroll` wizard → `canvasEnroll` Cloud Function. Step-by-step: email lookup → name search → confirm → section pick → optional email update + section conclude → enrol.
+- All events (both sources) land in `canvasEnrollmentLog` Firestore collection, visible at `/admin/enrollment-log`.
+- Probable duplicate accounts (fuzzy name match, different email) trigger an admin email from the WP plugin AND appear as flagged entries in the enrolment log.
+- Welcome emails: only sent by WP plugin when a brand-new Canvas account is created (Canvas also sends its own confirmation). Manual enrolments send no email — admin communicates directly.
+- WP plugin webhook config: `cce_webhook_url` and `cce_webhook_secret` options in WordPress. Firebase secret: `ENROLLMENT_WEBHOOK_SECRET`.
 
 ---
 
@@ -55,6 +63,15 @@ scores/           assignmentId, sessionId, raterId, testDocId, testNumber
 
 config/canvas     apiToken, courses: [{id, name}]   (Canvas API config)
 
+canvasEnrollmentLog/
+                  source: 'woocommerce' | 'manual'
+                  email, name, canvasUserId, sectionId, sectionName
+                  status: 'enrolled' | 'new_account' | 'already_enrolled' |
+                          'matched_by_name' | 'probable_duplicate' | 'failed'
+                  orderId (WooCommerce only), enrolledBy (manual only)
+                  emailUpdated, concludedSections[], timestamp
+                  (written by Cloud Functions only; admin-read via security rules)
+
 certificates/     (planned) certNumber, name, date, type, pin, createdAt, createdBy
 ```
 
@@ -78,6 +95,7 @@ certificates/     (planned) certNumber, name, date, type, pin, createdAt, create
 | 6b | Reports (PDF) | ❌ Not built | Candidate score report PDF |
 | 6c | CAA Export | ❌ Not built | CAA-format export (schema not yet defined) |
 | 7 | Admin Tools | ✅ Done | Import raters/tests/historical scores, Canvas Sync, Import Rasch Results |
+| 7b | Canvas Enrolment | ✅ Done | Manual enrol wizard, unified enrolment log, duplicate + section audits |
 | 8 | Canvas SSO | ✅ Done | OAuth2 → Firebase custom token via Cloud Function |
 | 9 | Certificates | 🔜 Placeholder | Links to existing cert_generator; full migration pending |
 
