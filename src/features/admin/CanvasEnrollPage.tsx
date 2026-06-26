@@ -46,7 +46,7 @@ interface EnrollResult {
 
 // ── firebase callables ────────────────────────────────────────────────────────
 
-const lookupFn = httpsCallable<{ email: string }, { found: boolean; user?: CanvasUser }>(functions, 'canvasUserLookup')
+const lookupFn = httpsCallable<{ email: string }, { found: boolean; user?: CanvasUser }>(functions, 'canvasLookupUser')
 const searchFn = httpsCallable<{ name: string }, { users: CanvasUser[] }>(functions, 'canvasUserSearch')
 const sectionsFn = httpsCallable<Record<string, never>, { sections: CanvasSection[] }>(functions, 'canvasSections')
 const enrollFn = httpsCallable<{

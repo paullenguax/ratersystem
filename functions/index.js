@@ -235,10 +235,10 @@ exports.canvasSections = onCall(async (request) => {
   return { sections }
 })
 
-// ── canvasUserLookup ──────────────────────────────────────────────────────────
+// ── canvasLookupUser ──────────────────────────────────────────────────────────
 // Looks up a Canvas user by exact email. Returns the user if found, null if not.
 
-exports.canvasUserLookup = onCall(async (request) => {
+exports.canvasLookupUser = onCall(async (request) => {
   await assertAdmin(request)
   const { email } = request.data
   if (!email) throw new HttpsError('invalid-argument', 'Missing email')
@@ -466,6 +466,39 @@ exports.canvasEnroll = onCall(async (request) => {
 // HTTP endpoint called by the WordPress plugin after each enrollment attempt.
 // Validates a shared secret then writes the event to canvasEnrollmentLog.
 
+// ── canvasSectionEnrollments ──────────────────────────────────────────────────
+// Fetches students enrolled in a specific section (not the whole course).
+// Used by the section membership audit.
+
+exports.canvasSectionEnrollments = onCall(async (request) => {
+  await assertAdmin(request)
+  const { sectionId } = request.data
+  if (!sectionId) throw new HttpsError('invalid-argument', 'Missing sectionId')
+
+  const apiToken = await getCanvasToken()
+  const users = await canvasFetchAll(
+    `/api/v1/sections/${sectionId}/enrollments?type[]=StudentEnrollment&per_page=100&include[]=email`,
+    apiToken
+  )
+
+  const seen = new Set()
+  return {
+    users: users
+      .filter(e => e.user)
+      .map(e => ({
+        canvasId: e.user.id,
+        name: e.user.name ?? '',
+        email: (e.user.login_id || e.user.email || '').toLowerCase().trim(),
+      }))
+      .filter(u => {
+        if (seen.has(u.canvasId)) return false
+        seen.add(u.canvasId)
+        return true
+      }),
+  }
+})
+
+// ── enrollmentWebhook ─────────────────────────────────────────────────────────
 exports.enrollmentWebhook = onRequest(
   { secrets: [WEBHOOK_SECRET] },
   async (req, res) => {

@@ -24,6 +24,7 @@ interface CanvasSection {
 
 const sectionsFn = httpsCallable<Record<string, never>, { sections: CanvasSection[] }>(functions, 'canvasSections')
 const enrollmentsFn = httpsCallable<{ courseId: string }, { users: CanvasUser[] }>(functions, 'canvasEnrollments')
+const sectionEnrollmentsFn = httpsCallable<{ sectionId: number }, { users: CanvasUser[] }>(functions, 'canvasSectionEnrollments')
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -248,7 +249,7 @@ function SectionMembershipAudit() {
 
         for (const section of courseSections) {
           try {
-            const res = await enrollmentsFn({ courseId: String(courseId) })
+            const res = await sectionEnrollmentsFn({ sectionId: section.id })
             for (const user of res.data.users) {
               if (!userSections.has(user.canvasId)) {
                 userSections.set(user.canvasId, { user, sections: [] })
