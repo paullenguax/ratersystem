@@ -4,7 +4,7 @@ import {
   collection, getDocs, doc, addDoc, setDoc, deleteDoc,
   updateDoc, orderBy, query, serverTimestamp, writeBatch,
 } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
+import { benchmarkDb as db } from '@/lib/firebase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -12,11 +12,20 @@ import { Trash2, Link2, ChevronDown, ChevronRight, Plus } from 'lucide-react'
 import type { Person } from '@/types'
 import {
   POOLS, LEVEL_LABELS, LEVEL_COLOURS,
-  type BenchmarkItem, type BenchmarkResult, type BenchmarkPool,
+  type BenchmarkItem, type BenchmarkResult, type BenchmarkPool, type TrialScores,
 } from './types'
 import { MOCK_ITEMS } from './mockItems'
 
-type Tab = 'results' | 'items'
+function pct(correct: number, total: number) {
+  if (total === 0) return '—'
+  return Math.round(correct / total * 100) + '%'
+}
+
+function isTrialScores(s: unknown): s is TrialScores {
+  return !!s && typeof s === 'object' && 'totalCorrect' in s
+}
+
+type Tab = 'results' | 'analysis' | 'items'
 
 // ── Results tab ───────────────────────────────────────────────────────────────
 
@@ -43,14 +52,18 @@ function ResultsTab() {
     },
   })
 
-  const visible = useMemo(() =>
-    filterLevel === 'all' ? results : results.filter(r => String(r.indicativeLevel) === filterLevel),
-    [results, filterLevel],
-  )
+  const visible = useMemo(() => {
+    const level = (r: BenchmarkResult) =>
+      String(isTrialScores(r.scores) ? r.scores.indicativeLevel : r.indicativeLevel)
+    return filterLevel === 'all' ? results : results.filter(r => level(r) === filterLevel)
+  }, [results, filterLevel])
 
   const levelCounts = useMemo(() => {
     const counts: Record<string, number> = {}
-    results.forEach(r => { const k = String(r.indicativeLevel); counts[k] = (counts[k] ?? 0) + 1 })
+    results.forEach(r => {
+      const k = String(isTrialScores(r.scores) ? r.scores.indicativeLevel : r.indicativeLevel)
+      counts[k] = (counts[k] ?? 0) + 1
+    })
     return counts
   }, [results])
 
@@ -113,8 +126,11 @@ function ResultsTab() {
               <tr>
                 <th className="px-3 py-2 text-left font-medium w-6"></th>
                 <th className="px-3 py-2 text-left font-medium">Candidate</th>
+                <th className="px-3 py-2 text-left font-medium">Form</th>
+                <th className="px-3 py-2 text-left font-medium">Self-reported</th>
                 <th className="px-3 py-2 text-left font-medium">Level</th>
-                <th className="px-3 py-2 text-left font-medium">Scores</th>
+                <th className="px-3 py-2 text-left font-medium">Score</th>
+                <th className="px-3 py-2 text-left font-medium">Flags</th>
                 <th className="px-3 py-2 text-left font-medium">Date</th>
                 <th className="px-3 py-2 text-left font-medium">Linked person</th>
                 <th className="px-2 py-2"></th>
@@ -133,13 +149,32 @@ function ResultsTab() {
                       <p className="font-medium">{res.candidateName || '—'}</p>
                       <p className="text-xs text-muted-foreground font-mono">{res.candidateEmail || '—'}</p>
                     </td>
+                    <td className="px-3 py-2 text-xs font-mono text-muted-foreground">
+                      {res.form ?? '—'}
+                    </td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground">
+                      {res.selfReportedLevel ?? '—'}
+                    </td>
                     <td className="px-3 py-2">
-                      <span className={`text-xs px-1.5 py-0.5 rounded border font-medium ${LEVEL_COLOURS[String(res.indicativeLevel)]}`}>
-                        {LEVEL_LABELS[String(res.indicativeLevel)] ?? res.indicativeLevel}
-                      </span>
+                      {(() => {
+                        const lvl = String(isTrialScores(res.scores) ? res.scores.indicativeLevel : res.indicativeLevel)
+                        return (
+                          <span className={`text-xs px-1.5 py-0.5 rounded border font-medium ${LEVEL_COLOURS[lvl] ?? ''}`}>
+                            {LEVEL_LABELS[lvl] ?? lvl}
+                          </span>
+                        )
+                      })()}
                     </td>
                     <td className="px-3 py-2 text-xs text-muted-foreground font-mono">
-                      P1:{res.scores?.phase1 ?? '?'} P2:{res.scores?.phase2 ?? '?'} P3:{res.scores?.phase3 ?? '?'}
+                      {isTrialScores(res.scores)
+                        ? `${res.scores.totalCorrect}/${res.scores.totalItems}`
+                        : `P1:${res.scores?.phase1 ?? '?'} P2:${res.scores?.phase2 ?? '?'} P3:${res.scores?.phase3 ?? '?'}`}
+                    </td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground">
+                      {(() => {
+                        const n = (res.responses ?? []).filter(r => r.flagComment).length
+                        return n > 0 ? <span className="text-amber-600 font-medium">{n}</span> : '—'
+                      })()}
                     </td>
                     <td className="px-3 py-2 text-xs text-muted-foreground">
                       {res.timestamp ? new Date(res.timestamp.seconds * 1000).toLocaleDateString() : '—'}
@@ -169,7 +204,7 @@ function ResultsTab() {
                   {/* Link person panel */}
                   {linking === res.id && (
                     <tr key={`link-${res.id}`} className="border-t bg-muted/30">
-                      <td colSpan={7} className="px-4 py-3">
+                      <td colSpan={10} className="px-4 py-3">
                         <div className="space-y-2 max-w-sm">
                           <p className="text-xs font-medium">Search people to link:</p>
                           <Input
@@ -197,24 +232,183 @@ function ResultsTab() {
                   {/* Expanded responses */}
                   {expanded === res.id && (
                     <tr key={`exp-${res.id}`} className="border-t bg-muted/20">
-                      <td colSpan={7} className="px-4 py-3">
-                        <p className="text-xs font-medium text-muted-foreground mb-2">Responses ({res.responses?.length ?? 0} items)</p>
-                        <div className="flex flex-wrap gap-1">
-                          {(res.responses ?? []).map((r, i) => (
-                            <span
-                              key={i}
-                              title={`${r.itemId}: selected ${r.selected}`}
-                              className={`text-xs px-1.5 py-0.5 rounded font-mono ${r.correct ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}
-                            >
-                              {r.itemId}:{r.selected}
-                            </span>
-                          ))}
+                      <td colSpan={10} className="px-4 py-3 space-y-3">
+                        {isTrialScores(res.scores) && (
+                          <div className="flex gap-6 text-xs text-muted-foreground">
+                            <span>Band 4: {pct(res.scores.band4.correct, res.scores.band4.total)} ({res.scores.band4.correct}/{res.scores.band4.total})</span>
+                            <span>Band 5: {pct(res.scores.band5.correct, res.scores.band5.total)} ({res.scores.band5.correct}/{res.scores.band5.total})</span>
+                            <span>Band 6: {pct(res.scores.band6.correct, res.scores.band6.total)} ({res.scores.band6.correct}/{res.scores.band6.total})</span>
+                            <span>Vocab: {pct(res.scores.vocabulary.correct, res.scores.vocabulary.total)}</span>
+                            <span>Structure: {pct(res.scores.structure.correct, res.scores.structure.total)}</span>
+                          </div>
+                        )}
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-1.5">Responses ({res.responses?.length ?? 0} items)</p>
+                          <div className="flex flex-wrap gap-1">
+                            {(res.responses ?? []).map((r, i) => (
+                              <span
+                                key={i}
+                                title={`${r.itemId}: selected ${r.selected}${r.flagComment ? ` | flagged: ${r.flagComment}` : ''}`}
+                                className={`text-xs px-1.5 py-0.5 rounded font-mono ${r.correct ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}${r.flagComment ? ' ring-1 ring-amber-400' : ''}`}
+                              >
+                                {r.itemId}:{r.selected}
+                              </span>
+                            ))}
+                          </div>
                         </div>
                       </td>
                     </tr>
                   )}
                 </>
               ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Item analysis tab ─────────────────────────────────────────────────────────
+
+function ItemAnalysisTab() {
+  const [filterForm, setFilterForm] = useState<'all' | 'A' | 'B'>('all')
+  const [sortBy, setSortBy] = useState<'id' | 'difficulty' | 'flags'>('id')
+
+  const { data: results = [] } = useQuery({
+    queryKey: ['benchmark_results'],
+    queryFn: async () => {
+      const snap = await getDocs(query(collection(db, 'benchmark_results'), orderBy('timestamp', 'desc')))
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }) as BenchmarkResult)
+    },
+  })
+
+  const { data: flagDocs = [] } = useQuery({
+    queryKey: ['benchmark_flags'],
+    queryFn: async () => {
+      const snap = await getDocs(collection(db, 'benchmark_flags'))
+      return snap.docs.map(d => d.data() as { itemId: string; comment: string })
+    },
+  })
+
+  const analysis = useMemo(() => {
+    type ItemStat = {
+      id: string; form: string; band: number; construct: string
+      attempts: number; correct: number; flagCount: number; flagComments: string[]
+    }
+    const stats: Record<string, ItemStat> = {}
+
+    const filtered = filterForm === 'all' ? results : results.filter(r => r.form === filterForm)
+
+    for (const result of filtered) {
+      for (const resp of (result.responses ?? [])) {
+        if (!stats[resp.itemId]) {
+          stats[resp.itemId] = {
+            id: resp.itemId,
+            form: result.form ?? '?',
+            band: resp.band ?? 0,
+            construct: resp.construct ?? '?',
+            attempts: 0, correct: 0, flagCount: 0, flagComments: [],
+          }
+        }
+        stats[resp.itemId].attempts++
+        if (resp.correct) stats[resp.itemId].correct++
+        if (resp.flagComment) {
+          stats[resp.itemId].flagCount++
+          stats[resp.itemId].flagComments.push(resp.flagComment)
+        }
+      }
+    }
+
+    // Merge flags from flags collection
+    for (const f of flagDocs) {
+      if (stats[f.itemId] && !stats[f.itemId].flagComments.includes(f.comment)) {
+        stats[f.itemId].flagComments.push(f.comment)
+      }
+    }
+
+    return Object.values(stats).sort((a, b) => {
+      if (sortBy === 'difficulty') {
+        const pA = a.attempts > 0 ? a.correct / a.attempts : 1
+        const pB = b.attempts > 0 ? b.correct / b.attempts : 1
+        return pA - pB
+      }
+      if (sortBy === 'flags') return b.flagCount - a.flagCount
+      return a.id.localeCompare(b.id)
+    })
+  }, [results, flagDocs, filterForm, sortBy])
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-3 flex-wrap items-center">
+        <select
+          value={filterForm}
+          onChange={e => setFilterForm(e.target.value as 'all' | 'A' | 'B')}
+          className="rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+        >
+          <option value="all">Both forms</option>
+          <option value="A">Form A</option>
+          <option value="B">Form B</option>
+        </select>
+        <select
+          value={sortBy}
+          onChange={e => setSortBy(e.target.value as 'id' | 'difficulty' | 'flags')}
+          className="rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+        >
+          <option value="id">Sort by item ID</option>
+          <option value="difficulty">Hardest first</option>
+          <option value="flags">Most flagged first</option>
+        </select>
+        <span className="text-xs text-muted-foreground">{analysis.length} items with data from {results.length} results</span>
+      </div>
+
+      {analysis.length === 0 ? (
+        <div className="rounded-md border border-dashed p-12 text-center text-sm text-muted-foreground">
+          No trial data yet.
+        </div>
+      ) : (
+        <div className="border rounded-lg overflow-hidden">
+          <table className="w-full text-xs">
+            <thead className="bg-muted/50 text-muted-foreground">
+              <tr>
+                <th className="px-3 py-2 text-left font-medium">Item</th>
+                <th className="px-3 py-2 text-left font-medium">Form</th>
+                <th className="px-3 py-2 text-left font-medium">Band</th>
+                <th className="px-3 py-2 text-left font-medium">Construct</th>
+                <th className="px-3 py-2 text-left font-medium">N</th>
+                <th className="px-3 py-2 text-left font-medium">Correct</th>
+                <th className="px-3 py-2 text-left font-medium">% correct</th>
+                <th className="px-3 py-2 text-left font-medium">Flags</th>
+                <th className="px-3 py-2 text-left font-medium">Flag comments</th>
+              </tr>
+            </thead>
+            <tbody>
+              {analysis.map(item => {
+                const p = item.attempts > 0 ? Math.round(item.correct / item.attempts * 100) : null
+                const pctClass = p === null ? 'text-muted-foreground'
+                  : p < 30 ? 'text-red-600 font-semibold'
+                  : p > 85 ? 'text-green-700 font-semibold'
+                  : 'text-muted-foreground'
+                return (
+                  <tr key={item.id} className="border-t hover:bg-muted/20">
+                    <td className="px-3 py-1.5 font-mono text-muted-foreground">{item.id}</td>
+                    <td className="px-3 py-1.5">{item.form}</td>
+                    <td className="px-3 py-1.5">{item.band}</td>
+                    <td className="px-3 py-1.5">{item.construct}</td>
+                    <td className="px-3 py-1.5">{item.attempts}</td>
+                    <td className="px-3 py-1.5">{item.correct}</td>
+                    <td className={`px-3 py-1.5 ${pctClass}`}>{p !== null ? p + '%' : '—'}</td>
+                    <td className="px-3 py-1.5">
+                      {item.flagCount > 0
+                        ? <span className="text-amber-600 font-semibold">{item.flagCount}</span>
+                        : <span className="text-muted-foreground">—</span>}
+                    </td>
+                    <td className="px-3 py-1.5 text-muted-foreground max-w-xs truncate" title={item.flagComments.join(' / ')}>
+                      {item.flagComments.length > 0 ? item.flagComments.join(' / ') : '—'}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -500,21 +694,22 @@ export function BenchmarkPage() {
       </div>
 
       <div className="flex gap-2 border-b pb-1">
-        {(['results', 'items'] as Tab[]).map(t => (
+        {([['results', 'Results'], ['analysis', 'Item analysis'], ['items', 'Item bank']] as [Tab, string][]).map(([t, label]) => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`px-4 py-1.5 rounded-t text-sm font-medium transition-colors capitalize ${
+            className={`px-4 py-1.5 rounded-t text-sm font-medium transition-colors ${
               tab === t ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
             }`}
           >
-            {t}
+            {label}
           </button>
         ))}
       </div>
 
-      {tab === 'results' && <ResultsTab />}
-      {tab === 'items'   && <ItemsTab />}
+      {tab === 'results'  && <ResultsTab />}
+      {tab === 'analysis' && <ItemAnalysisTab />}
+      {tab === 'items'    && <ItemsTab />}
     </div>
   )
 }

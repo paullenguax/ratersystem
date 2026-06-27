@@ -41,18 +41,36 @@ export interface BenchmarkItem {
 
 export interface BenchmarkResponse {
   itemId: string
+  band?: number
+  construct?: string
   selected: string
   correct: boolean
+  flagComment?: string | null
+}
+
+export interface TrialScores {
+  band4: { correct: number; total: number }
+  band5: { correct: number; total: number }
+  band6: { correct: number; total: number }
+  vocabulary: { correct: number; total: number }
+  structure:  { correct: number; total: number }
+  totalCorrect: number
+  totalItems: number
+  indicativeLevel: string
 }
 
 export interface BenchmarkResult {
   id: string
+  mode?: 'trial' | 'adaptive'
+  form?: 'A' | 'B'
   candidateName: string
   candidateEmail: string
+  selfReportedLevel?: string
   timestamp: { seconds: number } | null
   responses: BenchmarkResponse[]
-  scores: { phase1: number; phase2: number; phase3: number }
-  indicativeLevel: BenchmarkLevel
+  // adaptive mode scores
+  scores?: { phase1?: number; phase2?: number; phase3?: number } & Partial<TrialScores>
+  indicativeLevel?: BenchmarkLevel
   linkedPersonId?: string
   linkedPersonName?: string
 }

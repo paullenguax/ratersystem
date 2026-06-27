@@ -1,8 +1,5 @@
 rules_version = '2';
 
-// NOTE: These rules were generated to add the canvasEnrollmentLog collection.
-// Before deploying, merge any existing rules from the Firebase console into this file.
-// Deploy with: firebase deploy --only firestore:rules
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -64,11 +61,55 @@ service cloud.firestore {
         (isSignedIn() && resource.data.raterId == request.auth.uid);
     }
 
-    // ── testBank ──────────────────────────────────────────────────────────────
+    // ── test_bank ─────────────────────────────────────────────────────────────
 
-    match /testBank/{testId} {
+    match /test_bank/{testId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
+    }
+
+    // ── certificates ─────────────────────────────────────────────────────────
+    // Public read so /validate/:certNumber works without auth.
+
+    match /certificates/{certId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ── cert_config ───────────────────────────────────────────────────────────
+    // Public read so ValidatePage can resolve template URLs without auth.
+
+    match /cert_config/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ── official_forms ────────────────────────────────────────────────────────
+
+    match /official_forms/{formId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ── rasch_runs ────────────────────────────────────────────────────────────
+
+    match /rasch_runs/{runId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ── benchmark_items ───────────────────────────────────────────────────────
+    // Public read — Benchmark Check app reads items without auth.
+
+    match /benchmark_items/{itemId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ── benchmark_results ─────────────────────────────────────────────────────
+    // Public write — Benchmark Check app submits results without auth.
+
+    match /benchmark_results/{resultId} {
+      allow read: if isAdmin();
+      allow write: if true;
     }
 
     // ── canvasEnrollmentLog ───────────────────────────────────────────────────

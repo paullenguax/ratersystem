@@ -181,6 +181,10 @@ exports.canvasSections = onCall(async (request) => {
   await assertAdmin(request)
   const apiToken = await getCanvasToken()
 
+  const db = admin.firestore()
+  const configSnap = await db.doc('config/canvas').get()
+  const excludedCourseIds = new Set((configSnap.data()?.excludedCourseIds || []).map(Number))
+
   const courses = await canvasFetchAll(
     '/api/v1/courses?per_page=100&include[]=term',
     apiToken
@@ -200,6 +204,8 @@ exports.canvasSections = onCall(async (request) => {
   const sections = []
 
   for (const course of courses) {
+    if (excludedCourseIds.has(course.id)) continue
+
     let courseSections
     try {
       courseSections = await canvasFetchAll(
