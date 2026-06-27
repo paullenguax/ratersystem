@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { RefreshCw, Shuffle, BarChart2, Award, UserPlus, ClipboardList, Search } from 'lucide-react'
+import { RefreshCw, Shuffle, BarChart2, Award, UserPlus, ClipboardList, Search, Mic2 } from 'lucide-react'
 
 const tools = [
   {
@@ -43,6 +43,12 @@ const tools = [
     icon: Award,
     label: 'Certificate Assets',
     description: 'Upload and manage certificate templates, display images, and PSD source files per cert type.',
+  },
+  {
+    to: '/admin/pronunciation',
+    icon: Mic2,
+    label: 'Pronunciation Tool',
+    description: 'Manage language status, check Firebase Storage for missing audio files, and generate voice actor scripts.',
   },
 ]
 

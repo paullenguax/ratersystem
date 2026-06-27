@@ -25,6 +25,7 @@ import { EnrollmentLogPage } from '@/features/admin/EnrollmentLogPage'
 import { AutoAssignPage } from '@/features/admin/AutoAssignPage'
 import { ImportRaschPage } from '@/features/admin/ImportRaschPage'
 import { CertAssetsPage } from '@/features/admin/CertAssetsPage'
+import { PronunciationAdminPage } from '@/features/admin/PronunciationAdminPage'
 import { CertificatesPage } from '@/features/certificates/CertificatesPage'
 import { OfficialFormsPage } from '@/features/officialForms/OfficialFormsPage'
 import { ValidatePage } from '@/features/certificates/ValidatePage'
@@ -74,7 +75,8 @@ export default function App() {
                 <Route path="admin/enrollment-log" element={<ProtectedRoute allowedRoles={['admin']}><EnrollmentLogPage /></ProtectedRoute>} />
                 <Route path="admin/auto-assign"    element={<ProtectedRoute allowedRoles={['admin']}><AutoAssignPage /></ProtectedRoute>} />
                 <Route path="admin/import-rasch"   element={<ProtectedRoute allowedRoles={['admin']}><ImportRaschPage /></ProtectedRoute>} />
-                <Route path="admin/cert-assets"    element={<ProtectedRoute allowedRoles={['admin']}><CertAssetsPage /></ProtectedRoute>} />
+                <Route path="admin/cert-assets"        element={<ProtectedRoute allowedRoles={['admin']}><CertAssetsPage /></ProtectedRoute>} />
+                <Route path="admin/pronunciation"      element={<ProtectedRoute allowedRoles={['admin']}><PronunciationAdminPage /></ProtectedRoute>} />
               </Route>
 
               <Route path="*" element={<Navigate to="/" replace />} />
