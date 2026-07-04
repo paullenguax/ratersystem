@@ -31,6 +31,8 @@ import { OfficialFormsPage } from '@/features/officialForms/OfficialFormsPage'
 import { ValidatePage } from '@/features/certificates/ValidatePage'
 import { FeedbackReportPage } from '@/features/feedbackReport/FeedbackReportPage'
 import { BenchmarkPage } from '@/features/benchmark/BenchmarkPage'
+import { PracticePage } from '@/features/practice/PracticePage'
+import { PracticeScorePage } from '@/features/practice/PracticeScorePage'
 
 const queryClient = new QueryClient()
 
@@ -45,6 +47,7 @@ export default function App() {
               <Route path="/validate/:certNumber" element={<ValidatePage />} />
               <Route path="/validate" element={<ValidatePage />} />
               <Route path="/auth/canvas/callback" element={<CanvasCallbackPage />} />
+              <Route path="/practice/:code" element={<PracticeScorePage />} />
 
               <Route
                 element={
@@ -68,6 +71,7 @@ export default function App() {
                 <Route path="certificates"   element={<ProtectedRoute allowedRoles={['admin']}><CertificatesPage /></ProtectedRoute>} />
                 <Route path="official-forms" element={<ProtectedRoute allowedRoles={['admin']}><OfficialFormsPage /></ProtectedRoute>} />
                 <Route path="benchmark"   element={<ProtectedRoute allowedRoles={['admin']}><BenchmarkPage /></ProtectedRoute>} />
+                <Route path="practice"   element={<ProtectedRoute allowedRoles={['admin']}><PracticePage /></ProtectedRoute>} />
                 <Route path="admin"       element={<ProtectedRoute allowedRoles={['admin']}><AdminPage /></ProtectedRoute>} />
                 <Route path="admin/canvas-sync"    element={<ProtectedRoute allowedRoles={['admin']}><CanvasSyncPage /></ProtectedRoute>} />
                 <Route path="admin/canvas-enroll"  element={<ProtectedRoute allowedRoles={['admin']}><CanvasEnrollPage /></ProtectedRoute>} />

@@ -25,7 +25,7 @@ export interface RaschRun {
 }
 
 function nums(s: string): number[] {
-  return (s.match(/-?[\d]+\.?[\d]*/g) ?? []).map(Number)
+  return (s.match(/-?\d*\.?\d+/g) ?? []).map(Number)
 }
 
 function parseTable7(text: string): { raters: RaschRater[]; meanMeasure: number; reliability: number; separation: number; rmse: number } {

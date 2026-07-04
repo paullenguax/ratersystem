@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { RefreshCw, Shuffle, BarChart2, Award, UserPlus, ClipboardList, Search, Mic2 } from 'lucide-react'
+import { RefreshCw, Shuffle, BarChart2, Award, UserPlus, ClipboardList, Search, Mic2, Radio } from 'lucide-react'
 
 const tools = [
   {
@@ -49,6 +49,12 @@ const tools = [
     icon: Mic2,
     label: 'Pronunciation Tool',
     description: 'Manage language status, check Firebase Storage for missing audio files, and generate voice actor scripts.',
+  },
+  {
+    to: '/practice',
+    icon: Radio,
+    label: 'Practice Sessions',
+    description: 'Run live in-class scoring exercises. Share a link with trainees, collect scores in real time, and toggle name visibility for class discussion.',
   },
 ]
 

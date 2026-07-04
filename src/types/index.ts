@@ -56,6 +56,36 @@ export interface Score {
   createdAt?: Timestamp
 }
 
+export interface PracticeSession {
+  id: string
+  code: string
+  title: string
+  trainerId: string
+  trainerName: string
+  testDocId?: string
+  testSource?: 'test_bank' | 'training_recording'
+  audioUrl?: string
+  testLabel?: string
+  status: 'active' | 'closed'
+  createdAt?: Timestamp
+}
+
+export interface PracticeScore {
+  id: string
+  sessionId: string
+  sessionCode: string
+  participantName: string
+  pronunciation: number
+  structure: number
+  vocabulary: number
+  fluency: number
+  comprehension: number
+  interactions: number
+  overallLevel: number
+  sortKey: number
+  submittedAt?: Timestamp
+}
+
 export interface Test {
   id: string
   testId?: number

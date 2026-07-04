@@ -4,26 +4,13 @@ import {
   addDoc, updateDoc, doc, serverTimestamp,
 } from 'firebase/firestore'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight, Info } from 'lucide-react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
 import type { Assignment, Test, Score } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { ICAO_DESCRIPTIONS, LEVEL_LABELS } from '@/lib/icaoDescriptions'
-
-// ── types ──────────────────────────────────────────────────────────────────
-
-type DimScores = [number | null, number | null, number | null, number | null, number | null, number | null]
-
-const DIMENSIONS = [
-  { key: 'pronunciation' as const, label: 'Pronunciation' },
-  { key: 'structure'     as const, label: 'Structure' },
-  { key: 'vocabulary'   as const, label: 'Vocabulary' },
-  { key: 'fluency'      as const, label: 'Fluency' },
-  { key: 'comprehension'as const, label: 'Comprehension' },
-  { key: 'interactions' as const, label: 'Interactions' },
-]
+import { IcaoSliders, type DimScores } from './IcaoSliders'
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -46,32 +33,6 @@ const STATUS_VARIANT: Record<Assignment['status'], 'secondary' | 'default' | 'ou
   submitted: 'default',
   reviewed:  'outline',
   published: 'outline',
-}
-
-// ── ICAO tooltip ───────────────────────────────────────────────────────────
-
-function DimTooltip({ label, level }: { label: string; level: number }) {
-  const [show, setShow] = useState(false)
-  const desc = ICAO_DESCRIPTIONS[label]?.[level]
-  if (!desc) return null
-  return (
-    <div className="relative inline-block ml-1">
-      <button
-        type="button"
-        className="text-muted-foreground hover:text-foreground transition-colors align-middle"
-        onMouseEnter={() => setShow(true)}
-        onMouseLeave={() => setShow(false)}
-      >
-        <Info className="size-3.5" />
-      </button>
-      {show && (
-        <div className="absolute z-50 w-72 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-xl -top-2 left-5 pointer-events-none leading-relaxed">
-          <p className="font-semibold mb-1">Level {level} — {label}</p>
-          {desc}
-        </div>
-      )}
-    </div>
-  )
 }
 
 // ── data fetching ──────────────────────────────────────────────────────────
@@ -146,14 +107,12 @@ export function ScoringPage() {
   const { user } = useAuth()
   const queryClient = useQueryClient()
 
-  // player state
   const [assignment, setAssignment] = useState<Assignment | null>(null)
   const [tests, setTests] = useState<Test[]>([])
   const [existingScores, setExistingScores] = useState<Map<string, Score>>(new Map())
   const [loadingPlayer, setLoadingPlayer] = useState(false)
   const [currentIdx, setCurrentIdx] = useState(0)
   const [scores, setScores] = useState<DimScores>([null, null, null, null, null, null])
-  const [touched, setTouched] = useState<boolean[]>([false, false, false, false, false, false])
   const [showErrors, setShowErrors] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitSuccess, setSubmitSuccess] = useState(false)
@@ -179,7 +138,6 @@ export function ScoringPage() {
     setLoadingPlayer(false)
   }
 
-  // Pre-fill scores when current test changes
   useEffect(() => {
     const test = tests[currentIdx]
     if (!test) return
@@ -189,10 +147,8 @@ export function ScoringPage() {
         existing.pronunciation, existing.structure, existing.vocabulary,
         existing.fluency, existing.comprehension, existing.interactions,
       ])
-      setTouched([true, true, true, true, true, true])
     } else {
       setScores([null, null, null, null, null, null])
-      setTouched([false, false, false, false, false, false])
     }
     setSubmitSuccess(false)
     setShowErrors(false)
@@ -211,13 +167,6 @@ export function ScoringPage() {
           const next = [...prev] as DimScores
           const firstNull = next.findIndex(v => v === null)
           if (firstNull !== -1) next[firstNull] = n
-          return next
-        })
-        setTouched(prev => {
-          const firstUntouched = prev.findIndex(t => !t)
-          if (firstUntouched === -1) return prev
-          const next = [...prev]
-          next[firstUntouched] = true
           return next
         })
       }
@@ -266,7 +215,6 @@ export function ScoringPage() {
         })
       }
 
-      // Update local map so subsequent navigation reflects the new score
       const updatedScores = new Map(existingScores)
       updatedScores.set(test.id, {
         ...(existing ?? {}),
@@ -276,7 +224,6 @@ export function ScoringPage() {
       } as Score)
       setExistingScores(updatedScores)
 
-      // Auto-mark submitted when all tests have a score
       if (assignment.testDocIds.every(id => updatedScores.has(id))) {
         await updateDoc(doc(db, 'assignments', assignment.id), { status: 'submitted' })
         setAssignment(prev => prev ? { ...prev, status: 'submitted' } : null)
@@ -286,9 +233,7 @@ export function ScoringPage() {
       setSubmitSuccess(true)
       setTimeout(() => {
         setSubmitSuccess(false)
-        if (currentIdx < tests.length - 1) {
-          setCurrentIdx(idx => idx + 1)
-        }
+        if (currentIdx < tests.length - 1) setCurrentIdx(idx => idx + 1)
       }, 1500)
     } finally {
       setSubmitting(false)
@@ -307,7 +252,6 @@ export function ScoringPage() {
     )
   }
 
-  // Assignment list
   if (!assignment) {
     return (
       <div className="max-w-2xl space-y-4">
@@ -317,7 +261,6 @@ export function ScoringPage() {
     )
   }
 
-  // Scoring player
   const test = tests[currentIdx]
   const allScored = scores.every(s => s !== null)
   const overall = allScored ? Math.min(...(scores as number[])) : null
@@ -356,18 +299,10 @@ export function ScoringPage() {
             )}
           </div>
           <div className="flex gap-1">
-            <Button
-              variant="outline" size="sm"
-              disabled={currentIdx === 0}
-              onClick={() => setCurrentIdx(i => i - 1)}
-            >
+            <Button variant="outline" size="sm" disabled={currentIdx === 0} onClick={() => setCurrentIdx(i => i - 1)}>
               <ChevronLeft className="size-4" />
             </Button>
-            <Button
-              variant="outline" size="sm"
-              disabled={currentIdx === tests.length - 1}
-              onClick={() => setCurrentIdx(i => i + 1)}
-            >
+            <Button variant="outline" size="sm" disabled={currentIdx === tests.length - 1} onClick={() => setCurrentIdx(i => i + 1)}>
               <ChevronRight className="size-4" />
             </Button>
           </div>
@@ -413,9 +348,7 @@ export function ScoringPage() {
               controls
               controlsList="nodownload"
               onContextMenu={e => e.preventDefault()}
-              onLoadedMetadata={() => {
-                if (audioRef.current) audioRef.current.playbackRate = playbackSpeed
-              }}
+              onLoadedMetadata={() => { if (audioRef.current) audioRef.current.playbackRate = playbackSpeed }}
               className="w-full"
               src={test.recordingUrl}
               preload="metadata"
@@ -434,96 +367,35 @@ export function ScoringPage() {
           </div>
         )}
 
-        {/* ICAO sliders */}
-        <div className="space-y-3">
-          {DIMENSIONS.map((dim, i) => {
-            const val = scores[i]
-            const isTouched = touched[i]
-            const hasError = showErrors && !isTouched
-            return (
-              <div
-                key={dim.key}
-                className={`rounded-lg border-2 p-3 pb-5 transition-all ${
-                  hasError ? 'border-red-400 bg-red-50' : 'border-border hover:bg-muted/30'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-1">
-                    <span className="text-sm font-medium">{dim.label}</span>
-                    {isTouched && val !== null && <DimTooltip label={dim.label} level={val} />}
-                  </div>
-                  <span className={`text-lg font-bold ${
-                    !isTouched ? 'text-muted-foreground/30'
-                    : val! <= 3 ? 'text-red-600'
-                    : val! >= 5 ? 'text-green-700'
-                    : 'text-blue-700'
-                  }`}>
-                    {isTouched && val !== null ? val : '—'}
-                  </span>
-                </div>
-                <div className="grid grid-cols-[1fr_auto] items-center gap-3">
-                  <input
-                    type="range"
-                    min="1"
-                    max="6"
-                    value={val ?? 4}
-                    onChange={e => {
-                      const n = parseInt(e.target.value)
-                      setScores(prev => { const next = [...prev] as DimScores; next[i] = n; return next })
-                      setTouched(prev => { const next = [...prev]; next[i] = true; return next })
-                    }}
-                    className="w-full h-2 rounded-lg cursor-pointer accent-primary"
-                  />
-                  <input
-                    type="number"
-                    min="1"
-                    max="6"
-                    value={isTouched && val !== null ? val : ''}
-                    onChange={e => {
-                      const n = Math.min(6, Math.max(1, parseInt(e.target.value) || 1))
-                      setScores(prev => { const next = [...prev] as DimScores; next[i] = n; return next })
-                      setTouched(prev => { const next = [...prev]; next[i] = true; return next })
-                    }}
-                    className="w-14 text-center border border-input rounded-md p-1 text-sm focus:ring-2 focus:ring-primary"
-                  />
-                </div>
-                <div className="flex justify-between text-[10px] text-muted-foreground mt-1 mr-[3.75rem]">
-                  {LEVEL_LABELS.map(l => <span key={l}>{l}</span>)}
-                </div>
-                {hasError && (
-                  <p className="text-red-600 text-xs mt-2">Please rate this criterion</p>
-                )}
-              </div>
-            )
-          })}
-        </div>
-
-        {/* Overall */}
-        <div className="flex items-center gap-3 rounded-lg bg-muted/50 px-4 py-3">
-          <span className="text-sm font-medium w-32 shrink-0">Overall</span>
-          {overall !== null
-            ? <span className={`text-lg font-bold px-2 py-0.5 rounded border ${levelColour(overall)}`}>{overall}</span>
-            : <span className="text-sm text-muted-foreground">— set all 6 scores</span>
-          }
-        </div>
-
-        {/* Submit */}
-        <Button
-          className="w-full"
-          onClick={handleSubmit}
-          disabled={!allScored || submitting || submitSuccess}
-        >
-          {submitting ? 'Saving…'
-            : submitSuccess ? 'Saved!'
-            : isAlreadyScored ? 'Update scores'
-            : 'Submit scores'}
-        </Button>
-
-        <p className="text-xs text-center text-muted-foreground">
-          Tip: press 1–6 to fill the next unscored dimension
-        </p>
+        <IcaoSliders scores={scores} onChange={setScores} showErrors={showErrors} />
 
       </div>
+
+      {/* Sticky submit bar */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 px-4 py-3">
+        <div className="max-w-2xl mx-auto flex items-center gap-3">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <span className="text-sm text-muted-foreground shrink-0">Overall</span>
+            {overall !== null
+              ? <span className={`text-base font-bold px-2 py-0.5 rounded border ${levelColour(overall)}`}>{overall}</span>
+              : <span className="text-sm text-muted-foreground">—</span>
+            }
+            <span className="text-xs text-muted-foreground ml-2 truncate">
+              {scores.filter(s => s !== null).length}/6 scored
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground hidden sm:block shrink-0">1–6 to fill next</p>
+          <Button
+            onClick={handleSubmit}
+            disabled={!allScored || submitting || submitSuccess}
+            className="shrink-0"
+          >
+            {submitting ? 'Saving…' : submitSuccess ? 'Saved!' : isAlreadyScored ? 'Update scores' : 'Submit scores'}
+          </Button>
+        </div>
+      </div>
+
+      <div className="h-20" />
     </div>
   )
 }
