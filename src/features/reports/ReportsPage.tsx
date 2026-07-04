@@ -243,7 +243,16 @@ export function ReportsPage() {
     return [...seen.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))
   }, [scores, sessionIds])
 
-  const rater = useMemo(() => people.find(p => p.id === raterId), [people, raterId])
+  // Try people lookup first; fall back to a synthetic record built from score data
+  // so the email generates even for raters whose people doc ID differs from their raterId in scores
+  const rater = useMemo((): Person | undefined => {
+    if (!raterId) return undefined
+    const found = people.find(p => p.id === raterId)
+    if (found) return found
+    const nameFromScores = scores.find(s => s.raterId === raterId)?.raterName
+    if (!nameFromScores) return undefined
+    return { id: raterId, name: nameFromScores, email: '', role: 'trainee', status: 'active' }
+  }, [people, raterId, scores])
 
   const raschData = useMemo(() => {
     if (!latestRun || !rater?.raterNumber) return null
