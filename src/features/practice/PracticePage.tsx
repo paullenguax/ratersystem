@@ -365,6 +365,21 @@ export function PracticePage() {
     navigator.clipboard.writeText(practiceUrl(code))
   }
 
+  async function deleteSession(s: PracticeSession, e: React.MouseEvent) {
+    e.stopPropagation()
+    if (!confirm(`Delete "${s.title}" and all its scores? This cannot be undone.`)) return
+    const scoresSnap = await getDocs(query(collection(db, 'practice_scores'), where('sessionId', '==', s.id)))
+    await Promise.all(scoresSnap.docs.map(d => deleteDoc(doc(db, 'practice_scores', d.id))))
+    await deleteDoc(doc(db, 'practice_sessions', s.id))
+    queryClient.invalidateQueries({ queryKey: ['practice-sessions'] })
+  }
+
+  function formatDate(s: PracticeSession): string {
+    const ts = s.createdAt as unknown as { seconds: number } | undefined
+    if (!ts?.seconds) return ''
+    return new Date(ts.seconds * 1000).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+  }
+
   if (selectedSession) {
     return (
       <ResultsView
@@ -401,10 +416,10 @@ export function PracticePage() {
       ) : (
         <div className="space-y-2">
           {sessions.map(s => (
-            <button
+            <div
               key={s.id}
               onClick={() => setSelectedSession(s)}
-              className="w-full text-left rounded-lg border p-4 hover:bg-muted/50 transition-colors"
+              className="w-full text-left rounded-lg border p-4 hover:bg-muted/50 transition-colors cursor-pointer"
             >
               <div className="flex items-center justify-between gap-4">
                 <div className="min-w-0">
@@ -414,11 +429,16 @@ export function PracticePage() {
                       {s.status === 'active' ? 'Live' : 'Closed'}
                     </Badge>
                   </div>
-                  {s.testLabel && (
-                    <p className="text-xs text-muted-foreground mt-0.5 truncate">{s.testLabel}</p>
-                  )}
+                  <div className="flex items-center gap-2 mt-0.5">
+                    {s.testLabel && (
+                      <p className="text-xs text-muted-foreground truncate">{s.testLabel}</p>
+                    )}
+                    {formatDate(s) && (
+                      <p className="text-xs text-muted-foreground shrink-0">{formatDate(s)}</p>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-1 shrink-0">
                   <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">{s.code}</code>
                   {s.status === 'active' && (
                     <button
@@ -429,9 +449,16 @@ export function PracticePage() {
                       <Copy className="size-3.5" />
                     </button>
                   )}
+                  <button
+                    onClick={e => deleteSession(s, e)}
+                    className="text-muted-foreground hover:text-destructive p-1 ml-1"
+                    title="Delete session"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
                 </div>
               </div>
-            </button>
+            </div>
           ))}
         </div>
       )}

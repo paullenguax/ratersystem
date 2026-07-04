@@ -112,6 +112,24 @@ service cloud.firestore {
       allow write: if true;
     }
 
+    // ── practice_sessions ─────────────────────────────────────────────────────
+    // Public read so the public scoring page can look up a session by code.
+    // Only admins can create/update/delete sessions.
+
+    match /practice_sessions/{sessionId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ── practice_scores ───────────────────────────────────────────────────────
+    // Public write — participants submit without auth.
+    // Admin read only — trainer sees results.
+
+    match /practice_scores/{scoreId} {
+      allow read: if isAdmin();
+      allow write: if true;
+    }
+
     // ── canvasEnrollmentLog ───────────────────────────────────────────────────
     // Written only by Firebase Functions (admin SDK bypasses rules).
     // Readable by admins only.

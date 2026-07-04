@@ -94,6 +94,7 @@ export function PracticeScorePage() {
       setShowErrors(true)
       return
     }
+    if (existingDocId && !confirm('Replace your previous scores for this test?')) return
     const [p, st, v, fl, c, inter] = scores as number[]
     const overall = Math.min(p, st, v, fl, c, inter)
     setSubmitting(true)
