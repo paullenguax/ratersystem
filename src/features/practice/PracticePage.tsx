@@ -301,7 +301,11 @@ function ResultsView({ session, onBack }: { session: PracticeSession; onBack: ()
                   <tr key={s.id} className={i % 2 === 0 ? 'bg-background' : 'bg-muted/20'}>
                     <td className="px-3 py-2 font-medium">{s.participantName}</td>
                     {dimKeys.map(k => (
-                      <td key={k} className="text-center px-2 py-2">{s[k]}</td>
+                      <td key={k} className="text-center px-2 py-2">
+                        <span className={`inline-block text-xs font-bold px-1.5 py-0.5 rounded border ${levelColour(s[k as keyof PracticeScore] as number)}`}>
+                          {s[k as keyof PracticeScore] as number}
+                        </span>
+                      </td>
                     ))}
                     <td className="text-center px-3 py-2">
                       <span className={`inline-block text-xs font-bold px-1.5 py-0.5 rounded border ${levelColour(s.overallLevel)}`}>
