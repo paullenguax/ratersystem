@@ -1,8 +1,8 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { collection, addDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, addDoc, doc, updateDoc, serverTimestamp, query, where, limit, getDocs } from 'firebase/firestore'
 import { useQueryClient } from '@tanstack/react-query'
 import { db } from '@/lib/firebase'
 import type { Session } from '@/types'
@@ -14,16 +14,17 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 const TYPE_LABELS: Record<Session['type'], string> = {
-  refresher:   'Refresher Course',
-  reliability: 'Reliability Check',
-  calibration: 'Calibration',
-  historical:  'Historical Import',
-  ad_hoc:      'Ad hoc',
+  rater_course: 'Rater Course',
+  refresher:    'Refresher Course',
+  reliability:  'Reliability Check',
+  calibration:  'Calibration',
+  historical:   'Historical Import',
+  ad_hoc:       'Ad hoc',
 }
 
 const schema = z.object({
   name:   z.string().min(1, 'Required'),
-  type:   z.enum(['refresher', 'reliability', 'calibration', 'historical', 'ad_hoc']),
+  type:   z.enum(['rater_course', 'refresher', 'reliability', 'calibration', 'historical', 'ad_hoc']),
   status: z.enum(['open', 'closed', 'published']),
   notes:  z.string().optional(),
 })
@@ -40,6 +41,7 @@ interface Props {
 export function SessionDrawer({ open, onClose, session }: Props) {
   const queryClient = useQueryClient()
   const isEdit = !!session
+  const [hasScores, setHasScores] = useState(false)
 
   const { register, handleSubmit, control, reset, formState: { errors, isSubmitting } } =
     useForm<FormData>({ resolver: zodResolver(schema), defaultValues: EMPTY })
@@ -50,6 +52,12 @@ export function SessionDrawer({ open, onClose, session }: Props) {
       ? { name: session.name, type: session.type, status: session.status, notes: session.notes ?? '' }
       : EMPTY
     )
+    if (session) {
+      getDocs(query(collection(db, 'scores'), where('sessionId', '==', session.id), limit(1)))
+        .then(snap => setHasScores(!snap.empty))
+    } else {
+      setHasScores(false)
+    }
   }, [open, session, reset])
 
   async function onSubmit(data: FormData) {
@@ -80,7 +88,7 @@ export function SessionDrawer({ open, onClose, session }: Props) {
           <div className="space-y-1">
             <Label>Type</Label>
             <Controller name="type" control={control} render={({ field }) => (
-              <Select value={field.value} onValueChange={field.onChange}>
+              <Select value={field.value} onValueChange={field.onChange} disabled={hasScores}>
                 <SelectTrigger>
                   <SelectValue>{TYPE_LABELS[field.value]}</SelectValue>
                 </SelectTrigger>
@@ -91,6 +99,9 @@ export function SessionDrawer({ open, onClose, session }: Props) {
                 </SelectContent>
               </Select>
             )} />
+            {hasScores && (
+              <p className="text-xs text-muted-foreground">Locked — scores have already been submitted for this event.</p>
+            )}
           </div>
 
           <div className="space-y-1">

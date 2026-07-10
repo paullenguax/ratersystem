@@ -10,11 +10,12 @@ import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
 const TYPE_LABELS: Record<Session['type'], string> = {
-  refresher:   'Refresher Course',
-  reliability: 'Reliability Check',
-  calibration: 'Calibration',
-  historical:  'Historical Import',
-  ad_hoc:      'Ad hoc',
+  rater_course: 'Rater Course',
+  refresher:    'Refresher Course',
+  reliability:  'Reliability Check',
+  calibration:  'Calibration',
+  historical:   'Historical Import',
+  ad_hoc:       'Ad hoc',
 }
 
 const STATUS_VARIANT: Record<Session['status'], 'default' | 'secondary' | 'outline'> = {

@@ -57,7 +57,9 @@ service cloud.firestore {
 
     match /scores/{scoreId} {
       allow read: if isSignedIn();
-      allow write: if isAdmin() ||
+      allow create: if isAdmin() ||
+        (isSignedIn() && request.resource.data.raterId == request.auth.uid);
+      allow update, delete: if isAdmin() ||
         (isSignedIn() && resource.data.raterId == request.auth.uid);
     }
 

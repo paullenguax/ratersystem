@@ -27,7 +27,7 @@ export interface Assignment {
 export interface Session {
   id: string
   name: string
-  type: 'refresher' | 'reliability' | 'calibration' | 'historical' | 'ad_hoc'
+  type: 'rater_course' | 'refresher' | 'reliability' | 'calibration' | 'historical' | 'ad_hoc'
   status: 'open' | 'closed' | 'published'
   notes?: string
   createdAt?: Timestamp

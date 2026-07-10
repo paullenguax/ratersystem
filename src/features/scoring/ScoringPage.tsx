@@ -116,6 +116,7 @@ export function ScoringPage() {
   const [showErrors, setShowErrors] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitSuccess, setSubmitSuccess] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
   const [playbackSpeed, setPlaybackSpeed] = useState(1)
   const audioRef = useRef<HTMLAudioElement>(null)
 
@@ -151,6 +152,7 @@ export function ScoringPage() {
       setScores([null, null, null, null, null, null])
     }
     setSubmitSuccess(false)
+    setSubmitError(null)
     setShowErrors(false)
     if (audioRef.current) audioRef.current.load()
   }, [currentIdx, tests, existingScores])
@@ -187,6 +189,7 @@ export function ScoringPage() {
     const overall = Math.min(p, st, v, fl, c, inter)
 
     setSubmitting(true)
+    setSubmitError(null)
     try {
       const existing = existingScores.get(test.id)
       const dimPayload = {
@@ -235,6 +238,8 @@ export function ScoringPage() {
         setSubmitSuccess(false)
         if (currentIdx < tests.length - 1) setCurrentIdx(idx => idx + 1)
       }, 1500)
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Failed to save scores. Please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -364,6 +369,13 @@ export function ScoringPage() {
         {submitSuccess && (
           <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-800 font-medium">
             ✓ Scores saved{currentIdx < tests.length - 1 ? ' — moving to next test…' : ' — all done!'}
+          </div>
+        )}
+
+        {/* Error banner */}
+        {submitError && (
+          <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800 font-medium">
+            Couldn't save your scores: {submitError}
           </div>
         )}
 
