@@ -79,12 +79,12 @@ function buildEmail(params: {
   isRepeater: boolean
   prevRaterNumber: string
   prevMeasure: string
-  currentRaterNumber: string
+  raterNumberField: string
 }): string {
   const { rater, candidateStats, paraOverrides, measure, infit, outcome, advisoryText,
-          isRepeater, prevRaterNumber, prevMeasure, currentRaterNumber } = params
+          isRepeater, prevRaterNumber, prevMeasure, raterNumberField } = params
   const firstName = rater.name.split(' ')[0]
-  const raterNum = (isRepeater && currentRaterNumber) ? currentRaterNumber : (rater.raterNumber ?? '[RATER NUMBER]')
+  const raterNum = raterNumberField || (rater.raterNumber ?? '[RATER NUMBER]')
 
   const measureVal = measure || '[MEASURE]'
   const infitVal   = infit   || '[INFIT MNSQ]'
@@ -177,6 +177,20 @@ function buildEmail(params: {
   ].join('\n')
 }
 
+// Wraps bare URLs as clickable <a> tags so pasting into a rich-text email
+// compose window (Gmail, Outlook) renders them as real hyperlinks.
+function emailTextToHtml(text: string): string {
+  const escaped = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+  const linked = escaped.replace(
+    /(https?:\/\/[^\s]+)/g,
+    url => `<a href="${url}">${url}</a>`,
+  )
+  return linked.split('\n').map(line => line || '&nbsp;').join('<br>')
+}
+
 // ── page ───────────────────────────────────────────────────────────────────
 
 export function ReportsPage() {
@@ -190,7 +204,7 @@ export function ReportsPage() {
   const [expanded, setExpanded]         = useState<Set<string>>(new Set())
   const [copied, setCopied]             = useState(false)
   const [isRepeater, setIsRepeater]     = useState(false)
-  const [currentRaterNumber, setCurrentRaterNumber] = useState('')
+  const [raterNumberField, setRaterNumberField] = useState('')
   const [prevRaterNumber, setPrevRaterNumber] = useState('')
   const [prevMeasure, setPrevMeasure]   = useState('')
 
@@ -340,9 +354,9 @@ export function ReportsPage() {
   const emailText = useMemo(() => {
     if (!rater || candidateStats.length === 0) return ''
     return buildEmail({ rater, candidateStats, paraOverrides, measure, infit, outcome, advisoryText,
-                        isRepeater, currentRaterNumber, prevRaterNumber, prevMeasure })
+                        isRepeater, raterNumberField, prevRaterNumber, prevMeasure })
   }, [rater, candidateStats, paraOverrides, measure, infit, outcome, advisoryText,
-      isRepeater, currentRaterNumber, prevRaterNumber, prevMeasure])
+      isRepeater, raterNumberField, prevRaterNumber, prevMeasure])
 
   function toggleExpanded(testDocId: string) {
     setExpanded(prev => {
@@ -368,9 +382,10 @@ export function ReportsPage() {
     setParaOverrides({})
     setExpanded(new Set())
     setIsRepeater(false)
-    setCurrentRaterNumber('')
     setPrevRaterNumber('')
     setPrevMeasure('')
+    const found = people.find(p => p.id === id)
+    setRaterNumberField(found?.raterNumber ? String(found.raterNumber) : '')
   }
 
   function handleDownloadMap() {
@@ -401,7 +416,18 @@ export function ReportsPage() {
   }
 
   async function handleCopy() {
-    await navigator.clipboard.writeText(emailText)
+    try {
+      const html = emailTextToHtml(emailText)
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'text/plain': new Blob([emailText], { type: 'text/plain' }),
+          'text/html': new Blob([html], { type: 'text/html' }),
+        }),
+      ])
+    } catch {
+      // Fallback for browsers without ClipboardItem support (plain text only)
+      await navigator.clipboard.writeText(emailText)
+    }
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -636,7 +662,15 @@ export function ReportsPage() {
                 Rasch results{' '}
                 <span className="text-muted-foreground font-normal text-xs">(leave blank for placeholders)</span>
               </p>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Rater number</label>
+                  <Input
+                    placeholder="e.g. 48"
+                    value={raterNumberField}
+                    onChange={e => setRaterNumberField(e.target.value)}
+                  />
+                </div>
                 <div className="space-y-1">
                   <label className="text-xs text-muted-foreground">Measure (leniency)</label>
                   <Input placeholder="-0.98" value={measure} onChange={e => setMeasure(e.target.value)} />
@@ -720,15 +754,7 @@ export function ReportsPage() {
                 Returning rater (has previous certification)
               </label>
               {isRepeater && (
-                <div className="grid grid-cols-3 gap-3 pl-6">
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">Current rater number <span className="text-foreground">(this event)</span></label>
-                    <Input
-                      placeholder="e.g. 48"
-                      value={currentRaterNumber}
-                      onChange={e => setCurrentRaterNumber(e.target.value)}
-                    />
-                  </div>
+                <div className="grid grid-cols-2 gap-3 pl-6">
                   <div className="space-y-1">
                     <label className="text-xs text-muted-foreground">Previous rater number</label>
                     <Input

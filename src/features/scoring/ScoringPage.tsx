@@ -295,7 +295,7 @@ export function ScoringPage() {
         {/* Progress navigation */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">Test {currentIdx + 1} of {tests.length}</span>
+            <span className="text-sm font-medium">Test {String.fromCharCode(65 + currentIdx)} of {tests.length}</span>
             {test?.testId && (
               <span className="font-mono text-xs text-muted-foreground">#{test.testId}</span>
             )}

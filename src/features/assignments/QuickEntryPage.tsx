@@ -198,7 +198,7 @@ export function QuickEntryPage() {
             >
               {/* Test selector */}
               <div className="flex items-center gap-3">
-                <span className="text-xs font-medium text-muted-foreground w-12 shrink-0">Test {i + 1}</span>
+                <span className="text-xs font-medium text-muted-foreground w-12 shrink-0">Test {String.fromCharCode(65 + i)}</span>
                 <Select value={entry.testDocId} onValueChange={v => setTestDocId(i, v ?? '')}>
                   <SelectTrigger className="flex-1">
                     <SelectValue placeholder="Select test…">

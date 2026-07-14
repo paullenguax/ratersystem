@@ -117,4 +117,4 @@ Certificate validation is public at `/validate/:certNumber` (no auth required).
 
 ## Last updated
 
-2026-06-29
+2026-07-14
