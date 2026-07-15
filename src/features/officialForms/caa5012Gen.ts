@@ -54,7 +54,7 @@ export async function buildCaa5012PDF(raw: Omit<Caa5012Params, 'forenames' | 'su
     loadImage(`${p.basePath}/Lenguax-Logo-Stamp.png`),
   ])
 
-  const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' })
+  const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4', compress: true })
 
   // Background — placed at y=0 (original tFPDF used y=-3; all text offsets below compensate)
   pdf.addImage(bgData, 'PNG', 0, 0, 210, 297)

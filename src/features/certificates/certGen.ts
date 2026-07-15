@@ -72,7 +72,7 @@ export async function buildCertPDF(params: {
     QRCode.toDataURL(validationUrl, { errorCorrectionLevel: 'L', width: 200 }),
   ])
 
-  const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' })
+  const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4', compress: true })
 
   // Background template
   pdf.addImage(templateData, 'JPEG', 0, 0, 210, 297)
