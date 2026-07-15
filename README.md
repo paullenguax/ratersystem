@@ -112,11 +112,21 @@ Canvas SSO users: run Canvas Sync (Admin page) — it creates the `people` doc a
 
 Certificate validation is public at `/validate/:certNumber` (no auth required).
 
+## Canvas naming convention
+
+`Rater Course` and `Refresher Course` are cloned annually on Canvas, with a section per cohort inside each year's clone:
+
+- **Course**: `Rater Course {Year}` / `Refresher Course {Year}` (e.g. "Rater Course 2026") — clone yearly
+- **Section**: `{Month} {Year}` for open monthly cohorts (e.g. "July 2026"), or the client/group name for closed cohorts (e.g. "Acme Airlines")
+- **SIS IDs are not used anywhere in this integration** — everything (this app, the WP plugin, self-serve) reads/writes Canvas's own numeric `course.id`/`section.id`. No need to set one when creating a section.
+- Set an **end date** on each section once its cohort finishes — `canvasSections()` auto-hides sections ended >7 days ago from every picker (enroll wizard, audits, self-serve), so this keeps them tidy without needing `config/canvas.excludedCourseIds` (that field is for hiding unrelated Lenguax courses from the account entirely, not for retiring old cohorts)
+- Add each year's cloned course to `config/canvas.courses` (via Canvas Sync's Settings panel) — this list is also the self-serve auto-provisioning failsafe's allowlist, so a course needs to be here before self-serve login works for its enrollees
+
 ## Cloud Functions (`functions/index.js`)
 
 | Function | Purpose |
 |---|---|
-| `canvasAuth` | Canvas OAuth code → Firebase custom token. Requires a `people` doc matching the Canvas login email; creates the Firebase Auth user (UID = `people` doc ID) on first login |
+| `canvasAuth` | Canvas OAuth code → Firebase custom token. Requires a `people` doc matching the Canvas login email; creates the Firebase Auth user (UID = `people` doc ID) on first login. For self-serve logins (`selfServe: true`) with no matching `people` doc, auto-provisions one as a trainee — but only if the caller is actively enrolled in a course listed in `config/canvas.courses` and no existing person has a similar name (possible-duplicate case, left for an admin to link manually) |
 | `canvasEnrollments` | All student enrollments for a course (used by Canvas Sync) |
 | `canvasSections` | All sections across all accessible courses (admin, used by the enroll wizard and audits) |
 | `canvasLookupUser` / `canvasUserSearch` | Exact-email / fuzzy-name Canvas user lookup (admin, enroll wizard) |
@@ -135,7 +145,9 @@ A Canvas-enrolled trainee can go to `/take-test`, sign in with Canvas SSO, and l
 - The entry link (`TakeTestPage.tsx`) appends `state=self_serve` to the Canvas OAuth URL (`src/lib/canvasAuthUrl.ts`); Canvas round-trips that `state` back to `CanvasCallbackPage.tsx` unchanged.
 - After Canvas sign-in, if `state === 'self_serve'`, the callback calls `requestSelfAssignment` and routes into `/scoring` with the new assignment ID, which `ScoringPage.tsx` auto-opens instead of showing the assignment picker.
 - Test selection reuses `AutoAssignPage.tsx`'s tiering approach: tests this rater has never scored, spread across difficulty tiers (`Test.canonicalDifficulty`), with a preferred anchor that's both well-calibrated and has been scored by ≥100 distinct raters (`WELL_KNOWN_RATER_THRESHOLD` in `functions/index.js`).
+- The session a self-serve assignment files under is named `{Canvas course name} — {Canvas section name}` (e.g. "Rater Course 2026 — July 2026" or "Rater Course 2026 — Acme Airlines"), found-or-created by `canvasSectionId`. Course/section naming is otherwise just a Canvas-side habit — see "Canvas naming convention" below.
 - Requires `config/canvas.notificationEmail` and the `RESEND_API_KEY` secret set for email alerts; an in-app "self-serve submissions awaiting review" card also appears on the admin Dashboard regardless.
+- **Failsafe:** if Canvas Sync hasn't been run yet for someone taking a self-serve exam, `canvasAuth` auto-creates their `people` doc (role `trainee`) rather than hard-failing — gated on active enrollment in a course from `config/canvas.courses` and no name-similar existing person. Auto-created accounts show a small "auto" badge on the People page for a quick admin sanity check.
 
 ## Notes
 

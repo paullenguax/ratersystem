@@ -22,9 +22,9 @@ Roles: `admin`, `senior_rater`, `trainee`.
 
 ## Canvas integration
 
-Three enrollment paths converge on `canvasEnrollmentLog`: WooCommerce purchase (`CanvasCohortEnrollment` WP plugin → `enrollmentWebhook`), the manual wizard (`/admin/canvas-enroll` → `canvasEnroll`), and bulk course sync (`/admin/canvas-sync`, creates/links `people` docs — required before a Canvas user can SSO in, since `canvasAuth` only matches by email and never creates a `people` doc itself).
+Three enrollment paths converge on `canvasEnrollmentLog`: WooCommerce purchase (`CanvasCohortEnrollment` WP plugin → `enrollmentWebhook`), the manual wizard (`/admin/canvas-enroll` → `canvasEnroll`), and bulk course sync (`/admin/canvas-sync`, creates/links `people` docs — the normal way a Canvas user gets one before they can SSO in).
 
-Self-serve exam entry (`/take-test` → Canvas SSO with `state=self_serve` → `requestSelfAssignment`) builds a trainee a 4-test `assignments` doc (`source: 'self_serve'`) tied to a `sessions` doc keyed by `canvasSectionId`, reusing `AutoAssignPage.tsx`'s difficulty-tier/unseen-test selection logic server-side. `ScoringPage` auto-opens that assignment via router state. See `functions/index.js` for the full Cloud Functions list.
+Self-serve exam entry (`/take-test` → Canvas SSO with `state=self_serve` → `requestSelfAssignment`) builds a trainee a 4-test `assignments` doc (`source: 'self_serve'`) tied to a `sessions` doc keyed by `canvasSectionId` and named `{course.name} — {section.name}`, reusing `AutoAssignPage.tsx`'s difficulty-tier/unseen-test selection logic server-side. `ScoringPage` auto-opens that assignment via router state. If Canvas Sync wasn't run in time, `canvasAuth` self-heals for self-serve logins only — auto-creates a trainee `people` doc, gated on active enrollment in a `config/canvas.courses`-listed course and no name-similar existing person (`resolveActiveRaterSection`/`namesLikelyMatch` in `functions/index.js`). Course/section naming convention (annual course clones, section per cohort) is documented in `README.md`. See `functions/index.js` for the full Cloud Functions list.
 
 ## PDF generation
 

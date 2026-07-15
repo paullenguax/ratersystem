@@ -71,10 +71,72 @@ async function writeEnrollmentLog(entry) {
   })
 }
 
+function namesLikelyMatch(a, b) {
+  const na = (a || '').toLowerCase().replace(/\s+/g, ' ').trim()
+  const nb = (b || '').toLowerCase().replace(/\s+/g, ' ').trim()
+  if (!na || !nb) return false
+  if (na === nb) return true
+  const wa = na.split(' ')
+  const wb = nb.split(' ')
+  const overlap = wa.filter(w => wb.includes(w)).length
+  return overlap >= 2 || (overlap >= 1 && Math.min(wa.length, wb.length) === 1)
+}
+
+// Resolves a Canvas identity by email, then their most-recently-started active
+// student section enrollment (with the full section + course objects, not just
+// IDs). Returns null if no Canvas account or no active section is found.
+// Shared by requestSelfAssignment and canvasAuth's self-serve auto-provisioning.
+async function resolveActiveRaterSection(email, apiToken) {
+  const searchRes = await canvasFetch(
+    `/api/v1/accounts/self/users?search_term=${encodeURIComponent(email)}&per_page=10`,
+    apiToken
+  )
+  if (!searchRes.ok) throw new HttpsError('internal', `Canvas API error: ${searchRes.status}`)
+  const candidates = await searchRes.json()
+  const normalEmail = email.toLowerCase().trim()
+  const canvasUser = candidates.find(u =>
+    (u.login_id || '').toLowerCase() === normalEmail || (u.email || '').toLowerCase() === normalEmail
+  )
+  if (!canvasUser) return null
+
+  const enrollments = await canvasFetchAll(
+    `/api/v1/users/${canvasUser.id}/enrollments?type[]=StudentEnrollment&state[]=active&per_page=100`,
+    apiToken
+  )
+  if (enrollments.length === 0) return null
+
+  const courseById = new Map()
+  for (const e of enrollments) {
+    if (courseById.has(e.course_id)) continue
+    const courseRes = await canvasFetch(`/api/v1/courses/${e.course_id}`, apiToken)
+    if (courseRes.ok) courseById.set(e.course_id, await courseRes.json())
+  }
+
+  const withCourse = enrollments
+    .map(e => ({ enrollment: e, course: courseById.get(e.course_id) }))
+    .filter(x => x.course)
+    .sort((a, b) => {
+      const da = a.course.start_at || a.course.created_at || null
+      const dbb = b.course.start_at || b.course.created_at || null
+      if (da && dbb) return new Date(dbb) - new Date(da)
+      if (!da && dbb) return 1
+      if (da && !dbb) return -1
+      return 0
+    })
+  if (withCourse.length === 0) return null
+
+  const { enrollment, course } = withCourse[0]
+  const sectionRes = await canvasFetch(`/api/v1/sections/${enrollment.course_section_id}`, apiToken)
+  if (!sectionRes.ok) return null
+  const section = await sectionRes.json()
+
+  return { canvasUser, course, section }
+}
+
 // ── existing: canvasAuth ──────────────────────────────────────────────────────
 
 exports.canvasAuth = onCall({ secrets: [CANVAS_CLIENT_SECRET] }, async (request) => {
-  const { code } = request.data
+  const { code, selfServe } = request.data
   if (!code) throw new HttpsError('invalid-argument', 'Missing OAuth code')
 
   const tokenRes = await fetch(`${CANVAS_URL}/login/oauth2/token`, {
@@ -110,12 +172,48 @@ exports.canvasAuth = onCall({ secrets: [CANVAS_CLIENT_SECRET] }, async (request)
   const db = admin.firestore()
   const snap = await db.collection('people').where('email', '==', email).limit(1).get()
 
-  if (snap.empty) {
+  let personId, personName
+
+  if (!snap.empty) {
+    personId = snap.docs[0].id
+    personName = snap.docs[0].data().name
+  } else if (selfServe) {
+    // Failsafe for "Canvas Sync wasn't run before this person tried to take
+    // their exam": auto-provision a trainee record, but only if they're
+    // actively enrolled in one of our known rater/refresher courses
+    // (config/canvas.courses — the same curated list Canvas Sync itself
+    // uses), and only if nobody with a similar name already exists (that's
+    // a possible-duplicate case for an admin to link manually, not something
+    // to silently fork into two records).
+    const apiToken = await getCanvasToken()
+    const configSnap = await db.doc('config/canvas').get()
+    const knownCourseIds = new Set((configSnap.data()?.courses || []).map(c => Number(c.id)))
+
+    const resolved = await resolveActiveRaterSection(email, apiToken)
+    if (!resolved || !knownCourseIds.has(resolved.course.id)) {
+      throw new HttpsError('not-found', 'No RaterSystem account found for this Canvas user. Contact your administrator.')
+    }
+
+    const allPeople = await db.collection('people').get()
+    const possibleDuplicate = allPeople.docs.find(d => namesLikelyMatch(d.data().name, resolved.canvasUser.name))
+    if (possibleDuplicate) {
+      throw new HttpsError('failed-precondition', 'It looks like you may already have an account under a different email. Contact your administrator to link it.')
+    }
+
+    personName = resolved.canvasUser.name
+    const newPersonRef = db.collection('people').doc()
+    await newPersonRef.set({
+      name: personName,
+      email,
+      role: 'trainee',
+      status: 'active',
+      createdVia: 'self_serve_auto',
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    })
+    personId = newPersonRef.id
+  } else {
     throw new HttpsError('not-found', 'No RaterSystem account found for this Canvas user. Contact your administrator.')
   }
-
-  const personDoc = snap.docs[0]
-  const personId = personDoc.id
 
   try {
     await admin.auth().getUser(personId)
@@ -128,7 +226,7 @@ exports.canvasAuth = onCall({ secrets: [CANVAS_CLIENT_SECRET] }, async (request)
     await admin.auth().createUser({
       uid: personId,
       email,
-      displayName: personDoc.data().name,
+      displayName: personName,
     })
   }
 
@@ -235,9 +333,7 @@ exports.canvasSections = onCall(async (request) => {
         courseDate,
         courseStartAt: course.start_at || null,
         sectionEndAt: section.end_at || null,
-        displayName: courseDate
-          ? `${course.name} (${courseDate}) → ${section.name}`
-          : `${course.name} → ${section.name}`,
+        displayName: `${course.name} → ${section.name}`,
       })
     }
   }
@@ -544,53 +640,13 @@ exports.requestSelfAssignment = onCall(async (request) => {
 
   const apiToken = await getCanvasToken()
 
-  // ── 1. Resolve Canvas user by email ───────────────────────────────────────
-  const searchRes = await canvasFetch(
-    `/api/v1/accounts/self/users?search_term=${encodeURIComponent(person.email)}&per_page=10`,
-    apiToken
-  )
-  if (!searchRes.ok) throw new HttpsError('internal', `Canvas API error: ${searchRes.status}`)
-  const candidates = await searchRes.json()
-  const normalEmail = person.email.toLowerCase().trim()
-  const canvasUser = candidates.find(u =>
-    (u.login_id || '').toLowerCase() === normalEmail || (u.email || '').toLowerCase() === normalEmail
-  )
-  if (!canvasUser) throw new HttpsError('failed-precondition', 'Could not find a matching Canvas account')
-
-  // ── 2. Find their most-recently-started active section enrollment ────────
-  const enrollments = await canvasFetchAll(
-    `/api/v1/users/${canvasUser.id}/enrollments?type[]=StudentEnrollment&state[]=active&per_page=100`,
-    apiToken
-  )
-  if (enrollments.length === 0) {
+  // ── 1–2. Resolve Canvas identity + their active section enrollment ────────
+  const resolved = await resolveActiveRaterSection(person.email, apiToken)
+  if (!resolved) {
     throw new HttpsError('failed-precondition', 'Not currently enrolled in an active course section. Contact your administrator.')
   }
-
-  const courseById = new Map()
-  for (const e of enrollments) {
-    if (courseById.has(e.course_id)) continue
-    const courseRes = await canvasFetch(`/api/v1/courses/${e.course_id}`, apiToken)
-    if (courseRes.ok) courseById.set(e.course_id, await courseRes.json())
-  }
-
-  const withCourse = enrollments
-    .map(e => ({ enrollment: e, course: courseById.get(e.course_id) }))
-    .filter(x => x.course)
-    .sort((a, b) => {
-      const da = a.course.start_at || a.course.created_at || null
-      const dbb = b.course.start_at || b.course.created_at || null
-      if (da && dbb) return new Date(dbb) - new Date(da)
-      if (!da && dbb) return 1
-      if (da && !dbb) return -1
-      return 0
-    })
-
-  if (withCourse.length === 0) {
-    throw new HttpsError('failed-precondition', 'Not currently enrolled in an active course section. Contact your administrator.')
-  }
-
-  const { enrollment, course } = withCourse[0]
-  const sectionId = enrollment.course_section_id
+  const { course, section } = resolved
+  const sectionId = section.id
 
   // ── 3. Find-or-create the RaterSystem session for this section ───────────
   const sessionsSnap = await db.collection('sessions').where('canvasSectionId', '==', sectionId).limit(1).get()
@@ -599,10 +655,7 @@ exports.requestSelfAssignment = onCall(async (request) => {
     sessionId = sessionsSnap.docs[0].id
     sessionName = sessionsSnap.docs[0].data().name
   } else {
-    const monthYear = course.start_at
-      ? new Date(course.start_at).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
-      : ''
-    sessionName = monthYear ? `${course.name} ${monthYear}` : course.name
+    sessionName = `${course.name} — ${section.name}`
     const newSession = await db.collection('sessions').add({
       name: sessionName,
       type: 'rater_course',

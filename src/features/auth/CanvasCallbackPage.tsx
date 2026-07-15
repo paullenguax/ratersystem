@@ -12,15 +12,16 @@ export function CanvasCallbackPage() {
     const params = new URLSearchParams(window.location.search)
     const code = params.get('code')
     const state = params.get('state')
+    const selfServe = state === 'self_serve'
     if (!code) { setError('No authorisation code received from Canvas.'); return }
 
-    const canvasAuth = httpsCallable<{ code: string }, { token: string }>(functions, 'canvasAuth')
+    const canvasAuth = httpsCallable<{ code: string; selfServe: boolean }, { token: string }>(functions, 'canvasAuth')
     const requestSelfAssignment = httpsCallable<Record<string, never>, { assignmentId: string }>(functions, 'requestSelfAssignment')
 
-    canvasAuth({ code })
+    canvasAuth({ code, selfServe })
       .then(result => signInWithCustomToken(auth, result.data.token))
       .then(async () => {
-        if (state === 'self_serve') {
+        if (selfServe) {
           const result = await requestSelfAssignment({})
           navigate('/scoring', { replace: true, state: { assignmentId: result.data.assignmentId } })
         } else {

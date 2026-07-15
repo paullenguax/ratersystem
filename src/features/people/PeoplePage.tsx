@@ -56,7 +56,23 @@ export function PeoplePage() {
         return n ? <span className="font-mono text-sm text-muted-foreground">{n}</span> : null
       },
     },
-    { accessorKey: 'name', header: 'Name' },
+    {
+      accessorKey: 'name',
+      header: 'Name',
+      cell: ({ row }) => (
+        <span>
+          {row.original.name}
+          {row.original.createdVia === 'self_serve_auto' && (
+            <span
+              className="ml-1.5 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-1 py-0.5 font-normal"
+              title="Auto-created on first self-serve login — Canvas Sync hadn't been run for this person yet"
+            >
+              auto
+            </span>
+          )}
+        </span>
+      ),
+    },
     {
       accessorKey: 'email',
       header: 'Email',

@@ -9,6 +9,7 @@ export interface Person {
   raterNumber?: number
   notes?: string
   linkedAt?: Timestamp
+  createdVia?: 'self_serve_auto'
   createdAt?: Timestamp
 }
 
