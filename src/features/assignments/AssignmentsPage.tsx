@@ -100,6 +100,11 @@ export function AssignmentsPage() {
             {(role === 'senior_rater' || role === 'admin') && (
               <span className="ml-1.5 text-[10px] text-muted-foreground font-normal">SR</span>
             )}
+            {row.original.source === 'self_serve' && (
+              <span className="ml-1.5 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-1 py-0.5 font-normal">
+                self-serve
+              </span>
+            )}
           </span>
         )
       },

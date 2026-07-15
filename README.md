@@ -35,7 +35,8 @@ Manages the full workflow of ICAO English rating: assigning tests to raters, ent
 | Certificates | ✓ | | |
 | Official Forms | ✓ | | |
 | Benchmark | ✓ | | |
-| Admin | ✓ | | |
+| Practice Sessions | ✓ | | |
+| Admin (incl. Canvas Sync/Enroll/Audit, Enrollment Log, Auto-assign, Import Rasch, Cert Assets, Pronunciation) | ✓ | | |
 
 Role is determined by the `people` Firestore collection — the doc ID **must** equal the Firebase Auth UID.
 
@@ -44,9 +45,9 @@ Role is determined by the `people` Firestore collection — the doc ID **must** 
 | Collection | Purpose |
 |---|---|
 | `people` | Raters + admins, keyed by Firebase Auth UID |
-| `test_bank` | ICAO test recordings (51+ imported) |
-| `sessions` | Named groups of scoring work |
-| `assignments` | session + rater + tests; unit of work |
+| `test_bank` | ICAO test recordings (51+ imported); `canonicalDifficulty`/`canonicalSE` from Rasch imports drive both Auto-assign and the self-serve picker |
+| `sessions` | Named groups of scoring work; `canvasSectionId` links a session to a Canvas section for self-serve assignments |
+| `assignments` | session + rater + tests; unit of work; `source: 'self_serve'` marks ones created by the self-serve flow |
 | `scores` | Individual ICAO scores per rater per test |
 | `certificates` | Lenguax cert records (L-prefix numbers) |
 | `official_forms` | CAA 5012 and DGAC 87i records |
@@ -54,6 +55,9 @@ Role is determined by the `people` Firestore collection — the doc ID **must** 
 | `benchmark_items` | MCQ items for Benchmark Check |
 | `benchmark_results` | Candidate results from Benchmark Check |
 | `pronunciation_config/status` | Active languages for GPronTool |
+| `config/canvas` | Canvas API token, Canvas Sync course list, `excludedCourseIds`, `notificationEmail` for self-serve alerts |
+| `canvasEnrollmentLog` | Unified log of Canvas enrollments from both WooCommerce (`CanvasCohortEnrollment` WP plugin) and the manual `/admin/canvas-enroll` wizard |
+| `practice_sessions` / `practice_scores` | Ad-hoc live-course practice player (`/practice`), joined via a 6-character code, no login required |
 
 ## Local dev
 
@@ -108,6 +112,31 @@ Canvas SSO users: run Canvas Sync (Admin page) — it creates the `people` doc a
 
 Certificate validation is public at `/validate/:certNumber` (no auth required).
 
+## Cloud Functions (`functions/index.js`)
+
+| Function | Purpose |
+|---|---|
+| `canvasAuth` | Canvas OAuth code → Firebase custom token. Requires a `people` doc matching the Canvas login email; creates the Firebase Auth user (UID = `people` doc ID) on first login |
+| `canvasEnrollments` | All student enrollments for a course (used by Canvas Sync) |
+| `canvasSections` | All sections across all accessible courses (admin, used by the enroll wizard and audits) |
+| `canvasLookupUser` / `canvasUserSearch` | Exact-email / fuzzy-name Canvas user lookup (admin, enroll wizard) |
+| `canvasEnroll` | Full manual enrollment: create-user-if-needed, optional email update, optional old-section conclusion, enroll, log (admin) |
+| `canvasSectionEnrollments` | Students in one specific section (admin, section-membership audit) |
+| `enrollmentWebhook` | HTTP endpoint the WordPress plugin POSTs to after each WooCommerce enrollment attempt; shared-secret auth (`x-webhook-secret` / `ENROLLMENT_WEBHOOK_SECRET`) |
+| `requestSelfAssignment` | Self-serve exam entry point (any signed-in user). Resolves the caller's active Canvas section, finds-or-creates the matching `sessions` doc, and builds a 4-test `assignments` doc using unseen/difficulty-tier/well-known-anchor selection (same approach as Auto-assign) |
+| `notifySelfServeSubmission` | Fires when a self-serve assignment's status flips to `submitted`; emails `config/canvas.notificationEmail` via Resend (`RESEND_API_KEY` secret) — skipped silently if either isn't configured |
+
+See the full Canvas integration write-up (WP plugin ↔ Firebase ↔ RaterSystemNew) for the complete enrollment picture — ask Claude to regenerate it from `CanvasCohortEnrollment/canvas-cohort-enrollment.php` and this file if it's gone stale.
+
+## Self-serve rater exam
+
+A Canvas-enrolled trainee can go to `/take-test`, sign in with Canvas SSO, and land directly in the Scoring player (`/scoring`) pre-loaded with 4 tests — no admin setup required. Mechanics:
+
+- The entry link (`TakeTestPage.tsx`) appends `state=self_serve` to the Canvas OAuth URL (`src/lib/canvasAuthUrl.ts`); Canvas round-trips that `state` back to `CanvasCallbackPage.tsx` unchanged.
+- After Canvas sign-in, if `state === 'self_serve'`, the callback calls `requestSelfAssignment` and routes into `/scoring` with the new assignment ID, which `ScoringPage.tsx` auto-opens instead of showing the assignment picker.
+- Test selection reuses `AutoAssignPage.tsx`'s tiering approach: tests this rater has never scored, spread across difficulty tiers (`Test.canonicalDifficulty`), with a preferred anchor that's both well-calibrated and has been scored by ≥100 distinct raters (`WELL_KNOWN_RATER_THRESHOLD` in `functions/index.js`).
+- Requires `config/canvas.notificationEmail` and the `RESEND_API_KEY` secret set for email alerts; an in-app "self-serve submissions awaiting review" card also appears on the admin Dashboard regardless.
+
 ## Notes
 
 - `shadcn/ui` here uses the Base UI variant — always `render` prop, never `asChild`
@@ -117,4 +146,4 @@ Certificate validation is public at `/validate/:certNumber` (no auth required).
 
 ## Last updated
 
-2026-07-14
+2026-07-15

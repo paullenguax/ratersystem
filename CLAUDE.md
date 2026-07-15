@@ -18,7 +18,13 @@ Roles: `admin`, `senior_rater`, `trainee`.
 
 ## Key Firestore collections
 
-`people`, `test_bank`, `sessions`, `assignments`, `scores`, `certificates`, `official_forms`, `cert_config/templates`, `benchmark_items`, `benchmark_results`, `pronunciation_config/status`
+`people`, `test_bank`, `sessions`, `assignments`, `scores`, `certificates`, `official_forms`, `cert_config/templates`, `benchmark_items`, `benchmark_results`, `pronunciation_config/status`, `config/canvas`, `canvasEnrollmentLog`, `practice_sessions`, `practice_scores`
+
+## Canvas integration
+
+Three enrollment paths converge on `canvasEnrollmentLog`: WooCommerce purchase (`CanvasCohortEnrollment` WP plugin → `enrollmentWebhook`), the manual wizard (`/admin/canvas-enroll` → `canvasEnroll`), and bulk course sync (`/admin/canvas-sync`, creates/links `people` docs — required before a Canvas user can SSO in, since `canvasAuth` only matches by email and never creates a `people` doc itself).
+
+Self-serve exam entry (`/take-test` → Canvas SSO with `state=self_serve` → `requestSelfAssignment`) builds a trainee a 4-test `assignments` doc (`source: 'self_serve'`) tied to a `sessions` doc keyed by `canvasSectionId`, reusing `AutoAssignPage.tsx`'s difficulty-tier/unseen-test selection logic server-side. `ScoringPage` auto-opens that assignment via router state. See `functions/index.js` for the full Cloud Functions list.
 
 ## PDF generation
 

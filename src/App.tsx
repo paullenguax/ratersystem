@@ -5,6 +5,7 @@ import { AuthProvider } from '@/context/AuthContext'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { AppShell } from '@/components/AppShell'
 import { LoginPage } from '@/features/auth/LoginPage'
+import { TakeTestPage } from '@/features/auth/TakeTestPage'
 import { CanvasCallbackPage } from '@/features/auth/CanvasCallbackPage'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { PeoplePage } from '@/features/people/PeoplePage'
@@ -44,6 +45,7 @@ export default function App() {
           <AuthProvider>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/take-test" element={<TakeTestPage />} />
               <Route path="/validate/:certNumber" element={<ValidatePage />} />
               <Route path="/validate" element={<ValidatePage />} />
               <Route path="/auth/canvas/callback" element={<CanvasCallbackPage />} />

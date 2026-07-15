@@ -1,4 +1,5 @@
 const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https')
+const { onDocumentUpdated } = require('firebase-functions/v2/firestore')
 const { defineSecret } = require('firebase-functions/params')
 const admin = require('firebase-admin')
 
@@ -6,10 +7,13 @@ admin.initializeApp()
 
 const CANVAS_CLIENT_SECRET = defineSecret('CANVAS_CLIENT_SECRET')
 const WEBHOOK_SECRET = defineSecret('ENROLLMENT_WEBHOOK_SECRET')
+const RESEND_API_KEY = defineSecret('RESEND_API_KEY')
 const CANVAS_URL = 'https://courses.lenguax.com'
 const CANVAS_CLIENT_ID = '10000000000002'
 const REDIRECT_URI = 'https://lenguax.com/ratersystem/auth/canvas/callback'
 const SECTION_END_GRACE_DAYS = 7
+const WELL_KNOWN_RATER_THRESHOLD = 100
+const SELF_SERVE_TESTS_PER_RATER = 4
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -467,6 +471,233 @@ exports.canvasEnroll = onCall(async (request) => {
 
   return { canvasUserId, created, alreadyEnrolled, concludedSections, emailUpdated }
 })
+
+// ── requestSelfAssignment ──────────────────────────────────────────────────────
+// Called right after a Canvas SSO login flagged as a self-serve exam request
+// (see the `state=self_serve` param round-tripped through the OAuth flow).
+// Resolves the caller's active Canvas section, finds-or-creates the matching
+// RaterSystem session, and builds them a 4-test assignment.
+//
+// Selection mirrors AutoAssignPage's pickTests(): unseen-by-this-rater tests,
+// spread across difficulty tiers, with a preference for a well-known anchor
+// test (calibrated + seen by >= WELL_KNOWN_RATER_THRESHOLD distinct raters).
+
+function pickSelfServeTests({ pool, seenTestIds, raterCountByTest }) {
+  const chosen = []
+  const unseen = pool.filter(t => !seenTestIds.has(t.id))
+
+  const calibratedUnseen = unseen
+    .filter(t => t.canonicalDifficulty != null)
+    .sort((a, b) => (a.canonicalDifficulty ?? 0) - (b.canonicalDifficulty ?? 0))
+
+  const wellCalibrated = [...calibratedUnseen]
+    .filter(t => t.canonicalSE != null)
+    .sort((a, b) => (a.canonicalSE ?? 99) - (b.canonicalSE ?? 99))
+
+  const popularWellCalibrated = wellCalibrated.filter(
+    t => (raterCountByTest.get(t.id) ?? 0) >= WELL_KNOWN_RATER_THRESHOLD
+  )
+
+  const anchor = popularWellCalibrated[0] ?? wellCalibrated[0] ?? null
+  if (anchor) chosen.push(anchor)
+
+  const excluded = new Set(chosen.map(t => t.id))
+  function pickFrom(candidates) {
+    return candidates.find(t => !excluded.has(t.id)) ?? null
+  }
+
+  const remaining = SELF_SERVE_TESTS_PER_RATER - chosen.length
+  const n = calibratedUnseen.length
+  const third = Math.max(1, Math.floor(n / 3))
+  const tiers = [
+    calibratedUnseen.slice(0, third),
+    calibratedUnseen.slice(third, 2 * third),
+    calibratedUnseen.slice(2 * third),
+    unseen.filter(t => t.canonicalDifficulty == null),
+    unseen,
+  ]
+
+  let filled = 0
+  let attempt = 0
+  while (filled < remaining && attempt < tiers.length * 4) {
+    const pick = pickFrom(tiers[attempt % tiers.length])
+    if (pick) {
+      chosen.push(pick)
+      excluded.add(pick.id)
+      filled++
+    }
+    attempt++
+  }
+
+  return chosen
+}
+
+exports.requestSelfAssignment = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Must be logged in')
+  const db = admin.firestore()
+  const uid = request.auth.uid
+
+  const personSnap = await db.collection('people').doc(uid).get()
+  if (!personSnap.exists) throw new HttpsError('not-found', 'No RaterSystem account found for this user')
+  const person = personSnap.data()
+  if (!person.email) throw new HttpsError('failed-precondition', 'No email on file for this account')
+
+  const apiToken = await getCanvasToken()
+
+  // ── 1. Resolve Canvas user by email ───────────────────────────────────────
+  const searchRes = await canvasFetch(
+    `/api/v1/accounts/self/users?search_term=${encodeURIComponent(person.email)}&per_page=10`,
+    apiToken
+  )
+  if (!searchRes.ok) throw new HttpsError('internal', `Canvas API error: ${searchRes.status}`)
+  const candidates = await searchRes.json()
+  const normalEmail = person.email.toLowerCase().trim()
+  const canvasUser = candidates.find(u =>
+    (u.login_id || '').toLowerCase() === normalEmail || (u.email || '').toLowerCase() === normalEmail
+  )
+  if (!canvasUser) throw new HttpsError('failed-precondition', 'Could not find a matching Canvas account')
+
+  // ── 2. Find their most-recently-started active section enrollment ────────
+  const enrollments = await canvasFetchAll(
+    `/api/v1/users/${canvasUser.id}/enrollments?type[]=StudentEnrollment&state[]=active&per_page=100`,
+    apiToken
+  )
+  if (enrollments.length === 0) {
+    throw new HttpsError('failed-precondition', 'Not currently enrolled in an active course section. Contact your administrator.')
+  }
+
+  const courseById = new Map()
+  for (const e of enrollments) {
+    if (courseById.has(e.course_id)) continue
+    const courseRes = await canvasFetch(`/api/v1/courses/${e.course_id}`, apiToken)
+    if (courseRes.ok) courseById.set(e.course_id, await courseRes.json())
+  }
+
+  const withCourse = enrollments
+    .map(e => ({ enrollment: e, course: courseById.get(e.course_id) }))
+    .filter(x => x.course)
+    .sort((a, b) => {
+      const da = a.course.start_at || a.course.created_at || null
+      const dbb = b.course.start_at || b.course.created_at || null
+      if (da && dbb) return new Date(dbb) - new Date(da)
+      if (!da && dbb) return 1
+      if (da && !dbb) return -1
+      return 0
+    })
+
+  if (withCourse.length === 0) {
+    throw new HttpsError('failed-precondition', 'Not currently enrolled in an active course section. Contact your administrator.')
+  }
+
+  const { enrollment, course } = withCourse[0]
+  const sectionId = enrollment.course_section_id
+
+  // ── 3. Find-or-create the RaterSystem session for this section ───────────
+  const sessionsSnap = await db.collection('sessions').where('canvasSectionId', '==', sectionId).limit(1).get()
+  let sessionId, sessionName
+  if (!sessionsSnap.empty) {
+    sessionId = sessionsSnap.docs[0].id
+    sessionName = sessionsSnap.docs[0].data().name
+  } else {
+    const monthYear = course.start_at
+      ? new Date(course.start_at).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
+      : ''
+    sessionName = monthYear ? `${course.name} ${monthYear}` : course.name
+    const newSession = await db.collection('sessions').add({
+      name: sessionName,
+      type: 'rater_course',
+      status: 'open',
+      canvasSectionId: sectionId,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    })
+    sessionId = newSession.id
+  }
+
+  // ── 4. Idempotency — reuse an existing open assignment for this rater+session ──
+  const existingSnap = await db.collection('assignments')
+    .where('raterId', '==', uid)
+    .where('sessionId', '==', sessionId)
+    .get()
+  const existing = existingSnap.docs.find(d => d.data().status !== 'published')
+  if (existing) return { assignmentId: existing.id }
+
+  // ── 5. Build selection inputs ──────────────────────────────────────────────
+  const [testsSnap, scoresSnap] = await Promise.all([
+    db.collection('test_bank').get(),
+    db.collection('scores').get(),
+  ])
+  const pool = testsSnap.docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .filter(t => t.status === 'active' && !t.excludeFromPool)
+
+  const seenTestIds = new Set()
+  const ratersByTest = new Map()
+  scoresSnap.docs.forEach(d => {
+    const s = d.data()
+    if (s.raterId === uid) seenTestIds.add(s.testDocId)
+    if (!ratersByTest.has(s.testDocId)) ratersByTest.set(s.testDocId, new Set())
+    ratersByTest.get(s.testDocId).add(s.raterId)
+  })
+  const raterCountByTest = new Map([...ratersByTest].map(([id, set]) => [id, set.size]))
+
+  const tests = pickSelfServeTests({ pool, seenTestIds, raterCountByTest })
+
+  // ── 6. Create the assignment ───────────────────────────────────────────────
+  const assignRef = await db.collection('assignments').add({
+    raterId: uid,
+    raterName: person.name,
+    sessionId,
+    sessionName,
+    testDocIds: tests.map(t => t.id),
+    status: 'pending',
+    source: 'self_serve',
+    notes: '',
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  })
+
+  return { assignmentId: assignRef.id }
+})
+
+// ── notifySelfServeSubmission ──────────────────────────────────────────────────
+// Fires when a self-serve assignment is fully scored (status flips to
+// 'submitted') and emails the admin. Silently no-ops if email isn't configured,
+// matching the WP plugin's precedent for its own webhook.
+
+exports.notifySelfServeSubmission = onDocumentUpdated(
+  { document: 'assignments/{assignmentId}', secrets: [RESEND_API_KEY] },
+  async (event) => {
+    const before = event.data.before.data()
+    const after = event.data.after.data()
+
+    if (after.source !== 'self_serve') return
+    if (before.status === 'submitted' || after.status !== 'submitted') return
+
+    const db = admin.firestore()
+    const configSnap = await db.doc('config/canvas').get()
+    const notificationEmail = configSnap.data()?.notificationEmail
+    const apiKey = RESEND_API_KEY.value()
+
+    if (!notificationEmail || !apiKey) return // not configured — skip silently
+
+    try {
+      await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: 'RaterSystem <notifications@lenguax.com>',
+          to: notificationEmail,
+          subject: `Self-serve submission — ${after.raterName}`,
+          text: `${after.raterName} has completed a self-serve rater exam for "${after.sessionName}".\n\nReview it here: https://lenguax.com/ratersystem/assignments/${event.params.assignmentId}`,
+        }),
+      })
+    } catch (err) {
+      console.error('notifySelfServeSubmission: failed to send email', err)
+    }
+  }
+)
 
 // ── enrollmentWebhook ─────────────────────────────────────────────────────────
 // HTTP endpoint called by the WordPress plugin after each enrollment attempt.

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { signInWithEmailAndPassword } from 'firebase/auth'
 import { auth } from '@/lib/firebase'
+import { canvasOAuthUrl } from '@/lib/canvasAuthUrl'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import logo from '@/assets/lenguax-logo.png'
@@ -71,7 +72,7 @@ export function LoginPage() {
           </div>
 
           <a
-            href={`https://courses.lenguax.com/login/oauth2/auth?client_id=10000000000002&response_type=code&redirect_uri=${encodeURIComponent('https://lenguax.com/ratersystem/auth/canvas/callback')}`}
+            href={canvasOAuthUrl()}
             className="flex w-full items-center justify-center gap-2 rounded-md border border-input bg-white px-4 py-2 text-sm font-medium shadow-sm hover:bg-muted/50 transition-colors"
           >
             Log in with Canvas

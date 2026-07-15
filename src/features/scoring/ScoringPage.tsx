@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useLocation } from 'react-router-dom'
 import {
   collection, getDocs, query, where,
   addDoc, updateDoc, doc, serverTimestamp,
@@ -106,6 +107,8 @@ function AssignmentList({
 export function ScoringPage() {
   const { user } = useAuth()
   const queryClient = useQueryClient()
+  const location = useLocation()
+  const autoOpenAssignmentId = (location.state as { assignmentId?: string } | null)?.assignmentId
 
   const [assignment, setAssignment] = useState<Assignment | null>(null)
   const [tests, setTests] = useState<Test[]>([])
@@ -138,6 +141,13 @@ export function ScoringPage() {
     setAssignment(a)
     setLoadingPlayer(false)
   }
+
+  // Auto-open the assignment the self-serve flow just created, once it's loaded
+  useEffect(() => {
+    if (!autoOpenAssignmentId || assignment) return
+    const match = assignments.find(a => a.id === autoOpenAssignmentId)
+    if (match) openAssignment(match)
+  }, [autoOpenAssignmentId, assignment, assignments]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const test = tests[currentIdx]
@@ -249,7 +259,9 @@ export function ScoringPage() {
 
   if (!user) return null
 
-  if (isLoading || loadingPlayer) {
+  const waitingForAutoOpen = !!autoOpenAssignmentId && !assignment
+
+  if (isLoading || loadingPlayer || waitingForAutoOpen) {
     return (
       <div className="flex items-center justify-center py-20">
         <p className="text-muted-foreground text-sm">Loading…</p>

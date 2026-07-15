@@ -9,14 +9,24 @@ export function CanvasCallbackPage() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    const code = new URLSearchParams(window.location.search).get('code')
+    const params = new URLSearchParams(window.location.search)
+    const code = params.get('code')
+    const state = params.get('state')
     if (!code) { setError('No authorisation code received from Canvas.'); return }
 
     const canvasAuth = httpsCallable<{ code: string }, { token: string }>(functions, 'canvasAuth')
+    const requestSelfAssignment = httpsCallable<Record<string, never>, { assignmentId: string }>(functions, 'requestSelfAssignment')
 
     canvasAuth({ code })
       .then(result => signInWithCustomToken(auth, result.data.token))
-      .then(() => navigate('/', { replace: true }))
+      .then(async () => {
+        if (state === 'self_serve') {
+          const result = await requestSelfAssignment({})
+          navigate('/scoring', { replace: true, state: { assignmentId: result.data.assignmentId } })
+        } else {
+          navigate('/', { replace: true })
+        }
+      })
       .catch(err => setError(err.message ?? 'Sign-in failed. Please try again.'))
   }, [navigate])
 

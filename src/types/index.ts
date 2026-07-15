@@ -21,6 +21,7 @@ export interface Assignment {
   testDocIds: string[]
   status: 'pending' | 'submitted' | 'reviewed' | 'published'
   notes?: string
+  source?: 'admin' | 'self_serve'
   createdAt?: Timestamp
 }
 
@@ -30,6 +31,7 @@ export interface Session {
   type: 'rater_course' | 'refresher' | 'reliability' | 'calibration' | 'historical' | 'ad_hoc'
   status: 'open' | 'closed' | 'published'
   notes?: string
+  canvasSectionId?: number
   createdAt?: Timestamp
 }
 

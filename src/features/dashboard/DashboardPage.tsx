@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { collection, getDocs, query, where } from 'firebase/firestore'
 import { useNavigate } from 'react-router-dom'
-import { Users, FileAudio, CalendarDays, CheckCircle } from 'lucide-react'
+import { Users, FileAudio, CalendarDays, CheckCircle, Zap } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
 import type { Assignment, Person, Score, Session } from '@/types'
@@ -71,6 +71,7 @@ export function DashboardPage() {
     const openEvents    = data.sessions.filter(s => s.status === 'open').length
     const publishedScores = data.scores.filter(s => s.published).length
     const activeAssignments = data.assignments.filter(a => a.status !== 'published')
+    const selfServeSubmissions = data.assignments.filter(a => a.source === 'self_serve' && a.status === 'submitted')
 
     // Progress per assignment: count scored tests
     const scoresByAssignment = new Map<string, number>()
@@ -101,6 +102,19 @@ export function DashboardPage() {
             </div>
           ))}
         </div>
+
+        {/* Self-serve submissions awaiting review */}
+        {selfServeSubmissions.length > 0 && (
+          <button
+            onClick={() => navigate('/assignments')}
+            className="w-full flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-left hover:bg-amber-100/70 transition-colors"
+          >
+            <Zap className="size-4 text-amber-700 shrink-0" />
+            <span className="text-sm text-amber-800">
+              <span className="font-semibold">{selfServeSubmissions.length}</span> self-serve submission{selfServeSubmissions.length !== 1 ? 's' : ''} awaiting review
+            </span>
+          </button>
+        )}
 
         {/* Active assignments */}
         {activeAssignments.length > 0 && (
