@@ -580,7 +580,29 @@ exports.canvasEnroll = onCall(async (request) => {
 // spread across difficulty tiers, with a preference for a well-known anchor
 // test (calibrated + seen by >= WELL_KNOWN_RATER_THRESHOLD distinct raters).
 
-function pickSelfServeTests({ pool, seenTestIds, raterCountByTest }) {
+// Fisher-Yates shuffle — used to break ties among equally-eligible tests so
+// two trainees with identical (empty) scoring history don't get an identical
+// assignment.
+function shuffle(arr) {
+  const a = [...arr]
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
+
+// Prefers whichever candidates have been assigned least often within this
+// specific cohort so far, breaking ties (including the common "nobody in
+// this section has this test yet" tie) with a random pick.
+function pickLeastUsed(candidates, cohortFreq) {
+  if (candidates.length === 0) return null
+  const minFreq = Math.min(...candidates.map(t => cohortFreq.get(t.id) ?? 0))
+  const leastUsed = candidates.filter(t => (cohortFreq.get(t.id) ?? 0) === minFreq)
+  return shuffle(leastUsed)[0]
+}
+
+function pickSelfServeTests({ pool, seenTestIds, raterCountByTest, cohortFreq }) {
   const chosen = []
   const unseen = pool.filter(t => !seenTestIds.has(t.id))
 
@@ -596,12 +618,16 @@ function pickSelfServeTests({ pool, seenTestIds, raterCountByTest }) {
     t => (raterCountByTest.get(t.id) ?? 0) >= WELL_KNOWN_RATER_THRESHOLD
   )
 
-  const anchor = popularWellCalibrated[0] ?? wellCalibrated[0] ?? null
+  // Anchor: prefer one this cohort hasn't already been given, among the
+  // best-calibrated few — not deterministically the single lowest-SE test,
+  // which would otherwise be handed to everyone in the section.
+  const anchorPool = (popularWellCalibrated.length ? popularWellCalibrated : wellCalibrated).slice(0, 5)
+  const anchor = pickLeastUsed(anchorPool, cohortFreq)
   if (anchor) chosen.push(anchor)
 
   const excluded = new Set(chosen.map(t => t.id))
   function pickFrom(candidates) {
-    return candidates.find(t => !excluded.has(t.id)) ?? null
+    return pickLeastUsed(candidates.filter(t => !excluded.has(t.id)), cohortFreq)
   }
 
   const remaining = SELF_SERVE_TESTS_PER_RATER - chosen.length
@@ -677,9 +703,10 @@ exports.requestSelfAssignment = onCall(async (request) => {
   if (existing) return { assignmentId: existing.id }
 
   // ── 5. Build selection inputs ──────────────────────────────────────────────
-  const [testsSnap, scoresSnap] = await Promise.all([
+  const [testsSnap, scoresSnap, sessionAssignmentsSnap] = await Promise.all([
     db.collection('test_bank').get(),
     db.collection('scores').get(),
+    db.collection('assignments').where('sessionId', '==', sessionId).get(),
   ])
   const pool = testsSnap.docs
     .map(d => ({ id: d.id, ...d.data() }))
@@ -695,7 +722,18 @@ exports.requestSelfAssignment = onCall(async (request) => {
   })
   const raterCountByTest = new Map([...ratersByTest].map(([id, set]) => [id, set.size]))
 
-  const tests = pickSelfServeTests({ pool, seenTestIds, raterCountByTest })
+  // How many times each test has already been handed out within this same
+  // section/cohort — anyone's assignment, self-serve or admin-built — so
+  // different trainees in the same section fan out across the test bank
+  // rather than converging on the same handful of tests.
+  const cohortFreq = new Map()
+  sessionAssignmentsSnap.docs.forEach(d => {
+    for (const testDocId of d.data().testDocIds ?? []) {
+      cohortFreq.set(testDocId, (cohortFreq.get(testDocId) ?? 0) + 1)
+    }
+  })
+
+  const tests = pickSelfServeTests({ pool, seenTestIds, raterCountByTest, cohortFreq })
 
   // ── 6. Create the assignment ───────────────────────────────────────────────
   const assignRef = await db.collection('assignments').add({
