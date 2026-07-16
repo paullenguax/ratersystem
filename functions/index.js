@@ -158,7 +158,9 @@ exports.canvasAuth = onCall({ secrets: [CANVAS_CLIENT_SECRET] }, async (request)
 
   const { access_token } = await tokenRes.json()
 
-  const userRes = await fetch(`${CANVAS_URL}/api/v1/users/self`, {
+  // Note: /api/v1/users/self does NOT reliably return login_id/email — those
+  // fields belong to the separate profile endpoint.
+  const userRes = await fetch(`${CANVAS_URL}/api/v1/users/self/profile`, {
     headers: { Authorization: `Bearer ${access_token}` },
   })
 
