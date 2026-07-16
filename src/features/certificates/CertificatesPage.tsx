@@ -178,7 +178,7 @@ export function CertificatesPage() {
 
       {/* SharePoint connection bar */}
       {msSignInErr && <p className="text-xs text-red-600">{msSignInErr}</p>}
-      <div className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
+      <div className={`flex items-center justify-between rounded-md border px-3 py-2 text-sm ${msAccount ? '' : 'border-yellow-400 bg-yellow-100 dark:bg-yellow-950 dark:border-yellow-700'}`}>
         {msAccount ? (
           <>
             <span className="text-muted-foreground">
@@ -190,8 +190,8 @@ export function CertificatesPage() {
           </>
         ) : (
           <>
-            <span className="text-muted-foreground">Auto-save to SharePoint</span>
-            <button type="button" onClick={handleMsSignIn} className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline">
+            <span className="font-medium text-yellow-900 dark:text-yellow-200">Not signed in — certificates won't auto-save to SharePoint</span>
+            <button type="button" onClick={handleMsSignIn} className="flex items-center gap-1.5 text-xs font-semibold text-yellow-900 dark:text-yellow-200 hover:underline">
               <CloudUpload className="size-3.5" /> Connect
             </button>
           </>
