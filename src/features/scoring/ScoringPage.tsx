@@ -105,10 +105,15 @@ function AssignmentList({
 // ── main page ──────────────────────────────────────────────────────────────
 
 export function ScoringPage() {
-  const { user } = useAuth()
+  const { user, role } = useAuth()
   const queryClient = useQueryClient()
   const location = useLocation()
   const autoOpenAssignmentId = (location.state as { assignmentId?: string } | null)?.assignmentId
+  // Trainees are always here to sit their rater/refresher course exam — hide
+  // candidate-identifying info so they can't cross-reference which specific
+  // recordings they were assigned. Admins/senior raters scoring elsewhere
+  // still need the full detail, so this is scoped to role, not the page.
+  const isTraineeExam = role === 'trainee'
 
   const [assignment, setAssignment] = useState<Assignment | null>(null)
   const [tests, setTests] = useState<Test[]>([])
@@ -307,9 +312,18 @@ export function ScoringPage() {
         {/* Progress navigation */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">Test {String.fromCharCode(65 + currentIdx)} of {tests.length}</span>
-            {test?.testId && (
-              <span className="font-mono text-xs text-muted-foreground">#{test.testId}</span>
+            {isTraineeExam ? (
+              <span className="text-2xl font-bold">
+                Candidate {String.fromCharCode(65 + currentIdx)}{' '}
+                <span className="text-sm font-normal text-muted-foreground">({currentIdx + 1} of {tests.length})</span>
+              </span>
+            ) : (
+              <>
+                <span className="text-sm font-medium">Test {String.fromCharCode(65 + currentIdx)} of {tests.length}</span>
+                {test?.testId && (
+                  <span className="font-mono text-xs text-muted-foreground">#{test.testId}</span>
+                )}
+              </>
             )}
             {isAlreadyScored && (
               <span className="text-xs text-green-700 bg-green-50 border border-green-200 rounded px-1.5 py-0.5">scored</span>
@@ -325,8 +339,8 @@ export function ScoringPage() {
           </div>
         </div>
 
-        {/* Test info */}
-        {test && (
+        {/* Test info — hidden for trainees sitting the rater/refresher exam */}
+        {test && !isTraineeExam && (
           <div className="text-sm">
             <p className="font-medium">{test.candidateName}</p>
             <p className="text-muted-foreground text-xs mt-0.5">
@@ -396,7 +410,7 @@ export function ScoringPage() {
       </div>
 
       {/* Sticky submit bar */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 px-4 py-3">
+      <div className="fixed bottom-0 left-0 right-0 z-40 border-t bg-[#B3C8D9]/50 backdrop-blur supports-[backdrop-filter]:bg-[#B3C8D9]/40 px-4 py-3">
         <div className="max-w-2xl mx-auto flex items-center gap-3">
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <span className="text-sm text-muted-foreground shrink-0">Overall</span>
