@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import {
   collection, getDocs, query, where,
-  addDoc, updateDoc, doc, serverTimestamp,
+  addDoc, updateDoc, doc, serverTimestamp, Timestamp,
 } from 'firebase/firestore'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
@@ -126,6 +126,8 @@ export function ScoringPage() {
   const [submitSuccess, setSubmitSuccess] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [playbackSpeed, setPlaybackSpeed] = useState(1)
+  const [reviewing, setReviewing] = useState(false)
+  const [confirming, setConfirming] = useState(false)
   const audioRef = useRef<HTMLAudioElement>(null)
 
   const { data: assignments = [], isLoading } = useQuery({
@@ -143,6 +145,7 @@ export function ScoringPage() {
     setTests(ts)
     setExistingScores(sc)
     setCurrentIdx(0)
+    setReviewing(false)
     setAssignment(a)
     setLoadingPlayer(false)
   }
@@ -260,6 +263,22 @@ export function ScoringPage() {
     }
   }
 
+  // Final, explicit lock-in — once set, the completion screen no longer
+  // offers a way back into edit mode. Distinct from `assignment.status`
+  // flipping to 'submitted' (which just means all 4 tests are scored) —
+  // this is the rater actively saying "yes, these are my answers."
+  async function handleConfirm() {
+    if (!assignment) return
+    setConfirming(true)
+    try {
+      await updateDoc(doc(db, 'assignments', assignment.id), { confirmedAt: serverTimestamp() })
+      setAssignment(prev => prev ? { ...prev, confirmedAt: Timestamp.now() } : null)
+      queryClient.invalidateQueries({ queryKey: ['my-assignments', user!.uid] })
+    } finally {
+      setConfirming(false)
+    }
+  }
+
   // ── render ─────────────────────────────────────────────────────────────
 
   if (!user) return null
@@ -288,6 +307,7 @@ export function ScoringPage() {
   const overall = allScored ? Math.min(...(scores as number[])) : null
   const isAlreadyScored = !!existingScores.get(test?.id ?? '')
   const totalScored = assignment.testDocIds.filter(id => existingScores.has(id)).length
+  const assignmentComplete = tests.length > 0 && totalScored === tests.length
 
   return (
     <div className="max-w-2xl space-y-4">
@@ -307,6 +327,55 @@ export function ScoringPage() {
         <Badge variant={STATUS_VARIANT[assignment.status]}>{STATUS_LABEL[assignment.status]}</Badge>
       </div>
 
+      {assignmentComplete && !reviewing ? (
+        <div className="rounded-xl border bg-green-50 border-green-200 p-8 text-center space-y-5">
+          <div>
+            <p className="text-2xl font-bold text-green-800">
+              {assignment.confirmedAt ? '✓ All done' : 'Review your scores'}
+            </p>
+            <p className="text-sm text-green-700 mt-1">
+              {assignment.confirmedAt
+                ? `You've submitted scores for all ${tests.length} candidates in ${assignment.sessionName}.`
+                : 'Check everything below before confirming — once confirmed, you won\'t be able to change your answers.'}
+            </p>
+          </div>
+          <div className="flex flex-col gap-1.5 max-w-xs mx-auto">
+            {tests.map((t, i) => {
+              const s = existingScores.get(t.id)
+              const label = isTraineeExam
+                ? `Candidate ${String.fromCharCode(65 + i)}`
+                : `${t.testId ? `#${t.testId} — ` : ''}${t.candidateName}`
+              return (
+                <div key={t.id} className="flex items-center justify-between px-3 py-1.5 rounded-md bg-white border text-sm">
+                  <span className="font-medium truncate">{label}</span>
+                  {s && (
+                    <span className={`font-mono font-bold text-xs px-1.5 py-0.5 rounded border ${levelColour(s.overallLevel)}`}>
+                      {s.overallLevel}
+                    </span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+          <div className="flex items-center justify-center gap-2">
+            {assignment.confirmedAt ? (
+              <Button size="sm" onClick={() => setAssignment(null)}>
+                Done
+              </Button>
+            ) : (
+              <>
+                <Button variant="outline" size="sm" onClick={() => setReviewing(true)}>
+                  Review or change an answer
+                </Button>
+                <Button size="sm" onClick={handleConfirm} disabled={confirming}>
+                  {confirming ? 'Confirming…' : "Yes, that's my scores"}
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      ) : (
+      <>
       <div className="rounded-xl border bg-card p-5 space-y-5">
 
         {/* Progress navigation */}
@@ -428,12 +497,18 @@ export function ScoringPage() {
             disabled={!allScored || submitting || submitSuccess}
             className="shrink-0"
           >
-            {submitting ? 'Saving…' : submitSuccess ? 'Saved!' : isAlreadyScored ? 'Update scores' : 'Submit scores'}
+            {submitting ? 'Saving…'
+              : submitSuccess ? 'Saved!'
+              : isAlreadyScored ? 'Update this test'
+              : currentIdx === tests.length - 1 ? 'Submit final test'
+              : 'Submit & continue'}
           </Button>
         </div>
       </div>
 
       <div className="h-20" />
+      </>
+      )}
     </div>
   )
 }

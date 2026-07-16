@@ -23,6 +23,7 @@ export interface Assignment {
   status: 'pending' | 'submitted' | 'reviewed' | 'published'
   notes?: string
   source?: 'admin' | 'self_serve'
+  confirmedAt?: Timestamp
   createdAt?: Timestamp
 }
 

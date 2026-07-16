@@ -752,9 +752,11 @@ exports.requestSelfAssignment = onCall(async (request) => {
 })
 
 // ── notifySelfServeSubmission ──────────────────────────────────────────────────
-// Fires when a self-serve assignment is fully scored (status flips to
-// 'submitted') and emails the admin. Silently no-ops if email isn't configured,
-// matching the WP plugin's precedent for its own webhook.
+// Fires when a self-serve rater explicitly confirms their scores (not just
+// when the 4th test is saved — `status` flips to 'submitted' at that point,
+// but the rater can still review/change answers until they hit "confirm").
+// Emails the admin; silently no-ops if email isn't configured, matching the
+// WP plugin's precedent for its own webhook.
 
 exports.notifySelfServeSubmission = onDocumentUpdated(
   { document: 'assignments/{assignmentId}', secrets: [RESEND_API_KEY] },
@@ -763,7 +765,7 @@ exports.notifySelfServeSubmission = onDocumentUpdated(
     const after = event.data.after.data()
 
     if (after.source !== 'self_serve') return
-    if (before.status === 'submitted' || after.status !== 'submitted') return
+    if (before.confirmedAt || !after.confirmedAt) return
 
     const db = admin.firestore()
     const configSnap = await db.doc('config/canvas').get()
@@ -783,7 +785,7 @@ exports.notifySelfServeSubmission = onDocumentUpdated(
           from: 'RaterSystem <notifications@lenguax.com>',
           to: notificationEmail,
           subject: `Self-serve submission — ${after.raterName}`,
-          text: `${after.raterName} has completed a self-serve rater exam for "${after.sessionName}".\n\nReview it here: https://lenguax.com/ratersystem/assignments/${event.params.assignmentId}`,
+          text: `${after.raterName} has confirmed their self-serve rater exam for "${after.sessionName}".\n\nReview it here: https://lenguax.com/ratersystem/assignments/${event.params.assignmentId}`,
         }),
       })
     } catch (err) {

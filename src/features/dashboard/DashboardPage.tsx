@@ -71,7 +71,9 @@ export function DashboardPage() {
     const openEvents    = data.sessions.filter(s => s.status === 'open').length
     const publishedScores = data.scores.filter(s => s.published).length
     const activeAssignments = data.assignments.filter(a => a.status !== 'published')
-    const selfServeSubmissions = data.assignments.filter(a => a.source === 'self_serve' && a.status === 'submitted')
+    // confirmedAt, not just status === 'submitted' — the rater can still be
+    // reviewing/changing answers up until they explicitly confirm
+    const selfServeSubmissions = data.assignments.filter(a => a.source === 'self_serve' && a.confirmedAt)
 
     // Progress per assignment: count scored tests
     const scoresByAssignment = new Map<string, number>()
