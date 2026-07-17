@@ -216,10 +216,11 @@ export function ScoringPage() {
         overallLevel: overall,
       }
 
+      let scoreId = existing?.id
       if (existing) {
         await updateDoc(doc(db, 'scores', existing.id), dimPayload)
       } else {
-        await addDoc(collection(db, 'scores'), {
+        const newDocRef = await addDoc(collection(db, 'scores'), {
           ...dimPayload,
           assignmentId: assignment.id,
           sessionId: assignment.sessionId,
@@ -234,12 +235,13 @@ export function ScoringPage() {
           notes: '',
           createdAt: serverTimestamp(),
         })
+        scoreId = newDocRef.id
       }
 
       const updatedScores = new Map(existingScores)
       updatedScores.set(test.id, {
         ...(existing ?? {}),
-        id: existing?.id ?? '',
+        id: scoreId!,
         testDocId: test.id,
         ...dimPayload,
       } as Score)
