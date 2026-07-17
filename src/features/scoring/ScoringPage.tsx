@@ -256,7 +256,15 @@ export function ScoringPage() {
       setSubmitSuccess(true)
       setTimeout(() => {
         setSubmitSuccess(false)
-        if (currentIdx < tests.length - 1) setCurrentIdx(idx => idx + 1)
+        if (reviewing) {
+          // Fixing one test from the summary screen — go back there rather
+          // than marching through the rest, which was the "endless loop"
+          // (every test already shows "Update this test," so auto-advancing
+          // just repeats forever with no way out).
+          setReviewing(false)
+        } else if (currentIdx < tests.length - 1) {
+          setCurrentIdx(idx => idx + 1)
+        }
       }, 1500)
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Failed to save scores. Please try again.')
@@ -316,8 +324,12 @@ export function ScoringPage() {
 
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="sm" onClick={() => setAssignment(null)}>
-          <ChevronLeft className="size-4" /> Assignments
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => (assignmentComplete && reviewing ? setReviewing(false) : setAssignment(null))}
+        >
+          <ChevronLeft className="size-4" /> {assignmentComplete && reviewing ? 'Back to summary' : 'Assignments'}
         </Button>
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-sm truncate">{assignment.sessionName}</p>
