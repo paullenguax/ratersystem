@@ -5,13 +5,13 @@ import {
   addDoc, updateDoc, doc, serverTimestamp, Timestamp,
 } from 'firebase/firestore'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Pencil } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
 import type { Assignment, Test, Score } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { IcaoSliders, type DimScores } from './IcaoSliders'
+import { IcaoSliders, DIMENSIONS, type DimScores } from './IcaoSliders'
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -126,7 +126,6 @@ export function ScoringPage() {
   const [scores, setScores] = useState<DimScores>([null, null, null, null, null, null])
   const [showErrors, setShowErrors] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [submitSuccess, setSubmitSuccess] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [playbackSpeed, setPlaybackSpeed] = useState(1)
   const [reviewing, setReviewing] = useState(false)
@@ -135,6 +134,13 @@ export function ScoringPage() {
   // even before a save, so switching to another candidate and back doesn't
   // silently discard what was just entered.
   const [drafts, setDrafts] = useState<Map<string, DimScores>>(new Map())
+  // Label of whatever was just saved (including background auto-saves
+  // triggered by navigating away) — shown as a brief confirmation regardless
+  // of which screen you land on next, since the save and the navigation
+  // don't necessarily happen on the same screen.
+  const [justSaved, setJustSaved] = useState<string | null>(null)
+  // Which candidate's sub-score breakdown is expanded on the summary screen
+  const [expandedSummaryId, setExpandedSummaryId] = useState<string | null>(null)
   const audioRef = useRef<HTMLAudioElement>(null)
 
   const { data: assignments = [], isLoading } = useQuery({
@@ -180,7 +186,6 @@ export function ScoringPage() {
     } else {
       setScores([null, null, null, null, null, null])
     }
-    setSubmitSuccess(false)
     setSubmitError(null)
     setShowErrors(false)
     if (audioRef.current) audioRef.current.load()
@@ -219,18 +224,31 @@ export function ScoringPage() {
     return () => window.removeEventListener('keydown', onKey)
   }, [assignment])
 
-  // Persists tests[currentIdx]'s current `scores` to Firestore. Returns
-  // whether it actually saved — false if incomplete (shows validation
-  // errors) or on a write failure (shows the error banner). Deliberately has
-  // no opinion about what happens next in the UI; callers decide that, so
-  // this can be reused both for the explicit submit button and for "save
-  // whatever's pending before navigating away" (see goToTest/backOut below).
-  async function saveCurrentTest(): Promise<boolean> {
+  // Searches forward from `fromIdx` (wrapping, never returning `fromIdx`
+  // itself) for the nearest test not yet present in `scoredMap`. Null means
+  // every other test already has a score — i.e., saving the current one (if
+  // it needs saving) would complete the whole assignment.
+  function findNextIncompleteIdx(fromIdx: number, scoredMap: Map<string, Score>): number | null {
+    for (let offset = 1; offset < tests.length; offset++) {
+      const idx = (fromIdx + offset) % tests.length
+      if (!scoredMap.has(tests[idx].id)) return idx
+    }
+    return null
+  }
+
+  // Persists tests[currentIdx]'s current `scores` to Firestore. Returns the
+  // post-save scores map on success (so callers can immediately compute
+  // "what's next" without waiting on React state to catch up), or ok:false
+  // if incomplete (shows validation errors) or on a write failure (shows the
+  // error banner). Deliberately has no opinion about navigation — callers
+  // decide that, so this is reused by the main continue action and by
+  // "save whatever's pending before navigating away" (goToTest etc. below).
+  async function saveCurrentTest(): Promise<{ ok: boolean; updatedScores?: Map<string, Score> }> {
     const test = tests[currentIdx]
-    if (!test || !assignment || !user) return false
+    if (!test || !assignment || !user) return { ok: false }
     if (scores.some(s => s === null)) {
       setShowErrors(true)
-      return false
+      return { ok: false }
     }
 
     const [p, st, v, fl, c, inter] = scores as number[]
@@ -282,39 +300,45 @@ export function ScoringPage() {
         return next
       })
 
+      const label = isTraineeExam ? `Candidate ${String.fromCharCode(65 + currentIdx)}` : test.candidateName
+      setJustSaved(label)
+      setTimeout(() => setJustSaved(prev => (prev === label ? null : prev)), 2500)
+
       if (assignment.testDocIds.every(id => updatedScores.has(id))) {
         await updateDoc(doc(db, 'assignments', assignment.id), { status: 'submitted' })
         setAssignment(prev => prev ? { ...prev, status: 'submitted' } : null)
         queryClient.invalidateQueries({ queryKey: ['my-assignments', user.uid] })
       }
-      return true
+      return { ok: true, updatedScores }
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Failed to save scores. Please try again.')
-      return false
+      return { ok: false }
     } finally {
       setSubmitting(false)
     }
   }
 
-  async function handleSubmit() {
-    const ok = await saveCurrentTest()
-    if (!ok) return
-    setSubmitSuccess(true)
-    setTimeout(() => {
-      setSubmitSuccess(false)
-      if (reviewing) {
-        // Fixing one test from the summary screen — go back there rather
-        // than marching through the rest, which was the "endless loop"
-        // (every test already shows "Update this test," so auto-advancing
-        // just repeats forever with no way out).
-        setReviewing(false)
-      } else if (currentIdx < tests.length - 1) {
-        setCurrentIdx(idx => idx + 1)
-      }
-    }, 1500)
+  // The one action the bottom bar's main button ever performs: save the
+  // current test if there's a complete change pending, then go to wherever
+  // makes sense next — back to the summary if reviewing, the next
+  // not-yet-scored candidate if one exists, or nowhere (the summary screen
+  // takes over on its own once everything's scored).
+  async function handleContinue() {
+    let scoredMap = existingScores
+    if (hasChanges && allScored) {
+      const result = await saveCurrentTest()
+      if (!result.ok) return
+      scoredMap = result.updatedScores ?? existingScores
+    }
+    if (reviewing) {
+      setReviewing(false)
+      return
+    }
+    const nextIdx = findNextIncompleteIdx(currentIdx, scoredMap)
+    if (nextIdx !== null) setCurrentIdx(nextIdx)
   }
 
-  // Used by every way of leaving the current test (arrows, "Back to
+  // Used by every OTHER way of leaving the current test (arrows, "Back to
   // summary," "← Assignments") — if there's a complete, unsaved change
   // sitting on screen, save it first rather than silently stranding it in
   // the draft map. Doesn't apply to a still-incomplete test (fewer than 6
@@ -322,7 +346,7 @@ export function ScoringPage() {
   // waiting to be saved.
   async function saveIfNeeded(): Promise<boolean> {
     if (!hasChanges || !allScored) return true
-    return saveCurrentTest()
+    return (await saveCurrentTest()).ok
   }
 
   async function goToTest(newIdx: number) {
@@ -397,10 +421,21 @@ export function ScoringPage() {
     scores[4] !== existingScore!.comprehension ||
     scores[5] !== existingScore!.interactions
   ))
-  const readyToSubmit = allScored && !submitting && !submitSuccess && hasChanges
-  const submitLabel = isAlreadyScored
-    ? (hasChanges ? 'Update this test' : 'No changes')
-    : currentIdx === tests.length - 1 ? 'Submit final test' : 'Submit & continue'
+  const readyToSubmit = allScored && !submitting && hasChanges
+  // Where the main button goes next: back to the summary while reviewing;
+  // otherwise the nearest not-yet-scored candidate, or "Complete" if this is
+  // the last one left regardless of A/B/C/D order.
+  const nextIncompleteIdx = findNextIncompleteIdx(currentIdx, existingScores)
+  const canContinue = reviewing || (hasChanges && allScored) || nextIncompleteIdx !== null
+  // Full label describes the destination; short label is a fallback for
+  // narrow screens, where "Continue to Candidate C" (or a full real name)
+  // sitting next to two arrow buttons risks overflowing.
+  const continueLabelShort = reviewing ? 'Back' : nextIncompleteIdx === null ? 'Complete' : 'Continue'
+  const continueLabelFull = reviewing
+    ? 'Back to summary'
+    : nextIncompleteIdx === null
+      ? 'Complete'
+      : `Continue to ${isTraineeExam ? `Candidate ${String.fromCharCode(65 + nextIncompleteIdx)}` : tests[nextIncompleteIdx].candidateName}`
 
   return (
     <div className="max-w-2xl space-y-4">
@@ -425,6 +460,15 @@ export function ScoringPage() {
         <Badge variant={STATUS_VARIANT[assignment.status]}>{STATUS_LABEL[assignment.status]}</Badge>
       </div>
 
+      {/* Save confirmation — persists across the navigation that often
+          follows a save (including background auto-saves), so it's still
+          visible on whichever screen you land on next. */}
+      {justSaved && (
+        <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-2 text-sm text-green-800 font-medium">
+          ✓ {justSaved} saved
+        </div>
+      )}
+
       {assignmentComplete && !reviewing ? (
         <div className="rounded-xl border bg-green-50 border-green-200 p-8 text-center space-y-5">
           <div>
@@ -437,19 +481,42 @@ export function ScoringPage() {
                 : 'Check everything below before confirming — once confirmed, you won\'t be able to change your answers.'}
             </p>
           </div>
-          <div className="flex flex-col gap-1.5 max-w-xs mx-auto">
+          <div className="flex flex-col gap-1.5 max-w-sm mx-auto">
             {tests.map((t, i) => {
               const s = existingScores.get(t.id)
               const label = isTraineeExam
                 ? `Candidate ${String.fromCharCode(65 + i)}`
                 : `${t.testId ? `#${t.testId} — ` : ''}${t.candidateName}`
+              const isExpanded = expandedSummaryId === t.id
               return (
-                <div key={t.id} className="flex items-center justify-between px-3 py-1.5 rounded-md bg-white border text-sm">
-                  <span className="font-medium truncate">{label}</span>
-                  {s && (
-                    <span className={`font-mono font-bold text-xs px-1.5 py-0.5 rounded border ${levelColour(s.overallLevel)}`}>
-                      {s.overallLevel}
+                <div key={t.id} className="rounded-md bg-white border text-sm overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedSummaryId(isExpanded ? null : t.id)}
+                    className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-muted/30 transition-colors"
+                  >
+                    <span className="flex items-center gap-1.5 min-w-0">
+                      {isExpanded ? <ChevronUp className="size-3 text-muted-foreground shrink-0" /> : <ChevronDown className="size-3 text-muted-foreground shrink-0" />}
+                      <span className="font-medium truncate">{label}</span>
                     </span>
+                    {s && (
+                      <span className={`font-mono font-bold text-xs px-1.5 py-0.5 rounded border shrink-0 ${levelColour(s.overallLevel)}`}>
+                        {s.overallLevel}
+                      </span>
+                    )}
+                  </button>
+                  {isExpanded && s && (
+                    <div className="grid grid-cols-3 gap-x-3 gap-y-1 px-3 pb-2 pt-1 border-t text-xs">
+                      {DIMENSIONS.map(dim => {
+                        const val = s[dim.key] as number
+                        return (
+                          <div key={dim.key} className="flex items-center justify-between">
+                            <span className="text-muted-foreground">{dim.label.slice(0, 3).toUpperCase()}</span>
+                            <span className={`font-mono font-bold px-1 rounded ${levelColour(val)}`}>{val}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
                   )}
                 </div>
               )
@@ -474,6 +541,15 @@ export function ScoringPage() {
         </div>
       ) : (
       <>
+      {/* Announces test changes to screen readers — clicking an arrow or
+          Continue swaps content in place rather than navigating to a new
+          page, so without this a screen reader user gets no indication
+          they're now looking at a different candidate. */}
+      <div className="sr-only" aria-live="polite">
+        {test && (isTraineeExam
+          ? `Now viewing Candidate ${String.fromCharCode(65 + currentIdx)}, ${currentIdx + 1} of ${tests.length}`
+          : `Now viewing ${test.candidateName}, ${currentIdx + 1} of ${tests.length}`)}
+      </div>
       <div className="rounded-xl border bg-card p-5 space-y-5">
 
         {/* Progress navigation */}
@@ -497,10 +573,10 @@ export function ScoringPage() {
             )}
           </div>
           <div className="flex gap-1">
-            <Button variant="outline" size="sm" disabled={currentIdx === 0 || submitting} onClick={() => goToTest(currentIdx - 1)}>
+            <Button variant="outline" size="sm" disabled={currentIdx === 0 || submitting} onClick={() => goToTest(currentIdx - 1)} aria-label="Previous candidate">
               <ChevronLeft className="size-4" />
             </Button>
-            <Button variant="outline" size="sm" disabled={currentIdx === tests.length - 1 || submitting} onClick={() => goToTest(currentIdx + 1)}>
+            <Button variant="outline" size="sm" disabled={currentIdx === tests.length - 1 || submitting} onClick={() => goToTest(currentIdx + 1)} aria-label="Next candidate">
               <ChevronRight className="size-4" />
             </Button>
           </div>
@@ -558,13 +634,6 @@ export function ScoringPage() {
           </p>
         ) : null}
 
-        {/* Success banner */}
-        {submitSuccess && (
-          <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-800 font-medium">
-            ✓ Scores saved{currentIdx < tests.length - 1 ? ' — moving to next test…' : ' — all done!'}
-          </div>
-        )}
-
         {/* Error banner */}
         {submitError && (
           <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800 font-medium">
@@ -582,8 +651,8 @@ export function ScoringPage() {
             isAlreadyScored ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-green-50 border-green-200 text-green-800'
           }`}>
             {isAlreadyScored
-              ? `You've changed this answer — click "${submitLabel}" below to save your change.`
-              : `✓ All 6 areas scored — click "${submitLabel}" below to save.`}
+              ? `You've changed this answer — click "${continueLabelFull}" below to save your change.`
+              : `✓ All 6 areas scored — click "${continueLabelFull}" below to save.`}
           </div>
         )}
 
@@ -609,14 +678,38 @@ export function ScoringPage() {
               {scores.filter(s => s !== null).length}/6 scored
             </span>
           </div>
-          <p className="text-xs text-muted-foreground hidden sm:block shrink-0">1–6 to fill next</p>
-          <Button
-            onClick={handleSubmit}
-            disabled={!allScored || submitting || submitSuccess || !hasChanges}
-            className={`shrink-0 ${readyToSubmit ? (isAlreadyScored ? 'ring-2 ring-amber-500 ring-offset-1' : 'ring-2 ring-green-500 ring-offset-1') : ''}`}
-          >
-            {submitting ? 'Saving…' : submitSuccess ? 'Saved!' : submitLabel}
-          </Button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <Button
+              variant="outline" size="sm"
+              disabled={currentIdx === 0 || submitting}
+              onClick={() => goToTest(currentIdx - 1)}
+              aria-label="Previous candidate"
+            >
+              <ChevronLeft className="size-4" />
+            </Button>
+            <Button
+              onClick={handleContinue}
+              disabled={!canContinue || submitting}
+              className={`max-w-[45vw] sm:max-w-none ${readyToSubmit ? (isAlreadyScored ? 'ring-2 ring-amber-500 ring-offset-1' : 'ring-2 ring-green-500 ring-offset-1') : ''}`}
+            >
+              {/* Pencil icon backs up the amber ring with a shape, not just
+                  colour, for "you're about to overwrite a saved answer" —
+                  and the sr-only text carries the same distinction for
+                  screen readers, who perceive neither the ring nor the icon */}
+              {readyToSubmit && isAlreadyScored && <Pencil className="size-3.5 mr-1 shrink-0" aria-hidden="true" />}
+              <span className="truncate sm:hidden">{submitting ? 'Saving…' : continueLabelShort}</span>
+              <span className="hidden sm:inline">{submitting ? 'Saving…' : continueLabelFull}</span>
+              {readyToSubmit && isAlreadyScored && <span className="sr-only"> (editing a previously saved answer)</span>}
+            </Button>
+            <Button
+              variant="outline" size="sm"
+              disabled={currentIdx === tests.length - 1 || submitting}
+              onClick={() => goToTest(currentIdx + 1)}
+              aria-label="Next candidate"
+            >
+              <ChevronRight className="size-4" />
+            </Button>
+          </div>
         </div>
       </div>
 
