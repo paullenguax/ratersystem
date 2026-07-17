@@ -42,7 +42,10 @@ async function fetchMyAssignments(uid: string): Promise<Assignment[]> {
   const snap = await getDocs(query(collection(db, 'assignments'), where('raterId', '==', uid)))
   return snap.docs
     .map(d => ({ id: d.id, ...d.data() }) as Assignment)
-    .filter(a => a.status !== 'published')
+    // Confirmed assignments have nothing left for the rater to act on —
+    // drop them the same way published ones already are, so "Assignments"
+    // doesn't loop back to something already finished.
+    .filter(a => a.status !== 'published' && !a.confirmedAt)
     .sort((a, b) => a.sessionName.localeCompare(b.sessionName))
 }
 
@@ -128,6 +131,10 @@ export function ScoringPage() {
   const [playbackSpeed, setPlaybackSpeed] = useState(1)
   const [reviewing, setReviewing] = useState(false)
   const [confirming, setConfirming] = useState(false)
+  // In-memory drafts, keyed by testDocId — survive navigating between tests
+  // even before a save, so switching to another candidate and back doesn't
+  // silently discard what was just entered.
+  const [drafts, setDrafts] = useState<Map<string, DimScores>>(new Map())
   const audioRef = useRef<HTMLAudioElement>(null)
 
   const { data: assignments = [], isLoading } = useQuery({
@@ -146,6 +153,7 @@ export function ScoringPage() {
     setExistingScores(sc)
     setCurrentIdx(0)
     setReviewing(false)
+    setDrafts(new Map())
     setAssignment(a)
     setLoadingPlayer(false)
   }
@@ -160,8 +168,11 @@ export function ScoringPage() {
   useEffect(() => {
     const test = tests[currentIdx]
     if (!test) return
+    const draft = drafts.get(test.id)
     const existing = existingScores.get(test.id)
-    if (existing) {
+    if (draft) {
+      setScores(draft)
+    } else if (existing) {
       setScores([
         existing.pronunciation, existing.structure, existing.vocabulary,
         existing.fluency, existing.comprehension, existing.interactions,
@@ -173,7 +184,20 @@ export function ScoringPage() {
     setSubmitError(null)
     setShowErrors(false)
     if (audioRef.current) audioRef.current.load()
-  }, [currentIdx, tests, existingScores])
+    // drafts intentionally excluded — this should only re-run on actual test
+    // navigation, not every keystroke; the latest drafts value is still read
+    // via closure whenever it does run.
+  }, [currentIdx, tests, existingScores]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Mirror the current test's in-progress scores into the draft map as they
+  // change, so navigating away and back restores them even if unsaved.
+  useEffect(() => {
+    const test = tests[currentIdx]
+    if (!test) return
+    setDrafts(prev => new Map(prev).set(test.id, scores))
+    // currentIdx/tests intentionally excluded — only scores changing should
+    // trigger this; the effect above already reacts to navigation itself.
+  }, [scores]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keyboard shortcut: 1-6 fills next unscored dimension
   useEffect(() => {
@@ -246,6 +270,11 @@ export function ScoringPage() {
         ...dimPayload,
       } as Score)
       setExistingScores(updatedScores)
+      setDrafts(prev => {
+        const next = new Map(prev)
+        next.delete(test.id)
+        return next
+      })
 
       if (assignment.testDocIds.every(id => updatedScores.has(id))) {
         await updateDoc(doc(db, 'assignments', assignment.id), { status: 'submitted' })

@@ -36,7 +36,9 @@ async function fetchMyData(uid: string): Promise<{ assignments: Assignment[]; sc
   ])
   const assignments = assignSnap.docs
     .map(d => ({ id: d.id, ...d.data() }) as Assignment)
-    .filter(a => a.raterId === uid && a.status !== 'published')
+    // Confirmed assignments have nothing left for the rater to act on —
+    // same reasoning as ScoringPage's own "My Assignments" list.
+    .filter(a => a.raterId === uid && a.status !== 'published' && !a.confirmedAt)
   const scoresByAssignment = new Map<string, number>()
   scoreSnap.docs.forEach(d => {
     const s = d.data() as Score
