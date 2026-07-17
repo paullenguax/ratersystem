@@ -219,12 +219,18 @@ export function ScoringPage() {
     return () => window.removeEventListener('keydown', onKey)
   }, [assignment])
 
-  async function handleSubmit() {
+  // Persists tests[currentIdx]'s current `scores` to Firestore. Returns
+  // whether it actually saved — false if incomplete (shows validation
+  // errors) or on a write failure (shows the error banner). Deliberately has
+  // no opinion about what happens next in the UI; callers decide that, so
+  // this can be reused both for the explicit submit button and for "save
+  // whatever's pending before navigating away" (see goToTest/backOut below).
+  async function saveCurrentTest(): Promise<boolean> {
     const test = tests[currentIdx]
-    if (!test || !assignment || !user) return
+    if (!test || !assignment || !user) return false
     if (scores.some(s => s === null)) {
       setShowErrors(true)
-      return
+      return false
     }
 
     const [p, st, v, fl, c, inter] = scores as number[]
@@ -281,25 +287,57 @@ export function ScoringPage() {
         setAssignment(prev => prev ? { ...prev, status: 'submitted' } : null)
         queryClient.invalidateQueries({ queryKey: ['my-assignments', user.uid] })
       }
-
-      setSubmitSuccess(true)
-      setTimeout(() => {
-        setSubmitSuccess(false)
-        if (reviewing) {
-          // Fixing one test from the summary screen — go back there rather
-          // than marching through the rest, which was the "endless loop"
-          // (every test already shows "Update this test," so auto-advancing
-          // just repeats forever with no way out).
-          setReviewing(false)
-        } else if (currentIdx < tests.length - 1) {
-          setCurrentIdx(idx => idx + 1)
-        }
-      }, 1500)
+      return true
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Failed to save scores. Please try again.')
+      return false
     } finally {
       setSubmitting(false)
     }
+  }
+
+  async function handleSubmit() {
+    const ok = await saveCurrentTest()
+    if (!ok) return
+    setSubmitSuccess(true)
+    setTimeout(() => {
+      setSubmitSuccess(false)
+      if (reviewing) {
+        // Fixing one test from the summary screen — go back there rather
+        // than marching through the rest, which was the "endless loop"
+        // (every test already shows "Update this test," so auto-advancing
+        // just repeats forever with no way out).
+        setReviewing(false)
+      } else if (currentIdx < tests.length - 1) {
+        setCurrentIdx(idx => idx + 1)
+      }
+    }, 1500)
+  }
+
+  // Used by every way of leaving the current test (arrows, "Back to
+  // summary," "← Assignments") — if there's a complete, unsaved change
+  // sitting on screen, save it first rather than silently stranding it in
+  // the draft map. Doesn't apply to a still-incomplete test (fewer than 6
+  // scored) — that's a legitimate "just browsing ahead" case, not an edit
+  // waiting to be saved.
+  async function saveIfNeeded(): Promise<boolean> {
+    if (!hasChanges || !allScored) return true
+    return saveCurrentTest()
+  }
+
+  async function goToTest(newIdx: number) {
+    if (!(await saveIfNeeded())) return // save failed — stay put, show the error
+    setCurrentIdx(newIdx)
+  }
+
+  async function backToSummary() {
+    if (!(await saveIfNeeded())) return
+    setReviewing(false)
+  }
+
+  async function leaveAssignment() {
+    if (!(await saveIfNeeded())) return
+    setAssignment(null)
   }
 
   // Final, explicit lock-in — once set, the completion screen no longer
@@ -372,7 +410,8 @@ export function ScoringPage() {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => (assignmentComplete && reviewing ? setReviewing(false) : setAssignment(null))}
+          disabled={submitting}
+          onClick={() => (assignmentComplete && reviewing ? backToSummary() : leaveAssignment())}
         >
           <ChevronLeft className="size-4" /> {assignmentComplete && reviewing ? 'Back to summary' : 'Assignments'}
         </Button>
@@ -458,10 +497,10 @@ export function ScoringPage() {
             )}
           </div>
           <div className="flex gap-1">
-            <Button variant="outline" size="sm" disabled={currentIdx === 0} onClick={() => setCurrentIdx(i => i - 1)}>
+            <Button variant="outline" size="sm" disabled={currentIdx === 0 || submitting} onClick={() => goToTest(currentIdx - 1)}>
               <ChevronLeft className="size-4" />
             </Button>
-            <Button variant="outline" size="sm" disabled={currentIdx === tests.length - 1} onClick={() => setCurrentIdx(i => i + 1)}>
+            <Button variant="outline" size="sm" disabled={currentIdx === tests.length - 1 || submitting} onClick={() => goToTest(currentIdx + 1)}>
               <ChevronRight className="size-4" />
             </Button>
           </div>
