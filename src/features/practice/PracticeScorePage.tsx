@@ -133,6 +133,8 @@ export function PracticeScorePage() {
 
   const allScored = scores.every(s => s !== null)
   const overall = allScored ? Math.min(...(scores as number[])) : null
+  const submitLabel = existingDocId ? 'Update scores' : 'Submit scores'
+  const readyToSubmit = allScored && !submitting
 
   // ── shell ──────────────────────────────────────────────────────────────
 
@@ -299,10 +301,22 @@ export function PracticeScorePage() {
 
         <IcaoSliders scores={scores} onChange={setScores} showErrors={showErrors} />
 
+        {/* Ready-to-submit banner — bridges "I just finished the sliders"
+            and "there's a save action below," which was easy to miss */}
+        {readyToSubmit && (
+          <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-800 font-medium">
+            ✓ All 6 areas scored — click "{submitLabel}" below to save.
+          </div>
+        )}
+
       </div>
 
-      {/* Sticky submit bar */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 px-4 py-3">
+      {/* Sticky submit bar — visually shifts once ready */}
+      <div className={`fixed bottom-0 left-0 right-0 z-40 border-t backdrop-blur px-4 py-3 transition-colors ${
+        readyToSubmit
+          ? 'bg-green-100/80 supports-[backdrop-filter]:bg-green-100/70'
+          : 'bg-background/95 supports-[backdrop-filter]:bg-background/80'
+      }`}>
         <div className="max-w-lg mx-auto flex items-center gap-3">
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <span className="text-sm text-muted-foreground shrink-0">Overall</span>
@@ -317,9 +331,9 @@ export function PracticeScorePage() {
           <Button
             onClick={handleSubmit}
             disabled={!allScored || submitting}
-            className="shrink-0"
+            className={`shrink-0 ${readyToSubmit ? 'ring-2 ring-green-500 ring-offset-1' : ''}`}
           >
-            {submitting ? 'Saving…' : existingDocId ? 'Update scores' : 'Submit scores'}
+            {submitting ? 'Saving…' : submitLabel}
           </Button>
         </div>
       </div>

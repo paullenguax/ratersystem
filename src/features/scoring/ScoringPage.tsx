@@ -347,6 +347,10 @@ export function ScoringPage() {
   const isAlreadyScored = !!existingScores.get(test?.id ?? '')
   const totalScored = assignment.testDocIds.filter(id => existingScores.has(id)).length
   const assignmentComplete = tests.length > 0 && totalScored === tests.length
+  const submitLabel = isAlreadyScored ? 'Update this test'
+    : currentIdx === tests.length - 1 ? 'Submit final test'
+    : 'Submit & continue'
+  const readyToSubmit = allScored && !submitting && !submitSuccess
 
   return (
     <div className="max-w-2xl space-y-4">
@@ -519,10 +523,23 @@ export function ScoringPage() {
 
         <IcaoSliders scores={scores} onChange={setScores} showErrors={showErrors} />
 
+        {/* Ready-to-submit banner — bridges "I just finished the sliders"
+            and "there's a save action below," which was easy to miss */}
+        {readyToSubmit && (
+          <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-800 font-medium">
+            ✓ All 6 areas scored — click "{submitLabel}" below to save.
+          </div>
+        )}
+
       </div>
 
-      {/* Sticky submit bar */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 border-t bg-[#B3C8D9]/50 backdrop-blur supports-[backdrop-filter]:bg-[#B3C8D9]/40 px-4 py-3">
+      {/* Sticky submit bar — visually shifts once ready, so the state change
+          itself catches the eye even on a glance downward */}
+      <div className={`fixed bottom-0 left-0 right-0 z-40 border-t backdrop-blur px-4 py-3 transition-colors ${
+        readyToSubmit
+          ? 'bg-green-100/80 supports-[backdrop-filter]:bg-green-100/70'
+          : 'bg-[#B3C8D9]/50 supports-[backdrop-filter]:bg-[#B3C8D9]/40'
+      }`}>
         <div className="max-w-2xl mx-auto flex items-center gap-3">
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <span className="text-sm text-muted-foreground shrink-0">Overall</span>
@@ -538,13 +555,9 @@ export function ScoringPage() {
           <Button
             onClick={handleSubmit}
             disabled={!allScored || submitting || submitSuccess}
-            className="shrink-0"
+            className={`shrink-0 ${readyToSubmit ? 'ring-2 ring-green-500 ring-offset-1' : ''}`}
           >
-            {submitting ? 'Saving…'
-              : submitSuccess ? 'Saved!'
-              : isAlreadyScored ? 'Update this test'
-              : currentIdx === tests.length - 1 ? 'Submit final test'
-              : 'Submit & continue'}
+            {submitting ? 'Saving…' : submitSuccess ? 'Saved!' : submitLabel}
           </Button>
         </div>
       </div>
