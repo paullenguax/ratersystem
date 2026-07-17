@@ -344,13 +344,25 @@ export function ScoringPage() {
   const test = tests[currentIdx]
   const allScored = scores.every(s => s !== null)
   const overall = allScored ? Math.min(...(scores as number[])) : null
-  const isAlreadyScored = !!existingScores.get(test?.id ?? '')
+  const existingScore = existingScores.get(test?.id ?? '')
+  const isAlreadyScored = !!existingScore
   const totalScored = assignment.testDocIds.filter(id => existingScores.has(id)).length
   const assignmentComplete = tests.length > 0 && totalScored === tests.length
-  const submitLabel = isAlreadyScored ? 'Update this test'
-    : currentIdx === tests.length - 1 ? 'Submit final test'
-    : 'Submit & continue'
-  const readyToSubmit = allScored && !submitting && !submitSuccess
+  // Once already scored, "ready" only means something if the current sliders
+  // actually differ from what's saved — otherwise there's nothing to submit,
+  // just a prefilled view of the existing answer.
+  const hasChanges = !isAlreadyScored || (allScored && (
+    scores[0] !== existingScore!.pronunciation ||
+    scores[1] !== existingScore!.structure ||
+    scores[2] !== existingScore!.vocabulary ||
+    scores[3] !== existingScore!.fluency ||
+    scores[4] !== existingScore!.comprehension ||
+    scores[5] !== existingScore!.interactions
+  ))
+  const readyToSubmit = allScored && !submitting && !submitSuccess && hasChanges
+  const submitLabel = isAlreadyScored
+    ? (hasChanges ? 'Update this test' : 'No changes')
+    : currentIdx === tests.length - 1 ? 'Submit final test' : 'Submit & continue'
 
   return (
     <div className="max-w-2xl space-y-4">
@@ -524,10 +536,15 @@ export function ScoringPage() {
         <IcaoSliders scores={scores} onChange={setScores} showErrors={showErrors} />
 
         {/* Ready-to-submit banner — bridges "I just finished the sliders"
-            and "there's a save action below," which was easy to miss */}
+            and "there's a save action below," which was easy to miss.
+            Amber = you've changed an already-saved answer; green = new. */}
         {readyToSubmit && (
-          <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-800 font-medium">
-            ✓ All 6 areas scored — click "{submitLabel}" below to save.
+          <div className={`rounded-lg border px-4 py-3 text-sm font-medium ${
+            isAlreadyScored ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-green-50 border-green-200 text-green-800'
+          }`}>
+            {isAlreadyScored
+              ? `You've changed this answer — click "${submitLabel}" below to save your change.`
+              : `✓ All 6 areas scored — click "${submitLabel}" below to save.`}
           </div>
         )}
 
@@ -537,7 +554,9 @@ export function ScoringPage() {
           itself catches the eye even on a glance downward */}
       <div className={`fixed bottom-0 left-0 right-0 z-40 border-t backdrop-blur px-4 py-3 transition-colors ${
         readyToSubmit
-          ? 'bg-green-100/80 supports-[backdrop-filter]:bg-green-100/70'
+          ? (isAlreadyScored
+              ? 'bg-amber-100/80 supports-[backdrop-filter]:bg-amber-100/70'
+              : 'bg-green-100/80 supports-[backdrop-filter]:bg-green-100/70')
           : 'bg-[#B3C8D9]/50 supports-[backdrop-filter]:bg-[#B3C8D9]/40'
       }`}>
         <div className="max-w-2xl mx-auto flex items-center gap-3">
@@ -554,8 +573,8 @@ export function ScoringPage() {
           <p className="text-xs text-muted-foreground hidden sm:block shrink-0">1–6 to fill next</p>
           <Button
             onClick={handleSubmit}
-            disabled={!allScored || submitting || submitSuccess}
-            className={`shrink-0 ${readyToSubmit ? 'ring-2 ring-green-500 ring-offset-1' : ''}`}
+            disabled={!allScored || submitting || submitSuccess || !hasChanges}
+            className={`shrink-0 ${readyToSubmit ? (isAlreadyScored ? 'ring-2 ring-amber-500 ring-offset-1' : 'ring-2 ring-green-500 ring-offset-1') : ''}`}
           >
             {submitting ? 'Saving…' : submitSuccess ? 'Saved!' : submitLabel}
           </Button>
