@@ -141,6 +141,10 @@ export function ScoringPage() {
   const [justSaved, setJustSaved] = useState<string | null>(null)
   // Which candidate's sub-score breakdown is expanded on the summary screen
   const [expandedSummaryId, setExpandedSummaryId] = useState<string | null>(null)
+  // testDocIds edited (not just first-scored) during this session — unlike
+  // justSaved, this doesn't expire, so coming back to a test later still
+  // shows whether you're looking at your edit or the untouched original.
+  const [editedThisSession, setEditedThisSession] = useState<Set<string>>(new Set())
   const audioRef = useRef<HTMLAudioElement>(null)
 
   const { data: assignments = [], isLoading } = useQuery({
@@ -160,6 +164,7 @@ export function ScoringPage() {
     setCurrentIdx(0)
     setReviewing(false)
     setDrafts(new Map())
+    setEditedThisSession(new Set())
     setAssignment(a)
     setLoadingPlayer(false)
   }
@@ -267,6 +272,7 @@ export function ScoringPage() {
       let scoreId = existing?.id
       if (existing) {
         await updateDoc(doc(db, 'scores', existing.id), dimPayload)
+        setEditedThisSession(prev => new Set(prev).add(test.id))
       } else {
         const newDocRef = await addDoc(collection(db, 'scores'), {
           ...dimPayload,
@@ -498,6 +504,9 @@ export function ScoringPage() {
                     <span className="flex items-center gap-1.5 min-w-0">
                       {isExpanded ? <ChevronUp className="size-3 text-muted-foreground shrink-0" /> : <ChevronDown className="size-3 text-muted-foreground shrink-0" />}
                       <span className="font-medium truncate">{label}</span>
+                      {editedThisSession.has(t.id) && (
+                        <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-1 shrink-0">edited</span>
+                      )}
                     </span>
                     {s && (
                       <span className={`font-mono font-bold text-xs px-1.5 py-0.5 rounded border shrink-0 ${levelColour(s.overallLevel)}`}>
@@ -570,6 +579,12 @@ export function ScoringPage() {
             )}
             {isAlreadyScored && (
               <span className="text-xs text-green-700 bg-green-50 border border-green-200 rounded px-1.5 py-0.5">scored</span>
+            )}
+            {/* Persists for the rest of the session, unlike the justSaved
+                toast — so coming back to this test later still shows
+                whether you're looking at your edit or the untouched original */}
+            {test && editedThisSession.has(test.id) && (
+              <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">✓ your edit saved</span>
             )}
           </div>
           <div className="flex gap-1">
