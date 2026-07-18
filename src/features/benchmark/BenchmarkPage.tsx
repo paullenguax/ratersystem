@@ -504,6 +504,7 @@ function ItemForm({ initial, onSave, onCancel }: {
   }
 
   function handleAudioUpload(file: File) {
+    if (!benchmarkStorage) return
     const path = `benchmark-audio/${Date.now()}_${file.name}`
     const ref = storageRef(benchmarkStorage, path)
     const task = uploadBytesResumable(ref, file)
@@ -796,6 +797,9 @@ export function BenchmarkPage() {
     let cancelled = false
     async function connect() {
       try {
+        if (!benchmarkAuth) {
+          throw new Error('Benchmark Firebase app did not initialize — check VITE_BENCHMARK_* env vars')
+        }
         if (benchmarkAuth.currentUser) {
           if (!cancelled) setAuthState('ready')
           return

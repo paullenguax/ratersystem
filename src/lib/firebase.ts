@@ -30,5 +30,17 @@ const benchmarkConfig = {
 
 const benchmarkApp = initializeApp(benchmarkConfig, 'benchmark')
 export const benchmarkDb = getFirestore(benchmarkApp)
-export const benchmarkAuth = getAuth(benchmarkApp)
-export const benchmarkStorage = getStorage(benchmarkApp)
+
+// getAuth() validates the API key format synchronously and throws if it's
+// missing/malformed — unlike getFirestore/getStorage, which stay lazy until
+// first use. This app config is a secondary, optional integration (the
+// Benchmark admin tab), so a bad VITE_BENCHMARK_* value must not be able to
+// take down every other page in the app.
+export let benchmarkAuth: ReturnType<typeof getAuth> | undefined
+export let benchmarkStorage: ReturnType<typeof getStorage> | undefined
+try {
+  benchmarkAuth = getAuth(benchmarkApp)
+  benchmarkStorage = getStorage(benchmarkApp)
+} catch (err) {
+  console.error('Benchmark Firebase app failed to initialize — check VITE_BENCHMARK_* env vars:', err)
+}
