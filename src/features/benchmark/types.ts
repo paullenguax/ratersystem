@@ -67,6 +67,7 @@ export interface BenchmarkResult {
   candidateName: string
   candidateEmail: string
   selfReportedLevel?: string
+  centreId?: string | null
   timestamp: { seconds: number } | null
   responses: BenchmarkResponse[]
   // adaptive mode scores

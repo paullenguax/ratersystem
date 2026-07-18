@@ -254,7 +254,9 @@ exports.canvasAuth = onCall({ secrets: [CANVAS_CLIENT_SECRET] }, async (request)
 exports.mintBenchmarkAdminToken = onCall({ secrets: [BENCHMARK_SERVICE_ACCOUNT_KEY] }, async (request) => {
   await assertAdmin(request)
   const benchmarkApp = getBenchmarkAdminApp()
-  const token = await admin.auth(benchmarkApp).createCustomToken(request.auth.uid)
+  // The admin:true claim is what benchmark-project Firestore rules check to
+  // distinguish an admin session from a centre account login.
+  const token = await admin.auth(benchmarkApp).createCustomToken(request.auth.uid, { admin: true })
   return { token }
 })
 

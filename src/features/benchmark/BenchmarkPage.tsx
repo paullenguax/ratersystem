@@ -128,6 +128,7 @@ function ResultsTab() {
               <tr>
                 <th className="px-3 py-2 text-left font-medium w-6"></th>
                 <th className="px-3 py-2 text-left font-medium">Candidate</th>
+                <th className="px-3 py-2 text-left font-medium">Centre</th>
                 <th className="px-3 py-2 text-left font-medium">Form</th>
                 <th className="px-3 py-2 text-left font-medium">Self-reported</th>
                 <th className="px-3 py-2 text-left font-medium">Level</th>
@@ -150,6 +151,9 @@ function ResultsTab() {
                     <td className="px-3 py-2">
                       <p className="font-medium">{res.candidateName || '—'}</p>
                       <p className="text-xs text-muted-foreground font-mono">{res.candidateEmail || '—'}</p>
+                    </td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground">
+                      {res.centreId ?? '—'}
                     </td>
                     <td className="px-3 py-2 text-xs font-mono text-muted-foreground">
                       {res.form ?? '—'}
@@ -206,7 +210,7 @@ function ResultsTab() {
                   {/* Link person panel */}
                   {linking === res.id && (
                     <tr key={`link-${res.id}`} className="border-t bg-muted/30">
-                      <td colSpan={10} className="px-4 py-3">
+                      <td colSpan={11} className="px-4 py-3">
                         <div className="space-y-2 max-w-sm">
                           <p className="text-xs font-medium">Search people to link:</p>
                           <Input
@@ -234,7 +238,7 @@ function ResultsTab() {
                   {/* Expanded responses */}
                   {expanded === res.id && (
                     <tr key={`exp-${res.id}`} className="border-t bg-muted/20">
-                      <td colSpan={10} className="px-4 py-3 space-y-3">
+                      <td colSpan={11} className="px-4 py-3 space-y-3">
                         {isTrialScores(res.scores) && (
                           <div className="flex gap-6 text-xs text-muted-foreground">
                             <span>Band 4: {pct(res.scores.band4.correct, res.scores.band4.total)} ({res.scores.band4.correct}/{res.scores.band4.total})</span>
@@ -803,10 +807,10 @@ export function BenchmarkPage() {
         if (!benchmarkAuth) {
           throw new Error('Benchmark Firebase app did not initialize — check VITE_BENCHMARK_* env vars')
         }
-        if (benchmarkAuth.currentUser) {
-          if (!cancelled) setAuthState('ready')
-          return
-        }
+        // Always mint a fresh token rather than reusing a cached session —
+        // custom-token claims (e.g. admin: true) only apply from the moment
+        // they're minted, and a persisted sign-in from before a claims
+        // change would silently be missing them.
         const { data } = await mintBenchmarkAdminTokenFn()
         await signInWithCustomToken(benchmarkAuth, data.token)
         if (!cancelled) setAuthState('ready')
