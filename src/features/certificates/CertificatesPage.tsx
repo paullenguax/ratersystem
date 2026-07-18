@@ -10,7 +10,7 @@ import {
   CERT_TYPES, type CertTypeValue,
   generateCertNumber, generatePIN, buildCertPDF, resolveTemplateUrl,
 } from './certGen'
-import { msSignIn, msSignOut, getMsAccount } from '@/lib/msal'
+import { msSignIn, msSignOut, getMsAccount, getTokenStatus } from '@/lib/msal'
 import { uploadToSharePoint, SP_FOLDERS_CERT } from '@/lib/oneDrive'
 
 interface CertRecord {
@@ -47,7 +47,18 @@ export function CertificatesPage() {
 
   // ── SharePoint state ─────────────────────────────────────────────────────
   const [msAccount, setMsAccount]       = useState(() => getMsAccount())
-  useEffect(() => { setMsAccount(getMsAccount()) }, [])
+  const [msStatus, setMsStatus]         = useState(() => getTokenStatus())
+  useEffect(() => {
+    function refreshMsStatus() {
+      setMsAccount(getMsAccount())
+      setMsStatus(getTokenStatus())
+    }
+    refreshMsStatus()
+    // Catches the token quietly expiring while the page just sits open —
+    // not just on mount/sign-in/sign-out.
+    const interval = setInterval(refreshMsStatus, 60_000)
+    return () => clearInterval(interval)
+  }, [])
   const [msSignInErr, setMsSignInErr]   = useState<string | null>(null)
   const [certSpUrl, setCertSpUrl]       = useState<string | null>(null)
   const [certSpErr, setCertSpErr]       = useState<string | null>(null)
@@ -58,6 +69,7 @@ export function CertificatesPage() {
     try {
       const account = await msSignIn()
       setMsAccount(account)
+      setMsStatus(getTokenStatus())
     } catch (err) {
       setMsSignInErr(err instanceof Error ? err.message : 'Microsoft sign-in failed')
     }
@@ -66,6 +78,7 @@ export function CertificatesPage() {
   async function handleMsSignOut() {
     await msSignOut()
     setMsAccount(null)
+    setMsStatus('signed-out')
   }
 
   const { data: records = [] } = useQuery({
@@ -101,7 +114,7 @@ export function CertificatesPage() {
       pdf.save(filename)
 
       let spUrl: string | null = null
-      if (msAccount) {
+      if (msStatus === 'connected') {
         try {
           const blob = pdf.output('blob')
           spUrl = await uploadToSharePoint(blob, filename, SP_FOLDERS_CERT[certType])
@@ -178,20 +191,31 @@ export function CertificatesPage() {
 
       {/* SharePoint connection bar */}
       {msSignInErr && <p className="text-xs text-red-600">{msSignInErr}</p>}
-      <div className={`flex items-center justify-between rounded-md border px-3 py-2 text-sm ${msAccount ? '' : 'border-yellow-400 bg-yellow-100 dark:bg-yellow-950 dark:border-yellow-700'}`}>
+      <div className={`flex items-center justify-between rounded-md border px-3 py-2 text-sm ${
+        msStatus === 'connected' ? 'border-green-400 bg-green-100 dark:bg-green-950 dark:border-green-700'
+        : msStatus === 'stale' ? 'border-amber-400 bg-amber-100 dark:bg-amber-950 dark:border-amber-700'
+        : 'border-red-400 bg-red-100 dark:bg-red-950 dark:border-red-700'
+      }`}>
         {msAccount ? (
           <>
-            <span className="text-muted-foreground">
-              SharePoint: <span className="text-foreground font-medium">{msAccount.username}</span>
+            <span className={msStatus === 'connected' ? 'text-green-900 dark:text-green-200' : 'text-amber-900 dark:text-amber-200'}>
+              SharePoint: <span className="font-medium">{msAccount.username}</span>
+              {msStatus === 'stale' && <span className="font-normal"> — session needs refreshing</span>}
             </span>
-            <button type="button" onClick={handleMsSignOut} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-              <LogOut className="size-3" /> Disconnect
-            </button>
+            {msStatus === 'stale' ? (
+              <button type="button" onClick={handleMsSignIn} className="flex items-center gap-1.5 text-xs font-semibold text-amber-900 dark:text-amber-200 hover:underline">
+                <CloudUpload className="size-3.5" /> Reconnect
+              </button>
+            ) : (
+              <button type="button" onClick={handleMsSignOut} className="flex items-center gap-1 text-xs text-green-900 dark:text-green-200 hover:underline">
+                <LogOut className="size-3" /> Disconnect
+              </button>
+            )}
           </>
         ) : (
           <>
-            <span className="font-medium text-yellow-900 dark:text-yellow-200">Not signed in — certificates won't auto-save to SharePoint</span>
-            <button type="button" onClick={handleMsSignIn} className="flex items-center gap-1.5 text-xs font-semibold text-yellow-900 dark:text-yellow-200 hover:underline">
+            <span className="font-medium text-red-900 dark:text-red-200">Not signed in — certificates won't auto-save to SharePoint</span>
+            <button type="button" onClick={handleMsSignIn} className="flex items-center gap-1.5 text-xs font-semibold text-red-900 dark:text-red-200 hover:underline">
               <CloudUpload className="size-3.5" /> Connect
             </button>
           </>

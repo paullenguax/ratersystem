@@ -46,6 +46,18 @@ export function getMsAccount(): AccountInfo | null {
   return msalInstance.getAllAccounts()[0] ?? null
 }
 
+export type MsTokenStatus = 'connected' | 'stale' | 'signed-out'
+
+// 'stale' covers the common case where the MSAL account persists (it's
+// cached in sessionStorage) but tokenCache doesn't — e.g. right after a
+// page reload, since tokenCache is in-memory only. Uploads would fail
+// immediately in that state even though getMsAccount() still looks signed in.
+export function getTokenStatus(): MsTokenStatus {
+  if (!getMsAccount()) return 'signed-out'
+  if (tokenCache && tokenCache.expiry > Date.now() + 5 * 60 * 1000) return 'connected'
+  return 'stale'
+}
+
 export async function getGraphToken(): Promise<string> {
   // Use cached token if valid for at least another 5 minutes
   if (tokenCache && tokenCache.expiry > Date.now() + 5 * 60 * 1000) {

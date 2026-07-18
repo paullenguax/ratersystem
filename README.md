@@ -47,7 +47,7 @@ Role is determined by the `people` Firestore collection — the doc ID **must** 
 | `people` | Raters + admins, keyed by Firebase Auth UID |
 | `test_bank` | ICAO test recordings (51+ imported); `canonicalDifficulty`/`canonicalSE` from Rasch imports drive both Auto-assign and the self-serve picker |
 | `sessions` | Named groups of scoring work; `canvasSectionId` links a session to a Canvas section for self-serve assignments |
-| `assignments` | session + rater + tests; unit of work; `source: 'self_serve'` marks ones created by the self-serve flow |
+| `assignments` | session + rater + tests; unit of work; `source: 'self_serve'` marks ones created by the self-serve flow; `confirmedAt` is the rater's explicit "yes, these are my answers" lock-in — distinct from `status: 'submitted'`, which just means all tests are scored |
 | `scores` | Individual ICAO scores per rater per test |
 | `certificates` | Lenguax cert records (L-prefix numbers) |
 | `official_forms` | CAA 5012 and DGAC 87i records |
@@ -134,7 +134,7 @@ Certificate validation is public at `/validate/:certNumber` (no auth required).
 | `canvasSectionEnrollments` | Students in one specific section (admin, section-membership audit) |
 | `enrollmentWebhook` | HTTP endpoint the WordPress plugin POSTs to after each WooCommerce enrollment attempt; shared-secret auth (`x-webhook-secret` / `ENROLLMENT_WEBHOOK_SECRET`) |
 | `requestSelfAssignment` | Self-serve exam entry point (any signed-in user). Resolves the caller's active Canvas section, finds-or-creates the matching `sessions` doc, and builds a 4-test `assignments` doc using unseen/difficulty-tier/well-known-anchor selection (same approach as Auto-assign) |
-| `notifySelfServeSubmission` | Fires when a self-serve assignment's status flips to `submitted`; emails `config/canvas.notificationEmail` via Resend (`RESEND_API_KEY` secret) — skipped silently if either isn't configured |
+| `notifySelfServeSubmission` | Fires when a self-serve rater explicitly confirms their scores (`confirmedAt` newly set — not just all 4 tests being scored, which only flips `status` to `submitted`); emails `config/canvas.notificationEmail` via Resend (`RESEND_API_KEY` secret) — skipped silently if either isn't configured |
 
 See the full Canvas integration write-up (WP plugin ↔ Firebase ↔ RaterSystemNew) for the complete enrollment picture — ask Claude to regenerate it from `CanvasCohortEnrollment/canvas-cohort-enrollment.php` and this file if it's gone stale.
 
@@ -144,10 +144,24 @@ A Canvas-enrolled trainee can go to `/take-test`, sign in with Canvas SSO, and l
 
 - The entry link (`TakeTestPage.tsx`) appends `state=self_serve` to the Canvas OAuth URL (`src/lib/canvasAuthUrl.ts`); Canvas round-trips that `state` back to `CanvasCallbackPage.tsx` unchanged.
 - After Canvas sign-in, if `state === 'self_serve'`, the callback calls `requestSelfAssignment` and routes into `/scoring` with the new assignment ID, which `ScoringPage.tsx` auto-opens instead of showing the assignment picker.
-- Test selection reuses `AutoAssignPage.tsx`'s tiering approach: tests this rater has never scored, spread across difficulty tiers (`Test.canonicalDifficulty`), with a preferred anchor that's both well-calibrated and has been scored by ≥100 distinct raters (`WELL_KNOWN_RATER_THRESHOLD` in `functions/index.js`).
+- Test selection reuses `AutoAssignPage.tsx`'s tiering approach: tests this rater has never scored, spread across difficulty tiers (`Test.canonicalDifficulty`), with a preferred anchor that's both well-calibrated and has been scored by ≥100 distinct raters (`WELL_KNOWN_RATER_THRESHOLD` in `functions/index.js`). Picks are randomised among equally-eligible candidates (not just the single "best" one) and weighted toward whichever tests this specific section/cohort has used least so far (`cohortFreq` in `requestSelfAssignment`) — otherwise every brand-new trainee in a section would converge on the same handful of tests.
 - The session a self-serve assignment files under is named `{Canvas course name} — {Canvas section name}` (e.g. "Rater Course 2026 — July 2026" or "Rater Course 2026 — Acme Airlines"), found-or-created by `canvasSectionId`. Course/section naming is otherwise just a Canvas-side habit — see "Canvas naming convention" below.
 - Requires `config/canvas.notificationEmail` and the `RESEND_API_KEY` secret set for email alerts; an in-app "self-serve submissions awaiting review" card also appears on the admin Dashboard regardless.
 - **Failsafe:** if Canvas Sync hasn't been run yet for someone taking a self-serve exam, `canvasAuth` auto-creates their `people` doc (role `trainee`) rather than hard-failing — gated on active enrollment in a course from `config/canvas.courses` and no name-similar existing person. Auto-created accounts show a small "auto" badge on the People page for a quick admin sanity check.
+
+## Scoring player (`ScoringPage.tsx`, `/scoring`)
+
+Shared by all three roles for working through an assignment's 4 tests — used both by the self-serve flow above and by normal admin/senior_rater/trainee scoring.
+
+- **Trainee-only anonymisation**: when `role === 'trainee'` (`isTraineeExam`), tests are labelled "Candidate A/B/C/D" instead of showing the candidate's real name, test type, nationality, or test ID — so a rater sitting their own certification exam can't cross-reference which recordings they were assigned. Admins/senior raters scoring elsewhere always see full detail; this is scoped by role, not by page or session type.
+- **Drafts survive navigation**: in-progress slider values are mirrored into an in-memory `drafts` map (keyed by testDocId) as you type, independent of what's saved in Firestore. Switching to another candidate and back restores an unsaved edit rather than silently reverting to the last-saved value.
+- **Auto-save on navigate-away**: every way of leaving a test with a complete, unsaved change (arrows, "Back to summary," "← Assignments") saves it first automatically — you can't lose an edit just by clicking away without an explicit submit.
+- **Review → confirm → lock**: once all 4 are scored, a summary screen ("Review your scores") shows each candidate's overall level (click to expand the full 6-dimension breakdown). Nothing is final until the rater clicks "Yes, that's my scores," which sets `assignment.confirmedAt` — distinct from `status: 'submitted'` (which just means all 4 are scored, and still allows "Review or change an answer"). Once confirmed, there's no UI path back into edit mode.
+- **One unified "Continue" button**: never a dead end. It saves the current test if needed, then goes to whichever makes sense next — the nearest not-yet-scored candidate (`findNextIncompleteIdx`, searches forward and wraps, so it works regardless of what order you actually score things in), "Complete" if this is the last one left, or "Back to summary" while reviewing. Flanked by prev/next arrows in the same bottom bar for quick manual navigation.
+- **Save confirmation that outlives the navigation**: a `justSaved` toast ("✓ Candidate A saved") persists ~2.5s across whatever screen you land on next, since a save and the navigation that follows it don't always happen on the same screen. A separate, non-expiring `editedThisSession` badge marks any test you've actually changed (not just scored) for the rest of the session, so returning to a candidate later still shows whether you're looking at your edit or the untouched original.
+- **Accessibility**: the amber "you changed this" state is backed by a pencil icon and screen-reader-only text, not colour alone; an `aria-live` region announces candidate changes (switching tests updates content in place rather than navigating to a new page); icon-only nav buttons have `aria-label`s. The main button shows a shorter label on narrow screens (`sm:` breakpoint) since the full destination-aware label ("Continue to Candidate C") can overflow next to the flanking arrows.
+
+`PracticeScorePage.tsx` (`/practice/:code` — the separate live-practice player for in-course group exercises, joined via a 6-character code, no login) reuses only the ready-to-submit banner/bar-colour treatment from this page, not the rest of it — it's always a single test with no multi-candidate navigation, review, or confirm step.
 
 ## Notes
 
@@ -158,4 +172,4 @@ A Canvas-enrolled trainee can go to `/take-test`, sign in with Canvas SSO, and l
 
 ## Last updated
 
-2026-07-15
+2026-07-16

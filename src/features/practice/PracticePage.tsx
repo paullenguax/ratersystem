@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
   collection, getDocs, addDoc, updateDoc, deleteDoc,
-  doc, query, where, onSnapshot, serverTimestamp, orderBy,
+  doc, query, where, onSnapshot, serverTimestamp,
 } from 'firebase/firestore'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Copy, Eye, EyeOff, Download, Trash2, X, ChevronLeft, Radio, Plus } from 'lucide-react'
@@ -51,8 +51,15 @@ function exportCsv(session: PracticeSession, scores: PracticeScore[]) {
 // ── data ────────────────────────────────────────────────────────────────────
 
 async function fetchSessions(): Promise<PracticeSession[]> {
-  const snap = await getDocs(query(collection(db, 'practice_sessions'), orderBy('createdAt', 'desc')))
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }) as PracticeSession)
+  // Sorted client-side rather than via Firestore's orderBy — orderBy silently
+  // excludes any document missing the ordered field entirely (not an error,
+  // just dropped from the results), so a session somehow missing createdAt
+  // would vanish from this list while still working fine for participants
+  // (who find it by code, not by this query).
+  const snap = await getDocs(collection(db, 'practice_sessions'))
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data() }) as PracticeSession)
+    .sort((a, b) => ((b.createdAt as any)?.seconds ?? 0) - ((a.createdAt as any)?.seconds ?? 0))
 }
 
 async function fetchTests(): Promise<Test[]> {

@@ -392,7 +392,12 @@ export function ScoringPage() {
 
   const waitingForAutoOpen = !!autoOpenAssignmentId && !assignment
 
-  if (isLoading || loadingPlayer || waitingForAutoOpen) {
+  // isLoading reflects the outer "my assignments" list query, which gets
+  // invalidated (and silently refetches in the background) the moment the
+  // last test is saved or confirmed. That's only meant to gate the initial
+  // list view — once a specific assignment is open, its own view (player or
+  // summary) should never be preempted by that background refetch.
+  if ((isLoading && !assignment) || loadingPlayer || waitingForAutoOpen) {
     return (
       <div className="flex items-center justify-center py-20">
         <p className="text-muted-foreground text-sm">Loading…</p>
