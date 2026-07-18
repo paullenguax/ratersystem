@@ -260,6 +260,43 @@ exports.mintBenchmarkAdminToken = onCall({ secrets: [BENCHMARK_SERVICE_ACCOUNT_K
   return { token }
 })
 
+// Creates a centre login: a Firebase Auth user in the benchmark project plus
+// its matching centre_accounts/{uid} doc, so an admin never has to do the
+// manual Console + Firestore two-step described in the README by hand.
+exports.createBenchmarkCentreAccount = onCall({ secrets: [BENCHMARK_SERVICE_ACCOUNT_KEY] }, async (request) => {
+  await assertAdmin(request)
+  const { email, password, centreId, centreName } = request.data
+  if (!email || !password || !centreId || !centreName) {
+    throw new HttpsError('invalid-argument', 'email, password, centreId, and centreName are all required')
+  }
+  if (password.length < 6) {
+    throw new HttpsError('invalid-argument', 'Password must be at least 6 characters')
+  }
+
+  const benchmarkApp = getBenchmarkAdminApp()
+  const benchmarkDb = admin.firestore(benchmarkApp)
+
+  const existing = await benchmarkDb.collection('centre_accounts').where('centreId', '==', centreId).get()
+  if (!existing.empty) {
+    throw new HttpsError('already-exists', `centreId "${centreId}" is already in use by another account`)
+  }
+
+  const userRecord = await admin.auth(benchmarkApp).createUser({ email, password })
+  await benchmarkDb.doc(`centre_accounts/${userRecord.uid}`).set({ centreId, centreName })
+  return { uid: userRecord.uid }
+})
+
+exports.deleteBenchmarkCentreAccount = onCall({ secrets: [BENCHMARK_SERVICE_ACCOUNT_KEY] }, async (request) => {
+  await assertAdmin(request)
+  const { uid } = request.data
+  if (!uid) throw new HttpsError('invalid-argument', 'uid is required')
+
+  const benchmarkApp = getBenchmarkAdminApp()
+  await admin.firestore(benchmarkApp).doc(`centre_accounts/${uid}`).delete()
+  await admin.auth(benchmarkApp).deleteUser(uid).catch(() => {})   // account may already be gone
+  return { ok: true }
+})
+
 exports.canvasEnrollments = onCall(async (request) => {
   const { courseId } = request.data
   if (!courseId) throw new HttpsError('invalid-argument', 'Missing courseId')

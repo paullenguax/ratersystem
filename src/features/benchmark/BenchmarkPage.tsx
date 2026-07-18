@@ -27,7 +27,7 @@ function isTrialScores(s: unknown): s is TrialScores {
   return !!s && typeof s === 'object' && 'totalCorrect' in s
 }
 
-type Tab = 'results' | 'analysis' | 'items'
+type Tab = 'results' | 'analysis' | 'items' | 'centres'
 
 // ── Results tab ───────────────────────────────────────────────────────────────
 
@@ -788,6 +788,171 @@ function ItemsTab() {
   )
 }
 
+// ── Centres tab ───────────────────────────────────────────────────────────────
+
+interface CentreAccount {
+  id: string          // Firebase Auth uid — also the Firestore doc ID
+  centreId: string
+  centreName: string
+}
+
+const createCentreFn = httpsCallable<
+  { email: string; password: string; centreId: string; centreName: string },
+  { uid: string }
+>(functions, 'createBenchmarkCentreAccount')
+
+const deleteCentreFn = httpsCallable<{ uid: string }, { ok: true }>(functions, 'deleteBenchmarkCentreAccount')
+
+function CentreForm({ onSave, onCancel }: { onSave: () => void; onCancel: () => void }) {
+  const [centreName, setCentreName] = useState('')
+  const [centreId, setCentreId] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setSaving(true)
+    setError(null)
+    try {
+      await createCentreFn({ email, password, centreId: centreId.trim(), centreName: centreName.trim() })
+      onSave()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create centre account')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4 max-w-md">
+      <div className="space-y-1">
+        <label className="text-xs text-muted-foreground">Centre name</label>
+        <Input value={centreName} onChange={e => setCentreName(e.target.value)} placeholder="Oxford Aviation Academy" required />
+      </div>
+      <div className="space-y-1">
+        <label className="text-xs text-muted-foreground">Centre ID (short slug — used in their link)</label>
+        <Input
+          value={centreId}
+          onChange={e => setCentreId(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
+          placeholder="oxford-aviation"
+          required
+        />
+        {centreId && <p className="text-[11px] text-muted-foreground">Link: lenguax.com/benchmark/?centre={centreId}</p>}
+      </div>
+      <div className="space-y-1">
+        <label className="text-xs text-muted-foreground">Login email</label>
+        <Input type="email" value={email} onChange={e => setEmail(e.target.value)} required />
+      </div>
+      <div className="space-y-1">
+        <label className="text-xs text-muted-foreground">Login password</label>
+        <Input type="text" value={password} onChange={e => setPassword(e.target.value)} minLength={6} required />
+        <p className="text-[11px] text-muted-foreground">Shown in plain text so you can copy it to send to the centre — at least 6 characters.</p>
+      </div>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+      <div className="flex gap-2 pt-2">
+        <Button type="button" variant="outline" onClick={onCancel}>Cancel</Button>
+        <Button type="submit" disabled={saving}>{saving ? 'Creating…' : 'Create centre account'}</Button>
+      </div>
+    </form>
+  )
+}
+
+function CentresTab() {
+  const queryClient = useQueryClient()
+  const [view, setView] = useState<'list' | 'new'>('list')
+  const [copiedId, setCopiedId] = useState<string | null>(null)
+
+  const { data: centres = [] } = useQuery({
+    queryKey: ['centre_accounts'],
+    queryFn: async () => {
+      const snap = await getDocs(collection(db, 'centre_accounts'))
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }) as CentreAccount)
+    },
+  })
+
+  function refresh() {
+    queryClient.invalidateQueries({ queryKey: ['centre_accounts'] })
+    setView('list')
+  }
+
+  async function handleDelete(centre: CentreAccount) {
+    if (!confirm(`Delete the login for "${centre.centreName}"? Their link will stop working.`)) return
+    await deleteCentreFn({ uid: centre.id })
+    queryClient.invalidateQueries({ queryKey: ['centre_accounts'] })
+  }
+
+  function copyLink(centreId: string) {
+    const link = `https://lenguax.com/benchmark/?centre=${centreId}`
+    navigator.clipboard.writeText(link)
+    setCopiedId(centreId)
+    setTimeout(() => setCopiedId(null), 1500)
+  }
+
+  if (view === 'new') return (
+    <div className="space-y-4">
+      <h2 className="font-medium">New centre</h2>
+      <CentreForm onSave={refresh} onCancel={() => setView('list')} />
+    </div>
+  )
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">
+          Each centre gets one shared login and a tagged link — they see only their own trainees' results at{' '}
+          <span className="font-mono text-xs">lenguax.com/benchmark/centre</span>.
+        </p>
+        <Button size="sm" onClick={() => setView('new')}>
+          <Plus className="size-4 mr-1.5" /> New centre
+        </Button>
+      </div>
+
+      {centres.length === 0 ? (
+        <div className="rounded-md border border-dashed p-12 text-center text-sm text-muted-foreground">
+          No centres yet.
+        </div>
+      ) : (
+        <div className="border rounded-lg overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 text-xs text-muted-foreground">
+              <tr>
+                <th className="px-3 py-2 text-left font-medium">Centre</th>
+                <th className="px-3 py-2 text-left font-medium">Link</th>
+                <th className="px-2 py-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {centres.map(centre => (
+                <tr key={centre.id} className="border-t hover:bg-muted/20">
+                  <td className="px-3 py-2">
+                    <p className="font-medium">{centre.centreName}</p>
+                    <p className="text-xs text-muted-foreground font-mono">{centre.centreId}</p>
+                  </td>
+                  <td className="px-3 py-2">
+                    <button
+                      onClick={() => copyLink(centre.centreId)}
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      {copiedId === centre.centreId ? 'Copied!' : 'Copy link'}
+                    </button>
+                  </td>
+                  <td className="px-2 py-2">
+                    <button onClick={() => handleDelete(centre)} className="text-muted-foreground hover:text-red-600">
+                      <Trash2 className="size-3.5" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Page root ─────────────────────────────────────────────────────────────────
 
 const mintBenchmarkAdminTokenFn = httpsCallable<Record<string, never>, { token: string }>(
@@ -843,7 +1008,7 @@ export function BenchmarkPage() {
       </div>
 
       <div className="flex gap-2 border-b pb-1">
-        {([['results', 'Results'], ['analysis', 'Item analysis'], ['items', 'Item bank']] as [Tab, string][]).map(([t, label]) => (
+        {([['results', 'Results'], ['analysis', 'Item analysis'], ['items', 'Item bank'], ['centres', 'Centres']] as [Tab, string][]).map(([t, label]) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -871,6 +1036,7 @@ export function BenchmarkPage() {
           {tab === 'results'  && <ResultsTab />}
           {tab === 'analysis' && <ItemAnalysisTab />}
           {tab === 'items'    && <ItemsTab />}
+          {tab === 'centres'  && <CentresTab />}
         </>
       )}
     </div>
