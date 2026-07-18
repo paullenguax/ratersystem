@@ -1,20 +1,22 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   collection, getDocs, doc, addDoc, setDoc, deleteDoc,
-  updateDoc, orderBy, query, serverTimestamp, writeBatch,
+  updateDoc, orderBy, query, serverTimestamp,
 } from 'firebase/firestore'
-import { benchmarkDb as db } from '@/lib/firebase'
+import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage'
+import { httpsCallable } from 'firebase/functions'
+import { signInWithCustomToken } from 'firebase/auth'
+import { benchmarkDb as db, benchmarkAuth, benchmarkStorage, functions } from '@/lib/firebase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { Trash2, Link2, ChevronDown, ChevronRight, Plus } from 'lucide-react'
+import { Trash2, Link2, ChevronDown, ChevronRight, Plus, Upload } from 'lucide-react'
 import type { Person } from '@/types'
 import {
-  POOLS, LEVEL_LABELS, LEVEL_COLOURS,
-  type BenchmarkItem, type BenchmarkResult, type BenchmarkPool, type TrialScores,
+  CONSTRUCTS, LEVEL_LABELS, LEVEL_COLOURS,
+  type BenchmarkItem, type BenchmarkResult, type BenchmarkConstruct, type TrialScores,
 } from './types'
-import { MOCK_ITEMS } from './mockItems'
 
 function pct(correct: number, total: number) {
   if (total === 0) return '—'
@@ -240,6 +242,9 @@ function ResultsTab() {
                             <span>Band 6: {pct(res.scores.band6.correct, res.scores.band6.total)} ({res.scores.band6.correct}/{res.scores.band6.total})</span>
                             <span>Vocab: {pct(res.scores.vocabulary.correct, res.scores.vocabulary.total)}</span>
                             <span>Structure: {pct(res.scores.structure.correct, res.scores.structure.total)}</span>
+                            {res.scores.comprehension && (
+                              <span>Comprehension: {pct(res.scores.comprehension.correct, res.scores.comprehension.total)}</span>
+                            )}
                           </div>
                         )}
                         <div>
@@ -274,6 +279,7 @@ function ResultsTab() {
 function ItemAnalysisTab() {
   const [filterForm, setFilterForm] = useState<'all' | 'A' | 'B'>('all')
   const [sortBy, setSortBy] = useState<'id' | 'difficulty' | 'flags'>('id')
+  const queryClient = useQueryClient()
 
   const { data: results = [] } = useQuery({
     queryKey: ['benchmark_results'],
@@ -291,16 +297,32 @@ function ItemAnalysisTab() {
     },
   })
 
+  const { data: items = [] } = useQuery({
+    queryKey: ['benchmark_items'],
+    queryFn: async () => {
+      const snap = await getDocs(collection(db, 'benchmark_items'))
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }) as BenchmarkItem)
+    },
+  })
+  const itemById = useMemo(() => Object.fromEntries(items.map(i => [i.id, i])), [items])
+
+  async function handleMarkCorrected(itemId: string) {
+    await setDoc(doc(db, 'benchmark_items', itemId), { correctedAt: serverTimestamp() }, { merge: true })
+    queryClient.invalidateQueries({ queryKey: ['benchmark_items'] })
+  }
+
   const analysis = useMemo(() => {
     type ItemStat = {
       id: string; form: string; band: number; construct: string
       attempts: number; correct: number; flagCount: number; flagComments: string[]
+      sinceCorrection: { attempts: number; correct: number } | null
     }
     const stats: Record<string, ItemStat> = {}
 
     const filtered = filterForm === 'all' ? results : results.filter(r => r.form === filterForm)
 
     for (const result of filtered) {
+      const resultSeconds = result.timestamp?.seconds ?? 0
       for (const resp of (result.responses ?? [])) {
         if (!stats[resp.itemId]) {
           stats[resp.itemId] = {
@@ -309,13 +331,22 @@ function ItemAnalysisTab() {
             band: resp.band ?? 0,
             construct: resp.construct ?? '?',
             attempts: 0, correct: 0, flagCount: 0, flagComments: [],
+            sinceCorrection: null,
           }
         }
-        stats[resp.itemId].attempts++
-        if (resp.correct) stats[resp.itemId].correct++
+        const stat = stats[resp.itemId]
+        stat.attempts++
+        if (resp.correct) stat.correct++
         if (resp.flagComment) {
-          stats[resp.itemId].flagCount++
-          stats[resp.itemId].flagComments.push(resp.flagComment)
+          stat.flagCount++
+          stat.flagComments.push(resp.flagComment)
+        }
+
+        const correctedAtSeconds = itemById[resp.itemId]?.correctedAt?.seconds
+        if (correctedAtSeconds && resultSeconds > correctedAtSeconds) {
+          if (!stat.sinceCorrection) stat.sinceCorrection = { attempts: 0, correct: 0 }
+          stat.sinceCorrection.attempts++
+          if (resp.correct) stat.sinceCorrection.correct++
         }
       }
     }
@@ -336,7 +367,7 @@ function ItemAnalysisTab() {
       if (sortBy === 'flags') return b.flagCount - a.flagCount
       return a.id.localeCompare(b.id)
     })
-  }, [results, flagDocs, filterForm, sortBy])
+  }, [results, flagDocs, itemById, filterForm, sortBy])
 
   return (
     <div className="space-y-4">
@@ -380,6 +411,9 @@ function ItemAnalysisTab() {
                 <th className="px-3 py-2 text-left font-medium">% correct</th>
                 <th className="px-3 py-2 text-left font-medium">Flags</th>
                 <th className="px-3 py-2 text-left font-medium">Flag comments</th>
+                <th className="px-3 py-2 text-left font-medium">Corrected</th>
+                <th className="px-3 py-2 text-left font-medium">Since correction</th>
+                <th className="px-2 py-2"></th>
               </tr>
             </thead>
             <tbody>
@@ -389,6 +423,7 @@ function ItemAnalysisTab() {
                   : p < 30 ? 'text-red-600 font-semibold'
                   : p > 85 ? 'text-green-700 font-semibold'
                   : 'text-muted-foreground'
+                const correctedAt = itemById[item.id]?.correctedAt
                 return (
                   <tr key={item.id} className="border-t hover:bg-muted/20">
                     <td className="px-3 py-1.5 font-mono text-muted-foreground">{item.id}</td>
@@ -406,6 +441,24 @@ function ItemAnalysisTab() {
                     <td className="px-3 py-1.5 text-muted-foreground max-w-xs truncate" title={item.flagComments.join(' / ')}>
                       {item.flagComments.length > 0 ? item.flagComments.join(' / ') : '—'}
                     </td>
+                    <td className="px-3 py-1.5 text-muted-foreground">
+                      {correctedAt ? new Date(correctedAt.seconds * 1000).toLocaleDateString() : '—'}
+                    </td>
+                    <td className="px-3 py-1.5 text-muted-foreground">
+                      {item.sinceCorrection
+                        ? `${item.sinceCorrection.correct}/${item.sinceCorrection.attempts} (${pct(item.sinceCorrection.correct, item.sinceCorrection.attempts)})`
+                        : correctedAt ? 'No responses yet' : '—'}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      {item.flagCount > 0 && (
+                        <button
+                          onClick={() => handleMarkCorrected(item.id)}
+                          className="text-xs text-muted-foreground hover:text-foreground whitespace-nowrap"
+                        >
+                          Mark corrected
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 )
               })}
@@ -419,11 +472,13 @@ function ItemAnalysisTab() {
 
 // ── Item form ─────────────────────────────────────────────────────────────────
 
+const OPTION_LABELS = ['A', 'B', 'C', 'D'] as const
+
 const BLANK: Omit<BenchmarkItem, 'id'> = {
-  pool: 'phase1', section: 'A', band: 4, construct: 'vocabulary',
-  modality: 'reading', active: true,
-  stimulus: '', audioRef: '', question: '',
-  options: ['', '', '', ''], correct: 'A', feedback: '',
+  source: 'new', band: 4, construct: 'vocabulary',
+  modality: 'reading', form: 'A', active: true, flagged: false,
+  stem: '', stimulus: '', audioRef: '',
+  options: ['', '', '', ''], correct: 0, feedback: '', notes: '',
 }
 
 function ItemForm({ initial, onSave, onCancel }: {
@@ -436,6 +491,8 @@ function ItemForm({ initial, onSave, onCancel }: {
             : { ...BLANK, options: [...BLANK.options] as [string,string,string,string] }
   )
   const [saving, setSaving] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   function set<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
     setForm(f => ({ ...f, [k]: v }))
@@ -444,6 +501,23 @@ function ItemForm({ initial, onSave, onCancel }: {
     const opts = [...form.options] as [string,string,string,string]
     opts[i] = v
     setForm(f => ({ ...f, options: opts }))
+  }
+
+  function handleAudioUpload(file: File) {
+    const path = `benchmark-audio/${Date.now()}_${file.name}`
+    const ref = storageRef(benchmarkStorage, path)
+    const task = uploadBytesResumable(ref, file)
+    setUploadProgress(0)
+    task.on(
+      'state_changed',
+      snap => setUploadProgress(Math.round((snap.bytesTransferred / snap.totalBytes) * 100)),
+      () => setUploadProgress(null),
+      async () => {
+        const url = await getDownloadURL(task.snapshot.ref)
+        set('audioRef', url)
+        setUploadProgress(null)
+      },
+    )
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -461,57 +535,82 @@ function ItemForm({ initial, onSave, onCancel }: {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 max-w-2xl">
-      <div className="grid grid-cols-3 gap-3">
-        {(['pool','section','band'] as const).map(field => (
-          <div key={field} className="space-y-1">
-            <label className="text-xs text-muted-foreground capitalize">{field}</label>
-            <select value={String(form[field])} onChange={e => set(field, (field === 'band' ? Number(e.target.value) : e.target.value) as never)}
-              className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm">
-              {field === 'pool'    && POOLS.map(p => <option key={p} value={p}>{p}</option>)}
-              {field === 'section' && ['A','B','C'].map(s => <option key={s} value={s}>{s}</option>)}
-              {field === 'band'    && [4,5,6].map(b => <option key={b} value={b}>{b}</option>)}
-            </select>
-          </div>
-        ))}
-      </div>
-      <div className="grid grid-cols-3 gap-3">
-        {(['modality','construct'] as const).map(field => (
-          <div key={field} className="space-y-1">
-            <label className="text-xs text-muted-foreground capitalize">{field}</label>
-            <select value={form[field]} onChange={e => set(field, e.target.value as never)}
-              className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm">
-              {field === 'modality'  && ['reading','listening'].map(v => <option key={v}>{v}</option>)}
-              {field === 'construct' && ['vocabulary','structure','comprehension'].map(v => <option key={v}>{v}</option>)}
-            </select>
-          </div>
-        ))}
-        <div className="space-y-1 flex items-end pb-1">
-          <label className="flex items-center gap-2 text-sm cursor-pointer">
-            <input type="checkbox" checked={form.active} onChange={e => set('active', e.target.checked)} />
-            Active
-          </label>
+      <div className="grid grid-cols-4 gap-3">
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">Form</label>
+          <select value={form.form} onChange={e => set('form', e.target.value as 'A'|'B')}
+            className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm">
+            {['A','B'].map(f => <option key={f} value={f}>{f}</option>)}
+          </select>
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">Band</label>
+          <select value={form.band} onChange={e => set('band', Number(e.target.value) as 4|5|6)}
+            className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm">
+            {[4,5,6].map(b => <option key={b} value={b}>{b}</option>)}
+          </select>
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">Construct</label>
+          <select value={form.construct} onChange={e => set('construct', e.target.value as BenchmarkConstruct)}
+            className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm">
+            {CONSTRUCTS.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">Modality</label>
+          <select value={form.modality} onChange={e => set('modality', e.target.value as 'reading'|'listening')}
+            className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm">
+            {['reading','listening'].map(v => <option key={v}>{v}</option>)}
+          </select>
         </div>
       </div>
 
-      {form.modality === 'reading' ? (
+      <div className="flex items-center gap-4">
+        <label className="flex items-center gap-2 text-sm cursor-pointer">
+          <input type="checkbox" checked={form.active} onChange={e => set('active', e.target.checked)} />
+          Active
+        </label>
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-xs text-muted-foreground">Stimulus / passage (optional — used by comprehension items)</label>
+        <Textarea rows={3} value={form.stimulus ?? ''} onChange={e => set('stimulus', e.target.value)} placeholder="Passage, NOTAM, report…" className="text-sm" />
+      </div>
+
+      {form.modality === 'listening' && (
         <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Stimulus (optional)</label>
-          <Textarea rows={3} value={form.stimulus ?? ''} onChange={e => set('stimulus', e.target.value)} placeholder="Passage, NOTAM, report…" className="text-sm" />
-        </div>
-      ) : (
-        <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Audio file path</label>
-          <Input value={form.audioRef ?? ''} onChange={e => set('audioRef', e.target.value)} placeholder="audio/filename.mp3" />
+          <label className="text-xs text-muted-foreground">Audio</label>
+          <div className="flex gap-2">
+            <Input value={form.audioRef ?? ''} onChange={e => set('audioRef', e.target.value)} placeholder="https://… or upload below" className="flex-1" />
+            <Button
+              type="button" variant="outline" size="icon" title="Upload audio file"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadProgress !== null}
+            >
+              <Upload className="size-4" />
+            </Button>
+            <input
+              ref={fileInputRef} type="file" accept="audio/*" className="sr-only"
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleAudioUpload(f) }}
+            />
+          </div>
+          {uploadProgress !== null && (
+            <div className="w-full bg-muted rounded-full h-1.5 mt-1">
+              <div className="bg-primary h-1.5 rounded-full transition-all" style={{ width: `${uploadProgress}%` }} />
+            </div>
+          )}
+          {form.audioRef && <audio controls src={form.audioRef} className="w-full mt-1" />}
         </div>
       )}
 
       <div className="space-y-1">
-        <label className="text-xs text-muted-foreground">Question</label>
-        <Textarea rows={2} value={form.question} onChange={e => set('question', e.target.value)} required className="text-sm" />
+        <label className="text-xs text-muted-foreground">Question stem</label>
+        <Textarea rows={2} value={form.stem} onChange={e => set('stem', e.target.value)} required className="text-sm" />
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        {(['A','B','C','D'] as const).map((label, i) => (
+        {OPTION_LABELS.map((label, i) => (
           <div key={label} className="space-y-1">
             <label className="text-xs text-muted-foreground">Option {label}</label>
             <Input value={form.options[i]} onChange={e => setOption(i, e.target.value)} required />
@@ -521,15 +620,20 @@ function ItemForm({ initial, onSave, onCancel }: {
 
       <div className="space-y-1">
         <label className="text-xs text-muted-foreground">Correct answer</label>
-        <select value={form.correct} onChange={e => set('correct', e.target.value as 'A'|'B'|'C'|'D')}
+        <select value={form.correct} onChange={e => set('correct', Number(e.target.value) as 0|1|2|3)}
           className="rounded-md border border-input bg-background px-2 py-1.5 text-sm">
-          {['A','B','C','D'].map(l => <option key={l}>{l}</option>)}
+          {OPTION_LABELS.map((l, i) => <option key={l} value={i}>{l}</option>)}
         </select>
       </div>
 
       <div className="space-y-1">
         <label className="text-xs text-muted-foreground">Feedback / explanation</label>
         <Textarea rows={2} value={form.feedback} onChange={e => set('feedback', e.target.value)} className="text-sm" />
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-xs text-muted-foreground">Notes (revision history)</label>
+        <Textarea rows={2} value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="e.g. Stem reworded 2026-07-18 after 3 flags" className="text-sm" />
       </div>
 
       <div className="flex gap-2 pt-2">
@@ -542,12 +646,28 @@ function ItemForm({ initial, onSave, onCancel }: {
 
 // ── Items tab ─────────────────────────────────────────────────────────────────
 
+function CoverageSummary({ items }: { items: BenchmarkItem[] }) {
+  const rows = CONSTRUCTS.map(c => ({
+    construct: c,
+    A: items.filter(i => i.construct === c && i.form === 'A').length,
+    B: items.filter(i => i.construct === c && i.form === 'B').length,
+  }))
+  return (
+    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+      {rows.map(r => (
+        <span key={r.construct} className="capitalize">
+          {r.construct}: A {r.A} / B {r.B}
+        </span>
+      ))}
+    </div>
+  )
+}
+
 function ItemsTab() {
   const queryClient = useQueryClient()
-  const [filterPool, setFilterPool] = useState<BenchmarkPool | 'all'>('all')
+  const [filterConstruct, setFilterConstruct] = useState<BenchmarkConstruct | 'all'>('all')
   const [view, setView] = useState<'list' | 'new' | 'edit'>('list')
   const [editTarget, setEditTarget] = useState<BenchmarkItem | null>(null)
-  const [seeding, setSeeding] = useState(false)
 
   const { data: items = [] } = useQuery({
     queryKey: ['benchmark_items'],
@@ -557,7 +677,7 @@ function ItemsTab() {
     },
   })
 
-  const visible = filterPool === 'all' ? items : items.filter(i => i.pool === filterPool)
+  const visible = filterConstruct === 'all' ? items : items.filter(i => i.construct === filterConstruct)
 
   async function handleToggleActive(item: BenchmarkItem) {
     await setDoc(doc(db, 'benchmark_items', item.id), { active: !item.active }, { merge: true })
@@ -568,22 +688,6 @@ function ItemsTab() {
     if (!confirm(`Delete item ${item.id}?`)) return
     await deleteDoc(doc(db, 'benchmark_items', item.id))
     queryClient.invalidateQueries({ queryKey: ['benchmark_items'] })
-  }
-
-  async function handleSeed() {
-    if (!confirm(`Seed ${MOCK_ITEMS.length} default items into Firestore? This will overwrite any existing items with the same IDs.`)) return
-    setSeeding(true)
-    try {
-      const batch = writeBatch(db)
-      for (const item of MOCK_ITEMS) {
-        const { id, ...fields } = item
-        batch.set(doc(db, 'benchmark_items', id), { ...fields, createdAt: serverTimestamp() })
-      }
-      await batch.commit()
-      queryClient.invalidateQueries({ queryKey: ['benchmark_items'] })
-    } finally {
-      setSeeding(false)
-    }
   }
 
   function refresh() {
@@ -608,21 +712,18 @@ function ItemsTab() {
 
   return (
     <div className="space-y-4">
+      <CoverageSummary items={items} />
+
       <div className="flex items-center gap-3 flex-wrap">
         <select
-          value={filterPool}
-          onChange={e => setFilterPool(e.target.value as BenchmarkPool | 'all')}
+          value={filterConstruct}
+          onChange={e => setFilterConstruct(e.target.value as BenchmarkConstruct | 'all')}
           className="rounded-md border border-input bg-background px-2 py-1.5 text-sm"
         >
-          <option value="all">All pools ({items.length})</option>
-          {POOLS.map(p => <option key={p} value={p}>{p} ({items.filter(i => i.pool === p).length})</option>)}
+          <option value="all">All constructs ({items.length})</option>
+          {CONSTRUCTS.map(c => <option key={c} value={c}>{c} ({items.filter(i => i.construct === c).length})</option>)}
         </select>
         <div className="flex gap-2 ml-auto">
-          {items.length === 0 && (
-            <Button variant="outline" size="sm" onClick={handleSeed} disabled={seeding}>
-              {seeding ? 'Seeding…' : `Seed ${MOCK_ITEMS.length} default items`}
-            </Button>
-          )}
           <Button size="sm" onClick={() => setView('new')}>
             <Plus className="size-4 mr-1.5" /> New item
           </Button>
@@ -631,7 +732,7 @@ function ItemsTab() {
 
       {visible.length === 0 ? (
         <div className="rounded-md border border-dashed p-12 text-center text-sm text-muted-foreground">
-          {items.length === 0 ? 'No items yet — seed the defaults to get started.' : 'No items in this pool.'}
+          No items match this filter.
         </div>
       ) : (
         <div className="border rounded-lg overflow-hidden">
@@ -639,7 +740,7 @@ function ItemsTab() {
             <thead className="bg-muted/50 text-muted-foreground">
               <tr>
                 <th className="px-3 py-2 text-left font-medium">ID</th>
-                <th className="px-3 py-2 text-left font-medium">Pool</th>
+                <th className="px-3 py-2 text-left font-medium">Form</th>
                 <th className="px-3 py-2 text-left font-medium">Band</th>
                 <th className="px-3 py-2 text-left font-medium">Modality</th>
                 <th className="px-3 py-2 text-left font-medium">Construct</th>
@@ -651,7 +752,7 @@ function ItemsTab() {
               {visible.map(item => (
                 <tr key={item.id} className={`border-t hover:bg-muted/20 ${!item.active ? 'opacity-50' : ''}`}>
                   <td className="px-3 py-1.5 font-mono text-muted-foreground">{item.id.slice(0,8)}…</td>
-                  <td className="px-3 py-1.5">{item.pool}</td>
+                  <td className="px-3 py-1.5">{item.form}</td>
                   <td className="px-3 py-1.5">{item.band}</td>
                   <td className="px-3 py-1.5">{item.modality}</td>
                   <td className="px-3 py-1.5">{item.construct}</td>
@@ -681,8 +782,35 @@ function ItemsTab() {
 
 // ── Page root ─────────────────────────────────────────────────────────────────
 
+const mintBenchmarkAdminTokenFn = httpsCallable<Record<string, never>, { token: string }>(
+  functions, 'mintBenchmarkAdminToken'
+)
+
+type AuthState = 'connecting' | 'ready' | 'error'
+
 export function BenchmarkPage() {
   const [tab, setTab] = useState<Tab>('results')
+  const [authState, setAuthState] = useState<AuthState>('connecting')
+
+  useEffect(() => {
+    let cancelled = false
+    async function connect() {
+      try {
+        if (benchmarkAuth.currentUser) {
+          if (!cancelled) setAuthState('ready')
+          return
+        }
+        const { data } = await mintBenchmarkAdminTokenFn()
+        await signInWithCustomToken(benchmarkAuth, data.token)
+        if (!cancelled) setAuthState('ready')
+      } catch (err) {
+        console.error('Failed to connect to Benchmark project:', err)
+        if (!cancelled) setAuthState('error')
+      }
+    }
+    connect()
+    return () => { cancelled = true }
+  }, [])
 
   return (
     <div className="space-y-6">
@@ -707,9 +835,23 @@ export function BenchmarkPage() {
         ))}
       </div>
 
-      {tab === 'results'  && <ResultsTab />}
-      {tab === 'analysis' && <ItemAnalysisTab />}
-      {tab === 'items'    && <ItemsTab />}
+      {authState === 'connecting' && (
+        <div className="rounded-md border border-dashed p-12 text-center text-sm text-muted-foreground">
+          Connecting to Benchmark project…
+        </div>
+      )}
+      {authState === 'error' && (
+        <div className="rounded-md border border-destructive/30 bg-destructive/5 p-12 text-center text-sm text-destructive">
+          Couldn't authenticate against the Benchmark project. Results and item analysis need this to load — try refreshing.
+        </div>
+      )}
+      {authState === 'ready' && (
+        <>
+          {tab === 'results'  && <ResultsTab />}
+          {tab === 'analysis' && <ItemAnalysisTab />}
+          {tab === 'items'    && <ItemsTab />}
+        </>
+      )}
     </div>
   )
 }

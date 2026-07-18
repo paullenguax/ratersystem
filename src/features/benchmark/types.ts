@@ -1,13 +1,4 @@
-export type BenchmarkPool =
-  | 'phase1'
-  | 'phase2-low' | 'phase2-mid' | 'phase2-high'
-  | 'phase3-4'   | 'phase3-5'   | 'phase3-6'
-
 export type BenchmarkLevel = 'below4' | 4 | 5 | 6
-
-export const POOLS: BenchmarkPool[] = [
-  'phase1', 'phase2-low', 'phase2-mid', 'phase2-high', 'phase3-4', 'phase3-5', 'phase3-6',
-]
 
 export const LEVEL_LABELS: Record<string, string> = {
   'below4': 'Below Level 4',
@@ -23,20 +14,29 @@ export const LEVEL_COLOURS: Record<string, string> = {
   6:        'bg-green-100 text-green-700 border-green-200',
 }
 
+export type BenchmarkConstruct = 'vocabulary' | 'structure' | 'comprehension'
+export const CONSTRUCTS: BenchmarkConstruct[] = ['vocabulary', 'structure', 'comprehension']
+
+// Matches the live Firestore schema in lenguax-benchmark-32392 exactly — do not
+// reintroduce the older pool/section/stimulus-as-question shape, it doesn't
+// match what the candidate app actually reads/writes.
 export interface BenchmarkItem {
   id: string
-  pool: BenchmarkPool
-  section: 'A' | 'B' | 'C'
+  source: string
   band: 4 | 5 | 6
-  construct: 'vocabulary' | 'structure' | 'comprehension'
+  construct: BenchmarkConstruct
   modality: 'reading' | 'listening'
-  active: boolean
+  form: 'A' | 'B'
+  stem: string
   stimulus: string | null
   audioRef: string | null
-  question: string
   options: [string, string, string, string]
-  correct: 'A' | 'B' | 'C' | 'D'
+  correct: 0 | 1 | 2 | 3
   feedback: string
+  active: boolean
+  flagged: boolean
+  notes: string
+  correctedAt?: { seconds: number } | null
 }
 
 export interface BenchmarkResponse {
@@ -54,6 +54,7 @@ export interface TrialScores {
   band6: { correct: number; total: number }
   vocabulary: { correct: number; total: number }
   structure:  { correct: number; total: number }
+  comprehension: { correct: number; total: number }
   totalCorrect: number
   totalItems: number
   indicativeLevel: string

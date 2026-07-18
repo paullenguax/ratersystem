@@ -8,6 +8,7 @@ admin.initializeApp()
 const CANVAS_CLIENT_SECRET = defineSecret('CANVAS_CLIENT_SECRET')
 const WEBHOOK_SECRET = defineSecret('ENROLLMENT_WEBHOOK_SECRET')
 const RESEND_API_KEY = defineSecret('RESEND_API_KEY')
+const BENCHMARK_SERVICE_ACCOUNT_KEY = defineSecret('BENCHMARK_SERVICE_ACCOUNT_KEY')
 const CANVAS_URL = 'https://courses.lenguax.com'
 const CANVAS_CLIENT_ID = '10000000000002'
 const REDIRECT_URI = 'https://lenguax.com/ratersystem/auth/canvas/callback'
@@ -33,6 +34,15 @@ async function assertAdmin(request) {
   if (!snap.exists || snap.data().role !== 'admin') {
     throw new HttpsError('permission-denied', 'Admin access required')
   }
+}
+
+function getBenchmarkAdminApp() {
+  const existing = admin.apps.find(a => a?.name === 'benchmarkAdmin')
+  if (existing) return existing
+  return admin.initializeApp(
+    { credential: admin.credential.cert(JSON.parse(BENCHMARK_SERVICE_ACCOUNT_KEY.value())) },
+    'benchmarkAdmin'
+  )
 }
 
 async function canvasFetch(path, token, options = {}) {
@@ -237,6 +247,16 @@ exports.canvasAuth = onCall({ secrets: [CANVAS_CLIENT_SECRET] }, async (request)
 })
 
 // ── existing: canvasEnrollments ───────────────────────────────────────────────
+
+// Bridges a RaterSystemNew admin's identity into the separate Benchmark Check
+// Firebase project (lenguax-benchmark-32392) so benchmark_results/benchmark_flags
+// reads can require request.auth != null instead of being world-readable.
+exports.mintBenchmarkAdminToken = onCall({ secrets: [BENCHMARK_SERVICE_ACCOUNT_KEY] }, async (request) => {
+  await assertAdmin(request)
+  const benchmarkApp = getBenchmarkAdminApp()
+  const token = await admin.auth(benchmarkApp).createCustomToken(request.auth.uid)
+  return { token }
+})
 
 exports.canvasEnrollments = onCall(async (request) => {
   const { courseId } = request.data

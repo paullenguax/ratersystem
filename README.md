@@ -52,8 +52,8 @@ Role is determined by the `people` Firestore collection — the doc ID **must** 
 | `certificates` | Lenguax cert records (L-prefix numbers) |
 | `official_forms` | CAA 5012 and DGAC 87i records |
 | `cert_config/templates` | Storage URL overrides per cert type |
-| `benchmark_items` | MCQ items for Benchmark Check |
-| `benchmark_results` | Candidate results from Benchmark Check |
+| `benchmark_items` | MCQ items for Benchmark Check — vocabulary/structure/comprehension constructs, reading/listening modalities |
+| `benchmark_results` / `benchmark_flags` | Candidate results and item flags from Benchmark Check (separate `lenguax-benchmark-32392` project, not this one — admin reads require the `mintBenchmarkAdminToken` auth bridge) |
 | `pronunciation_config/status` | Active languages for GPronTool |
 | `config/canvas` | Canvas API token, Canvas Sync course list, `excludedCourseIds`, `notificationEmail` for self-serve alerts |
 | `canvasEnrollmentLog` | Unified log of Canvas enrollments from both WooCommerce (`CanvasCohortEnrollment` WP plugin) and the manual `/admin/canvas-enroll` wizard |
@@ -135,6 +135,7 @@ Certificate validation is public at `/validate/:certNumber` (no auth required).
 | `enrollmentWebhook` | HTTP endpoint the WordPress plugin POSTs to after each WooCommerce enrollment attempt; shared-secret auth (`x-webhook-secret` / `ENROLLMENT_WEBHOOK_SECRET`) |
 | `requestSelfAssignment` | Self-serve exam entry point (any signed-in user). Resolves the caller's active Canvas section, finds-or-creates the matching `sessions` doc, and builds a 4-test `assignments` doc using unseen/difficulty-tier/well-known-anchor selection (same approach as Auto-assign) |
 | `notifySelfServeSubmission` | Fires when a self-serve rater explicitly confirms their scores (`confirmedAt` newly set — not just all 4 tests being scored, which only flips `status` to `submitted`); emails `config/canvas.notificationEmail` via Resend (`RESEND_API_KEY` secret) — skipped silently if either isn't configured |
+| `mintBenchmarkAdminToken` | Bridges an admin's identity into the separate `lenguax-benchmark-32392` Firebase project so the Benchmark page's `benchmark_results`/`benchmark_flags` reads can require `request.auth != null` instead of being world-readable. Checks `people/{uid}.role === 'admin'`, then mints a custom token via a second `admin.app()` credentialed with the `BENCHMARK_SERVICE_ACCOUNT_KEY` secret |
 
 See the full Canvas integration write-up (WP plugin ↔ Firebase ↔ RaterSystemNew) for the complete enrollment picture — ask Claude to regenerate it from `CanvasCohortEnrollment/canvas-cohort-enrollment.php` and this file if it's gone stale.
 
@@ -172,4 +173,4 @@ Shared by all three roles for working through an assignment's 4 tests — used b
 
 ## Last updated
 
-2026-07-16
+2026-07-18

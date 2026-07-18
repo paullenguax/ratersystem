@@ -30,3 +30,5 @@ const benchmarkConfig = {
 
 const benchmarkApp = initializeApp(benchmarkConfig, 'benchmark')
 export const benchmarkDb = getFirestore(benchmarkApp)
+export const benchmarkAuth = getAuth(benchmarkApp)
+export const benchmarkStorage = getStorage(benchmarkApp)

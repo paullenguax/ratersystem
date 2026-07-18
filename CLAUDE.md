@@ -40,9 +40,13 @@ Self-serve exam entry (`/take-test` → Canvas SSO with `state=self_serve` → `
 
 The app connects to two Firebase projects:
 - `ratersystem` — main project (`VITE_FIREBASE_*`)
-- Benchmark Check project (`VITE_BENCHMARK_*`) — used by the Benchmark admin tab
+- `lenguax-benchmark-32392` (Benchmark Check project, `VITE_BENCHMARK_*`) — used by the Benchmark admin tab (`benchmarkDb`/`benchmarkAuth`/`benchmarkStorage` in `lib/firebase.ts`)
 
 Both sets of env vars are required for a full build.
+
+`benchmark_results`/`benchmark_flags` in the benchmark project require `request.auth != null` to read (candidate PII). `BenchmarkPage.tsx` bridges the current admin's identity in via the `mintBenchmarkAdminToken` Cloud Function (checks `people/{uid}.role === 'admin'` in `ratersystem`, then mints a custom token for the benchmark project using a second `admin.app()` initialized from the `BENCHMARK_SERVICE_ACCOUNT_KEY` secret) and signs into `benchmarkAuth` with it before any query runs — don't add a `benchmark_*` query to that page without gating it behind `authState === 'ready'`, or it'll hit permission-denied.
+
+The item editor there (`ItemForm`/`BenchmarkItem` in `src/features/benchmark/`) matches the benchmark project's live Firestore schema exactly (`stem`/`form`/index-based `correct`/`stimulus`/`audioRef`/`notes`/`correctedAt`) — this schema drifted out of sync once before and silently corrupted saves; don't reintroduce fields that aren't in the actual documents without checking live data first.
 
 ## SiteGround caching
 
