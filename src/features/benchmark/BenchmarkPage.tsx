@@ -11,7 +11,7 @@ import { benchmarkDb as db, benchmarkAuth, benchmarkStorage, functions } from '@
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { Trash2, Link2, ChevronDown, ChevronRight, Plus, Upload } from 'lucide-react'
+import { Trash2, Link2, ChevronDown, ChevronRight, Plus, Upload, ExternalLink } from 'lucide-react'
 import type { Person } from '@/types'
 import {
   CONSTRUCTS, LEVEL_LABELS, LEVEL_COLOURS,
@@ -564,6 +564,9 @@ function ItemForm({ initial, onSave, onCancel }: {
             className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm">
             {['reading','listening'].map(v => <option key={v}>{v}</option>)}
           </select>
+          {form.modality === 'reading' && (
+            <p className="text-[11px] text-muted-foreground">Set to "listening" to attach audio</p>
+          )}
         </div>
       </div>
 
@@ -818,11 +821,21 @@ export function BenchmarkPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Benchmark Check</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Manage the ICAO comprehension screener — view candidate results and edit the item bank.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">Benchmark Check</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Manage the ICAO comprehension screener — view candidate results and edit the item bank.
+          </p>
+        </div>
+        <a
+          href="https://lenguax.com/benchmark/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground whitespace-nowrap pt-1"
+        >
+          Open candidate app <ExternalLink className="size-3.5" />
+        </a>
       </div>
 
       <div className="flex gap-2 border-b pb-1">
