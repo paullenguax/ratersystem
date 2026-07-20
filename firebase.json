@@ -4,5 +4,9 @@
   },
   "firestore": {
     "rules": "firestore.rules"
+  },
+  "storage": {
+    "bucket": "ratersystem.firebasestorage.app",
+    "rules": "storage.rules"
   }
 }

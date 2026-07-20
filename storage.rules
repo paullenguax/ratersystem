@@ -1,0 +1,63 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // ── helpers ──────────────────────────────────────────────────────────────
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        firestore.get(/databases/(default)/documents/people/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // ── tests ────────────────────────────────────────────────────────────────
+    // Test-bank recording audio, uploaded from TestDrawer.tsx (admin-only route).
+    // Raters play it back via the token URL stored on the test_bank doc (bypasses
+    // rules), but keep SDK read available to any signed-in rater for safety.
+
+    match /tests/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ── phoneme-audio ────────────────────────────────────────────────────────
+    // ICAO sound-chart clips. Played back on /practice/:code, a public,
+    // unauthenticated route — must stay publicly readable. Uploaded only from
+    // PronunciationAdminPage.tsx (admin-only route).
+
+    match /phoneme-audio/{fileName} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ── cert-templates ───────────────────────────────────────────────────────
+    // Cert background JPGs. URLs are stored in cert_config/templates and fetched
+    // by their token (bypasses rules) from the public /validate page, but keep
+    // SDK read admin-only since there's no legitimate non-admin SDK caller.
+
+    match /cert-templates/{fileName} {
+      allow read, write: if isAdmin();
+    }
+
+    // ── cert-display / cert-psd ──────────────────────────────────────────────
+    // Admin-only preview JPGs and source PSDs, used only by CertAssetsPage.tsx.
+
+    match /cert-display/{certType}/{fileName} {
+      allow read, write: if isAdmin();
+    }
+
+    match /cert-psd/{certType}/{fileName} {
+      allow read, write: if isAdmin();
+    }
+
+    // ── default deny ─────────────────────────────────────────────────────────
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
