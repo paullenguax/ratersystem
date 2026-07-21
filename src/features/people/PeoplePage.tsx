@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { collection, getDocs } from 'firebase/firestore'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { collection, getDocs, deleteDoc, doc } from 'firebase/firestore'
 import { useReactTable, getCoreRowModel, getSortedRowModel, flexRender, type ColumnDef, type SortingState } from '@tanstack/react-table'
-import { Plus, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
+import { Plus, ChevronUp, ChevronDown, ChevronsUpDown, Trash2 } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import type { Person } from '@/types'
 import { PersonDrawer } from './PersonDrawer'
@@ -26,6 +26,7 @@ async function fetchPeople(): Promise<Person[]> {
 }
 
 export function PeoplePage() {
+  const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState<'all' | Person['role']>('all')
   const [statusFilter, setStatusFilter] = useState<'all' | Person['status']>('all')
@@ -33,8 +34,20 @@ export function PeoplePage() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [selectedPerson, setSelectedPerson] = useState<Person | undefined>()
   const [sorting, setSorting] = useState<SortingState>([{ id: 'role', desc: false }])
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const { data: people = [], isLoading } = useQuery({ queryKey: ['people'], queryFn: fetchPeople })
+
+  async function handleDelete(person: Person) {
+    if (!confirm(`Delete ${person.name}? This permanently removes their record from the database — it does not touch any assignments or scores that might still reference them. This cannot be undone.`)) return
+    setDeletingId(person.id)
+    try {
+      await deleteDoc(doc(db, 'people', person.id))
+      queryClient.invalidateQueries({ queryKey: ['people'] })
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   const filtered = useMemo(() => people.filter(p => {
     const s = search.toLowerCase()
@@ -103,13 +116,24 @@ export function PeoplePage() {
     {
       id: 'actions',
       cell: ({ row }) => (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => { setSelectedPerson(row.original); setDrawerOpen(true) }}
-        >
-          Edit
-        </Button>
+        <div className="flex items-center justify-end gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => { setSelectedPerson(row.original); setDrawerOpen(true) }}
+          >
+            Edit
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={deletingId === row.original.id}
+            onClick={() => handleDelete(row.original)}
+            className="text-muted-foreground hover:text-destructive"
+          >
+            <Trash2 className="size-4" />
+          </Button>
+        </div>
       ),
     },
   ]

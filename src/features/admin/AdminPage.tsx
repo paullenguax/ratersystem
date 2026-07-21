@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { RefreshCw, Shuffle, BarChart2, Award, UserPlus, ClipboardList, Search, Mic2, Radio } from 'lucide-react'
+import { RefreshCw, Shuffle, BarChart2, Award, UserPlus, ClipboardList, Search, Mic2, Radio, History } from 'lucide-react'
 
 const tools = [
   {
@@ -37,6 +37,12 @@ const tools = [
     icon: BarChart2,
     label: 'Import Rasch Results',
     description: 'Paste a Facets .out file to extract rater measures and Wright map data for Reports.',
+  },
+  {
+    to: '/admin/import-historical-scores',
+    icon: History,
+    label: 'Import Historical Scores',
+    description: 'Backfill scores for people missed by the original migration, from a scores CSV and a rater number-to-name map. Matches to existing people — never creates new ones.',
   },
   {
     to: '/admin/cert-assets',
