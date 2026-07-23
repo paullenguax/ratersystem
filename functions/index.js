@@ -359,14 +359,21 @@ exports.invitePerson = onCall({ secrets: [RESEND_API_KEY] }, async (request) => 
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   })
 
-  const resetLink = await admin.auth().generatePasswordResetLink(email, {
-    url: 'https://lenguax.com/ratersystem/login',
-  })
-
-  const apiKey = RESEND_API_KEY.value()
-  if (apiKey) {
-    try {
-      await fetch('https://api.resend.com/emails', {
+  // The account + people doc above are the important part and are already
+  // durably created — nothing past this point should throw and undo the
+  // caller's success. generatePasswordResetLink can fail on its own (e.g. an
+  // unauthorized continue-URI domain), so it's wrapped alongside the email
+  // send rather than left to crash the whole call; either way the admin can
+  // fall back to "Forgot password" on the login page, which doesn't need a
+  // custom continue URL at all.
+  let inviteEmailSent = false
+  try {
+    const resetLink = await admin.auth().generatePasswordResetLink(email, {
+      url: 'https://lenguax.com/ratersystem/login',
+    })
+    const apiKey = RESEND_API_KEY.value()
+    if (apiKey) {
+      const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${apiKey}`,
@@ -379,14 +386,13 @@ exports.invitePerson = onCall({ secrets: [RESEND_API_KEY] }, async (request) => 
           text: `You've been added to the Lenguax RaterSystem. Set your password here:\n\n${resetLink}`,
         }),
       })
-    } catch (err) {
-      // Don't fail the call over this — the account + people doc already
-      // exist; the admin can trigger another reset email if it didn't land.
-      console.error('invitePerson: failed to send invite email', err)
+      inviteEmailSent = res.ok
     }
+  } catch (err) {
+    console.error('invitePerson: failed to generate/send invite email', err)
   }
 
-  return { uid: userRecord.uid }
+  return { uid: userRecord.uid, inviteEmailSent }
 })
 
 exports.canvasEnrollments = onCall(async (request) => {

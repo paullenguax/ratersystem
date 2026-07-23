@@ -20,7 +20,7 @@ type FormData = z.infer<typeof schema>
 
 const invitePersonFn = httpsCallable<
   { name: string; email: string; role: FormData['role']; canStandardize?: boolean },
-  { uid: string }
+  { uid: string; inviteEmailSent: boolean }
 >(functions, 'invitePerson')
 
 interface Props {
@@ -32,6 +32,7 @@ export function InvitePersonDialog({ open, onClose }: Props) {
   const queryClient = useQueryClient()
   const [canStandardize, setCanStandardize] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [emailWarning, setEmailWarning] = useState<string | null>(null)
 
   const { register, handleSubmit, control, reset, formState: { errors, isSubmitting } } =
     useForm<FormData>({
@@ -44,15 +45,24 @@ export function InvitePersonDialog({ open, onClose }: Props) {
       reset({ name: '', email: '', role: 'interlocutor' })
       setCanStandardize(false)
       setSubmitError(null)
+      setEmailWarning(null)
     }
   }, [open, reset])
 
   async function onSubmit(data: FormData) {
     setSubmitError(null)
+    setEmailWarning(null)
     try {
-      await invitePersonFn({ ...data, canStandardize })
+      const result = await invitePersonFn({ ...data, canStandardize })
       queryClient.invalidateQueries({ queryKey: ['people'] })
-      onClose()
+      if (result.data.inviteEmailSent) {
+        onClose()
+      } else {
+        // Account + people doc exist either way — only the email failed —
+        // so leave the drawer open just long enough to tell the admin the
+        // fallback ("Forgot password" on the login page) still works.
+        setEmailWarning(`${data.name}'s account was created, but the invite email couldn't be sent. Ask them to use "Forgot password" on the login page to set a password.`)
+      }
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Failed to send invite')
     }
@@ -109,10 +119,21 @@ export function InvitePersonDialog({ open, onClose }: Props) {
           </label>
 
           {submitError && <p className="text-xs text-destructive">{submitError}</p>}
+          {emailWarning && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+              {emailWarning}
+            </p>
+          )}
 
           <SheetFooter className="mt-2">
-            <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-            <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Sending…' : 'Send invite'}</Button>
+            {emailWarning ? (
+              <Button type="button" onClick={onClose}>Close</Button>
+            ) : (
+              <>
+                <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+                <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Sending…' : 'Send invite'}</Button>
+              </>
+            )}
           </SheetFooter>
         </form>
       </SheetContent>
