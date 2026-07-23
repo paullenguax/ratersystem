@@ -10,6 +10,12 @@ import { CanvasCallbackPage } from '@/features/auth/CanvasCallbackPage'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { PeoplePage } from '@/features/people/PeoplePage'
 import { TestBankPage } from '@/features/testBank/TestBankPage'
+import { StorylineTestsPage } from '@/features/storyline/StorylineTestsPage'
+import { StorylineVersionsPage } from '@/features/storyline/StorylineVersionsPage'
+import { StorylineVersionEditorPage } from '@/features/storyline/StorylineVersionEditorPage'
+import { StorylineTemplateEditorPage } from '@/features/storyline/StorylineTemplateEditorPage'
+import { StorylinePartsPage } from '@/features/storyline/StorylinePartsPage'
+import { StorylinePartEditorPage } from '@/features/storyline/StorylinePartEditorPage'
 import { SessionsPage } from '@/features/sessions/SessionsPage'
 import { AssignmentsPage } from '@/features/assignments/AssignmentsPage'
 import { AssignmentReviewPage } from '@/features/assignments/AssignmentReviewPage'
@@ -62,6 +68,12 @@ export default function App() {
                 <Route index element={<DashboardPage />} />
                 <Route path="people"      element={<ProtectedRoute allowedRoles={['admin']}><PeoplePage /></ProtectedRoute>} />
                 <Route path="test-bank"   element={<ProtectedRoute allowedRoles={['admin']}><TestBankPage /></ProtectedRoute>} />
+                <Route path="test-versions" element={<ProtectedRoute allowedRoles={['admin']}><StorylineTestsPage /></ProtectedRoute>} />
+                <Route path="test-versions/template" element={<ProtectedRoute allowedRoles={['admin']}><StorylineTemplateEditorPage /></ProtectedRoute>} />
+                <Route path="test-versions/parts" element={<ProtectedRoute allowedRoles={['admin']}><StorylinePartsPage /></ProtectedRoute>} />
+                <Route path="test-versions/parts/:partId/edit" element={<ProtectedRoute allowedRoles={['admin']}><StorylinePartEditorPage /></ProtectedRoute>} />
+                <Route path="test-versions/:testId" element={<ProtectedRoute allowedRoles={['admin']}><StorylineVersionsPage /></ProtectedRoute>} />
+                <Route path="test-versions/:testId/versions/:versionId/edit" element={<ProtectedRoute allowedRoles={['admin']}><StorylineVersionEditorPage /></ProtectedRoute>} />
                 <Route path="sessions"    element={<ProtectedRoute allowedRoles={['admin']}><SessionsPage /></ProtectedRoute>} />
                 <Route path="assignments" element={<AssignmentsPage />} />
                 <Route path="assignments/quick-entry" element={<ProtectedRoute allowedRoles={['admin']}><QuickEntryPage /></ProtectedRoute>} />

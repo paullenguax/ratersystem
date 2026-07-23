@@ -54,6 +54,25 @@ service firebase.storage {
       allow read, write: if isAdmin();
     }
 
+    // ── storylines ───────────────────────────────────────────────────────────
+    // Storyline Replacement item media (images/audio), uploaded from
+    // StorylineVersionEditorPage.tsx (admin-only route). The exported player
+    // reads media via the token URL stored in each item (bypasses rules), so
+    // SDK access stays admin-only in both directions — test content is
+    // confidential, unlike test-bank recordings.
+
+    match /storylines/{testId}/{versionId}/{fileName} {
+      allow read, write: if isAdmin();
+    }
+
+    // ── storylines/parts ─────────────────────────────────────────────────────
+    // Pooled Part media, uploaded from StorylinePartEditorPage.tsx. Not scoped
+    // to a testId — Parts are shared across role types.
+
+    match /storylines/parts/{partId}/{fileName} {
+      allow read, write: if isAdmin();
+    }
+
     // ── default deny ─────────────────────────────────────────────────────────
 
     match /{allPaths=**} {

@@ -132,6 +132,36 @@ service cloud.firestore {
       allow write: if true;
     }
 
+    // ── storyline_tests ───────────────────────────────────────────────────────
+    // Test-authoring content (Storyline Replacement). Admin-only in both
+    // directions — unlike test_bank, no other role has a legitimate reason to
+    // read test content, and the exported player never queries Firestore
+    // directly (it only uses public Storage download-token URLs).
+
+    match /storyline_tests/{testId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ── storyline_versions ────────────────────────────────────────────────────
+
+    match /storyline_versions/{versionId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ── storyline_template ────────────────────────────────────────────────────
+    // Single shared, global examiner script template (one doc, id "current").
+
+    match /storyline_template/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ── storyline_parts ───────────────────────────────────────────────────────
+    // Pooled Part content, not scoped to a Test — shared across role types.
+
+    match /storyline_parts/{partId} {
+      allow read, write: if isAdmin();
+    }
+
     // ── canvasEnrollmentLog ───────────────────────────────────────────────────
     // Written only by Firebase Functions (admin SDK bypasses rules).
     // Readable by admins only.

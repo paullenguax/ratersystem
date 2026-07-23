@@ -25,6 +25,7 @@ Manages the full workflow of ICAO English rating: assigning tests to raters, ent
 | Dashboard | ✓ | ✓ | ✓ |
 | People | ✓ | | |
 | Test Bank | ✓ | | |
+| Storyline | ✓ | | |
 | Events (Sessions) | ✓ | | |
 | Assignments | ✓ | | |
 | Scoring | ✓ | ✓ | ✓ |
@@ -58,6 +59,7 @@ Role is determined by the `people` Firestore collection — the doc ID **must** 
 | `config/canvas` | Canvas API token, Canvas Sync course list, `excludedCourseIds`, `notificationEmail` for self-serve alerts |
 | `canvasEnrollmentLog` | Unified log of Canvas enrollments from both WooCommerce (`CanvasCohortEnrollment` WP plugin) and the manual `/admin/canvas-enroll` wizard |
 | `practice_sessions` / `practice_scores` | Ad-hoc live-course practice player (`/practice`), joined via a 6-character code, no login required |
+| `storyline_tests` / `storyline_versions` | Storyline Replacement test authoring — see "Storyline Replacement" section below |
 
 ## Local dev
 
@@ -165,6 +167,61 @@ Shared by all three roles for working through an assignment's 4 tests — used b
 
 `PracticeScorePage.tsx` (`/practice/:code` — the separate live-practice player for in-course group exercises, joined via a 6-character code, no login) reuses only the ready-to-submit banner/bar-colour treatment from this page, not the rest of it — it's always a single test with no multi-candidate navigation, review, or confirm step.
 
+## Storyline Replacement (`/storyline`)
+
+Phase 1 of replacing Articulate Storyline as the tool used to author and run
+aviation English speaking tests (full background:
+`/home/paul/Programs/Storyline-Replacement/storyline-replacement-spec.md`).
+This phase covers authoring, in-app preview, and export — **not** the
+WordPress auth/redirect integration, which is a later phase.
+
+- **Data model**: `storyline_tests` (a named test series, e.g. "Approach") →
+  `storyline_versions` (an immutable-once-published version, `testId` +
+  `status: 'draft'|'published'|'archived'` + an embedded `items[]` array).
+  `StorylineItem` = `{ id, type: 'logo'|'task_prompt'|'picture_prompt', order,
+  examinerText?, candidateState, media?: {imageUrl?, audioUrl?}, timing?:
+  {prepSeconds?, responseSeconds?} }`. Task types are structurally identical
+  across tests — only content differs — so the item form doesn't branch on
+  `type`; it's mainly a content-organisation label.
+- **Pages**: `StorylineTestsPage` → `StorylineVersionsPage` (draft/publish/
+  duplicate-as-new-draft/archive lifecycle) → `StorylineVersionEditorPage`
+  (add/reorder/remove items, per-item media upload via `MediaUploadField`).
+  A published version's editor is read-only — edits require "Duplicate" to
+  spin up a new draft.
+- **Access**: `storyline_tests`/`storyline_versions`/`storylines/` Storage are
+  admin-only for read *and* write (unlike `test_bank`'s `isSignedIn()`-read —
+  test content should stay confidential, and the exported player never
+  queries Firestore directly).
+- **Player shell** (`player-src/` at the repo root, sibling to `src/`, its own
+  minimal `tsconfig.json` — deliberately outside the main `tsc -b` graph):
+  plain HTML/TS `examiner.html`/`examiner.ts` (control view, triggers
+  candidate-state changes) and `candidate.html`/`candidate.ts` (builds one
+  hidden panel per item, toggles visibility on incoming messages) — no React
+  or Firebase dependency, so an exported test runs standalone. Sync is via
+  `BroadcastChannel` (replacing the old system's fragile direct cross-window
+  JS reference); both windows independently load the same item list at
+  startup (no ready/handshake race), and the channel carries only the
+  runtime "advance to state X" signal.
+- **Build**: a *separate* `vite.config.player.ts` (multi-page, fixed asset
+  names via a manifest, `outDir` pointed straight at `public/player-shell`)
+  builds this shell. Wired as an npm `prebuild` script, so `public/player-
+  shell/` can never drift from `player-src/` source — safe because it never
+  touches `dist/` beyond what the main build's static-asset copy already
+  does, and `.github/workflows/deploy.yml` only FTPs `dist/`.
+- **Preview**: `useStorylinePreview.ts` writes the current (possibly unsaved)
+  draft items to `localStorage` under a random per-launch session ID and
+  opens `player-shell/examiner.html?preview=1&session=…` — the *exact* same
+  built artifact used for export, so there's no drift between what's tested
+  and what's shipped.
+- **Export**: `exportStoryline.ts` reads `public/player-shell/.vite/
+  manifest.json` (emitted by the player build) to discover every built file
+  without hardcoding filenames, zips them with `jszip` alongside a generated
+  `version.json` (the published version's `items`, referencing live Firebase
+  Storage download-URLs — no media re-hosting, matching the already-decided
+  no-offline-first posture), and downloads it. v1 publish is manual: an admin
+  uploads this zip to the WordPress tests folder and pastes the URL into the
+  existing TEAC-Plugin admin, same as the current Storyline workflow.
+
 ## Notes
 
 - `shadcn/ui` here uses the Base UI variant — always `render` prop, never `asChild`
@@ -174,4 +231,4 @@ Shared by all three roles for working through an assignment's 4 tests — used b
 
 ## Last updated
 
-2026-07-18
+2026-07-22
