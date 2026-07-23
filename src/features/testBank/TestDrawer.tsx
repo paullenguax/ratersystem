@@ -25,13 +25,18 @@ const schema = z.object({
   durationSeconds: z.number().min(0).optional(),
   status: z.enum(['active', 'retired']),
   category: z.enum(['rater_course', 'standardization']),
+  // 'unset' is a form-only sentinel (Select can't bind to undefined) —
+  // stripped back to undefined/null at the Firestore-payload boundary.
+  courseTag: z.enum(['unset', 'rater_course', 'refresher_course', 'other']),
+  dayLabel: z.string().optional(),
   notes: z.string().optional(),
 })
 type FormData = z.infer<typeof schema>
 
 const EMPTY: FormData = {
   recordingUrl: '', candidateName: '', candidateNationality: '',
-  testType: 'PPL', durationSeconds: undefined, status: 'active', category: 'rater_course', notes: '',
+  testType: 'PPL', durationSeconds: undefined, status: 'active', category: 'rater_course',
+  courseTag: 'unset', dayLabel: '', notes: '',
 }
 
 interface Props {
@@ -72,7 +77,7 @@ export function TestDrawer({ open, onClose, test }: Props) {
 
   useEffect(() => {
     if (open) {
-      const vals = test ? {
+      const vals: FormData = test ? {
         recordingUrl: test.recordingUrl,
         candidateName: test.candidateName,
         candidateNationality: test.candidateNationality,
@@ -80,6 +85,8 @@ export function TestDrawer({ open, onClose, test }: Props) {
         durationSeconds: test.durationSeconds,
         status: test.status,
         category: test.category ?? 'rater_course',
+        courseTag: test.courseTag ?? 'unset',
+        dayLabel: test.dayLabel ?? '',
         notes: test.notes ?? '',
       } : EMPTY
       reset(vals)
@@ -99,6 +106,8 @@ export function TestDrawer({ open, onClose, test }: Props) {
       durationSeconds: data.durationSeconds ?? null,
       status: data.status,
       category: data.category,
+      courseTag: data.courseTag === 'unset' ? null : data.courseTag,
+      dayLabel: data.dayLabel?.trim() || null,
       excludeFromPool,
       notes: data.notes ?? '',
     }
@@ -214,6 +223,27 @@ export function TestDrawer({ open, onClose, test }: Props) {
                   </SelectContent>
                 </Select>
               )} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label>Used in</Label>
+              <Controller name="courseTag" control={control} render={({ field }) => (
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unset">—</SelectItem>
+                    <SelectItem value="rater_course">Rater course</SelectItem>
+                    <SelectItem value="refresher_course">Refresher course</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              )} />
+            </div>
+            <div className="space-y-1">
+              <Label>Day</Label>
+              <Input {...register('dayLabel')} placeholder="e.g. Day 1" />
             </div>
           </div>
 

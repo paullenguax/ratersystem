@@ -302,6 +302,14 @@ export interface Test {
   excludeFromPool?: boolean
   // Undefined is treated as 'rater_course' everywhere this is read.
   category?: 'rater_course' | 'standardization'
+  // Which course this test's recording is used in — a sub-classification
+  // within the rater_course pool (unrelated to `category` above, which
+  // separates rater_course from standardization). Helps a trainer find the
+  // right test when picking one for a Practice Session.
+  courseTag?: 'rater_course' | 'refresher_course' | 'other'
+  // Free-text, e.g. "Day 1" — sortable/filterable alongside courseTag in
+  // Test Bank and the Practice Session test picker.
+  dayLabel?: string
   canonicalDifficulty?: number | null
   canonicalSE?: number | null
   notes?: string

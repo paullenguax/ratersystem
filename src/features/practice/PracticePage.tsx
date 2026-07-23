@@ -85,7 +85,20 @@ function CreateDialog({
   const { user } = useAuth()
   const [title, setTitle] = useState('')
   const [selectedTestId, setSelectedTestId] = useState('')
+  const [courseTagFilter, setCourseTagFilter] = useState<'all' | NonNullable<Test['courseTag']>>('all')
   const [saving, setSaving] = useState(false)
+
+  // Grouped by courseTag, then ordered by dayLabel (plain string sort — "Day 1"
+  // before "Day 2" etc, pad to "Day 01" if a course ever runs past 9 days) so
+  // a trainer can quickly scan for the right day's test instead of hunting
+  // through every test in the bank by candidate name alone.
+  const filteredTests = tests
+    .filter(t => courseTagFilter === 'all' || t.courseTag === courseTagFilter)
+    .sort((a, b) =>
+      (a.courseTag ?? '').localeCompare(b.courseTag ?? '') ||
+      (a.dayLabel ?? '').localeCompare(b.dayLabel ?? '') ||
+      (a.testId ?? 999) - (b.testId ?? 999)
+    )
 
   async function handleCreate() {
     if (!title.trim() || !user) return
@@ -137,14 +150,24 @@ function CreateDialog({
           <div>
             <label className="text-sm font-medium block mb-1">Test recording (optional)</label>
             <select
+              value={courseTagFilter}
+              onChange={e => { setCourseTagFilter(e.target.value as typeof courseTagFilter); setSelectedTestId('') }}
+              className="w-full border border-input rounded-lg px-3 py-2 text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-primary bg-background"
+            >
+              <option value="all">Used in — any</option>
+              <option value="rater_course">Rater course</option>
+              <option value="refresher_course">Refresher course</option>
+              <option value="other">Other</option>
+            </select>
+            <select
               value={selectedTestId}
               onChange={e => setSelectedTestId(e.target.value)}
               className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-background"
             >
               <option value="">— Trainer plays audio externally —</option>
-              {tests.map(t => (
+              {filteredTests.map(t => (
                 <option key={t.id} value={t.id}>
-                  #{t.testId ?? '?'} — {t.candidateName} ({t.testType})
+                  {t.dayLabel ? `${t.dayLabel} — ` : ''}#{t.testId ?? '?'} — {t.candidateName} ({t.testType})
                 </option>
               ))}
             </select>

@@ -18,12 +18,19 @@ async function fetchTests(): Promise<Test[]> {
   return snap.docs.map(d => ({ id: d.id, ...d.data() }) as Test)
 }
 
+const COURSE_TAG_LABELS: Record<NonNullable<Test['courseTag']>, string> = {
+  rater_course: 'Rater course',
+  refresher_course: 'Refresher course',
+  other: 'Other',
+}
+
 export function TestBankPage() {
   const [search, setSearch] = useState('')
   const [typeFilter, setLicenceFilter] = useState<'all' | Test['testType']>('all')
   const [statusFilter, setStatusFilter] = useState<'all' | Test['status']>('all')
   const [poolFilter, setPoolFilter] = useState<'all' | 'pool' | 'excluded'>('all')
   const [categoryFilter, setCategoryFilter] = useState<'all' | NonNullable<Test['category']>>('all')
+  const [courseTagFilter, setCourseTagFilter] = useState<'all' | NonNullable<Test['courseTag']>>('all')
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [selectedTest, setSelectedTest] = useState<Test | undefined>()
   const [playingUrl, setPlayingUrl] = useState<string | null>(null)
@@ -38,9 +45,10 @@ export function TestBankPage() {
       (typeFilter === 'all' || t.testType === typeFilter) &&
       (statusFilter === 'all' || t.status === statusFilter) &&
       (poolFilter === 'all' || (poolFilter === 'excluded' ? !!t.excludeFromPool : !t.excludeFromPool)) &&
-      (categoryFilter === 'all' || (t.category ?? 'rater_course') === categoryFilter)
+      (categoryFilter === 'all' || (t.category ?? 'rater_course') === categoryFilter) &&
+      (courseTagFilter === 'all' || t.courseTag === courseTagFilter)
     )
-  }), [tests, search, typeFilter, statusFilter, categoryFilter])
+  }), [tests, search, typeFilter, statusFilter, categoryFilter, courseTagFilter])
 
   const columns: ColumnDef<Test>[] = [
     {
@@ -74,6 +82,22 @@ export function TestBankPage() {
       header: 'Category',
       enableSorting: false,
       cell: ({ row }) => <CategoryBadge category={row.original.category} />,
+    },
+    {
+      id: 'courseTag',
+      header: 'Used in',
+      enableSorting: false,
+      cell: ({ row }) => row.original.courseTag
+        ? <Badge variant="outline">{COURSE_TAG_LABELS[row.original.courseTag]}</Badge>
+        : <span className="text-muted-foreground/50 text-xs">—</span>,
+    },
+    {
+      accessorKey: 'dayLabel',
+      header: 'Day',
+      sortUndefined: 'last',
+      cell: ({ row }) => (
+        <span className="text-muted-foreground text-sm">{row.original.dayLabel ?? '—'}</span>
+      ),
     },
     {
       id: 'excludeFromPool',
@@ -180,6 +204,15 @@ export function TestBankPage() {
             <SelectItem value="all">All categories</SelectItem>
             <SelectItem value="rater_course">Rater course</SelectItem>
             <SelectItem value="standardization">Standardization</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={courseTagFilter} onValueChange={v => setCourseTagFilter(v as typeof courseTagFilter)}>
+          <SelectTrigger className="w-40"><SelectValue placeholder="Used in" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Used in — any</SelectItem>
+            <SelectItem value="rater_course">Rater course</SelectItem>
+            <SelectItem value="refresher_course">Refresher course</SelectItem>
+            <SelectItem value="other">Other</SelectItem>
           </SelectContent>
         </Select>
       </div>
