@@ -4,9 +4,19 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { collection, getDocs, doc, getDoc, query, where, updateDoc, arrayRemove, deleteDoc } from 'firebase/firestore'
 import { ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { db } from '@/lib/firebase'
-import type { Assignment, Person, Score, Test } from '@/types'
+import type { Assignment, Person, Score, StandardizationScore, Test } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+
+// Score and StandardizationScore share every field this page reads
+// (dims/overallLevel/raterId/raterName/testDocId/assignmentId) — the only
+// differences (`published` vs `comments`) are never referenced here, so a
+// union works fine rather than duplicating this whole page per category.
+type AnyScore = Score | StandardizationScore
+
+function scoresCollectionFor(assignment: Assignment) {
+  return (assignment.category ?? 'rater_course') === 'standardization' ? 'standardization_scores' : 'scores'
+}
 
 const DIMS = [
   { key: 'pronunciation' as const, abbr: 'PRO' },
@@ -49,9 +59,9 @@ async function fetchTests(ids: string[]): Promise<Test[]> {
     .sort((a, b) => (a.testId ?? 999) - (b.testId ?? 999))
 }
 
-async function fetchRaterScores(assignmentId: string): Promise<Score[]> {
-  const snap = await getDocs(query(collection(db, 'scores'), where('assignmentId', '==', assignmentId)))
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }) as Score)
+async function fetchRaterScores(assignmentId: string, scoresCollection: string): Promise<AnyScore[]> {
+  const snap = await getDocs(query(collection(db, scoresCollection), where('assignmentId', '==', assignmentId)))
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }) as AnyScore)
 }
 
 async function fetchPeople(): Promise<Person[]> {
@@ -59,14 +69,14 @@ async function fetchPeople(): Promise<Person[]> {
   return snap.docs.map(d => ({ id: d.id, ...d.data() }) as Person)
 }
 
-async function fetchAllTestScores(testDocIds: string[]): Promise<Score[]> {
+async function fetchAllTestScores(testDocIds: string[], scoresCollection: string): Promise<AnyScore[]> {
   if (!testDocIds.length) return []
-  const batches: Score[][] = []
+  const batches: AnyScore[][] = []
   for (let i = 0; i < testDocIds.length; i += 30) {
     const snap = await getDocs(
-      query(collection(db, 'scores'), where('testDocId', 'in', testDocIds.slice(i, i + 30)))
+      query(collection(db, scoresCollection), where('testDocId', 'in', testDocIds.slice(i, i + 30)))
     )
-    batches.push(snap.docs.map(d => ({ id: d.id, ...d.data() }) as Score))
+    batches.push(snap.docs.map(d => ({ id: d.id, ...d.data() }) as AnyScore))
   }
   return batches.flat()
 }
@@ -110,37 +120,48 @@ export function AssignmentReviewPage() {
     enabled: !!assignment,
   })
 
+  const scoresCollection = assignment ? scoresCollectionFor(assignment) : null
+
   const { data: raterScores = [] } = useQuery({
-    queryKey: ['assignment-scores', assignmentId],
-    queryFn: () => fetchRaterScores(assignmentId!),
-    enabled: !!assignmentId,
+    queryKey: ['assignment-scores', assignmentId, scoresCollection],
+    queryFn: () => fetchRaterScores(assignmentId!, scoresCollection!),
+    enabled: !!assignmentId && !!scoresCollection,
   })
 
   const { data: allTestScores = [] } = useQuery({
-    queryKey: ['all-test-scores', assignmentId],
-    queryFn: () => fetchAllTestScores(assignment!.testDocIds),
-    enabled: !!assignment?.testDocIds.length,
+    queryKey: ['all-test-scores', assignmentId, scoresCollection],
+    queryFn: () => fetchAllTestScores(assignment!.testDocIds, scoresCollection!),
+    enabled: !!assignment?.testDocIds.length && !!scoresCollection,
   })
 
   const { data: people = [] } = useQuery({ queryKey: ['people'], queryFn: fetchPeople })
 
+  // "Other raters" eligible to appear in the comparison dropdown — for
+  // rater-course assignments that's senior_rater/admin (keeps trainee exam
+  // noise out of the comparison); for standardization it's whoever can
+  // actually produce a standardization score: interlocutors, canStandardize
+  // raters, or admin.
   const srRaterIds = useMemo(() => {
+    const isStandardization = assignment ? (assignment.category ?? 'rater_course') === 'standardization' : false
     return new Set(
       people
-        .filter(p => p.role === 'senior_rater' || p.role === 'admin')
+        .filter(p => isStandardization
+          ? p.role === 'interlocutor' || p.role === 'admin' || p.canStandardize
+          : p.role === 'senior_rater' || p.role === 'admin'
+        )
         .map(p => p.id)
     )
-  }, [people])
+  }, [people, assignment])
 
   const raterScoreMap = useMemo(() => {
-    const m = new Map<string, Score>()
+    const m = new Map<string, AnyScore>()
     raterScores.forEach(s => m.set(s.testDocId, s))
     return m
   }, [raterScores])
 
   // Group all scores by testDocId for expanded rows — senior raters / admins only
   const scoresByTest = useMemo(() => {
-    const m = new Map<string, Score[]>()
+    const m = new Map<string, AnyScore[]>()
     allTestScores
       .filter(s => srRaterIds.has(s.raterId))
       .forEach(s => {
@@ -172,7 +193,7 @@ export function AssignmentReviewPage() {
   }, [tests, allTestScores])
 
   const raterSummary = useMemo(() => {
-    const scored = tests.map(t => raterScoreMap.get(t.id)).filter(Boolean) as Score[]
+    const scored = tests.map(t => raterScoreMap.get(t.id)).filter(Boolean) as AnyScore[]
     if (!scored.length) return null
     const dims: Record<string, number | null> = {}
     DIMS.forEach(d => { dims[d.key] = mean(scored.map(s => s[d.key] as number)) })
