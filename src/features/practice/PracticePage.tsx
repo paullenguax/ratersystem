@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
 import {
-  collection, getDocs, addDoc, updateDoc, deleteDoc,
+  collection, getDocs, getDoc, addDoc, updateDoc, deleteDoc,
   doc, query, where, onSnapshot, serverTimestamp,
 } from 'firebase/firestore'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Copy, Eye, EyeOff, Download, Trash2, X, ChevronLeft, Radio, Plus } from 'lucide-react'
+import { Copy, Eye, EyeOff, Download, Trash2, X, ChevronLeft, Radio, Plus, GraduationCap } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
 import type { PracticeSession, PracticeScore, Test } from '@/types'
@@ -174,6 +174,19 @@ function ResultsView({ session, onBack }: { session: PracticeSession; onBack: ()
   const [shuffledIds, setShuffledIds] = useState<string[]>([])
   const [copied, setCopied] = useState(false)
   const [clearing, setClearing] = useState(false)
+  const [promoting, setPromoting] = useState(false)
+
+  // The Test this session was built from (if any) — needed to supply
+  // candidateName/testType/testNumber when promoting scores, since
+  // standardization_scores requires those and PracticeScore doesn't carry them.
+  const { data: linkedTest } = useQuery({
+    queryKey: ['practice-linked-test', session.testDocId],
+    queryFn: async () => {
+      const snap = await getDoc(doc(db, 'test_bank', session.testDocId!))
+      return snap.exists() ? ({ id: snap.id, ...snap.data() } as Test) : null
+    },
+    enabled: !!session.testDocId,
+  })
 
   // Real-time listener
   useEffect(() => {
@@ -221,6 +234,45 @@ function ResultsView({ session, onBack }: { session: PracticeSession; onBack: ()
     setClearing(false)
   }
 
+  // Copies Canvas-identified, not-yet-promoted scores into standardization_scores.
+  // Anonymous submissions (no raterId) are skipped — there's no real person to
+  // attribute them to. Written as the signed-in admin, so the existing
+  // standardization_scores create rule's isAdmin() branch covers this without
+  // needing any rule changes.
+  async function promoteScores() {
+    if (!linkedTest) return
+    const eligible = scores.filter(s => s.raterId && !s.promotedToStandardization)
+    if (eligible.length === 0) return
+    if (!confirm(`Save ${eligible.length} score${eligible.length === 1 ? '' : 's'} to the standardization pool?`)) return
+    setPromoting(true)
+    try {
+      await Promise.all(eligible.map(async s => {
+        await addDoc(collection(db, 'standardization_scores'), {
+          assignmentId: `practice:${session.id}`,
+          sessionId: `practice:${session.id}`,
+          sessionName: `Practice: ${session.title}`,
+          raterId: s.raterId,
+          raterName: s.raterName ?? s.participantName,
+          testDocId: linkedTest.id,
+          testNumber: linkedTest.testId ?? null,
+          candidateName: linkedTest.candidateName,
+          testType: linkedTest.testType,
+          pronunciation: s.pronunciation,
+          structure: s.structure,
+          vocabulary: s.vocabulary,
+          fluency: s.fluency,
+          comprehension: s.comprehension,
+          interactions: s.interactions,
+          overallLevel: s.overallLevel,
+          createdAt: serverTimestamp(),
+        })
+        await updateDoc(doc(db, 'practice_scores', s.id), { promotedToStandardization: true })
+      }))
+    } finally {
+      setPromoting(false)
+    }
+  }
+
   function copyUrl() {
     navigator.clipboard.writeText(practiceUrl(session.code))
     setCopied(true)
@@ -228,6 +280,12 @@ function ResultsView({ session, onBack }: { session: PracticeSession; onBack: ()
   }
 
   const dimKeys = DIMENSIONS.map(d => d.key)
+  const promotableCount = scores.filter(s => s.raterId && !s.promotedToStandardization).length
+  const promoteDisabledReason = !session.testDocId
+    ? 'Only available for sessions built from a Test Bank recording'
+    : promotableCount === 0
+      ? 'No Canvas-identified scores yet'
+      : undefined
 
   return (
     <div className="space-y-4">
@@ -277,6 +335,17 @@ function ResultsView({ session, onBack }: { session: PracticeSession; onBack: ()
             <Trash2 className="size-3.5 mr-1.5" /> Clear scores
           </Button>
         )}
+        {scores.length > 0 && (
+          <Button
+            variant="outline" size="sm"
+            onClick={promoteScores}
+            disabled={promoting || !!promoteDisabledReason}
+            title={promoteDisabledReason}
+          >
+            <GraduationCap className="size-3.5 mr-1.5" />
+            {promoting ? 'Saving…' : `Save${promotableCount > 0 ? ` ${promotableCount}` : ''} to standardization pool`}
+          </Button>
+        )}
         {session.status === 'active' && (
           <Button variant="outline" size="sm" onClick={closeSession} className="text-destructive hover:text-destructive ml-auto">
             Close session
@@ -306,7 +375,17 @@ function ResultsView({ session, onBack }: { session: PracticeSession; onBack: ()
               {displayScores.map((s, i) => {
                 return (
                   <tr key={s.id} className={i % 2 === 0 ? 'bg-background' : 'bg-muted/20'}>
-                    <td className="px-3 py-2 font-medium">{s.participantName}</td>
+                    <td className="px-3 py-2 font-medium">
+                      {s.participantName}
+                      {!s.raterId && (
+                        <span className="ml-1.5 text-[10px] text-muted-foreground font-normal">anonymous</span>
+                      )}
+                      {s.promotedToStandardization && (
+                        <span className="ml-1.5 text-[10px] text-green-700 bg-green-50 border border-green-200 rounded px-1 py-0.5 font-normal">
+                          ✓ saved
+                        </span>
+                      )}
+                    </td>
                     {dimKeys.map(k => (
                       <td key={k} className="text-center px-2 py-2">
                         <span className={`inline-block text-xs font-bold px-1.5 py-0.5 rounded border ${levelColour(s[k as keyof PracticeScore] as number)}`}>

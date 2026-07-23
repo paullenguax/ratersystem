@@ -108,6 +108,10 @@ export interface PracticeScore {
   sessionId: string
   sessionCode: string
   participantName: string
+  // Present only when the participant signed in via Canvas SSO — anonymous
+  // ("I don't have Canvas") submissions omit both, and can never be promoted.
+  raterId?: string
+  raterName?: string
   pronunciation: number
   structure: number
   vocabulary: number
@@ -117,6 +121,9 @@ export interface PracticeScore {
   overallLevel: number
   sortKey: number
   submittedAt?: Timestamp
+  // Stamped by PracticePage's "Save to standardization pool" action so a
+  // repeat click doesn't create duplicate standardization_scores docs.
+  promotedToStandardization?: boolean
 }
 
 export type TemplateSlideKind =

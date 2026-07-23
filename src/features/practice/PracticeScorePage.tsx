@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import {
-  collection, getDocs, query, where,
+  collection, getDocs, getDoc, query, where,
   addDoc, updateDoc, doc, serverTimestamp,
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { useAuth } from '@/context/AuthContext'
+import { canvasOAuthUrl } from '@/lib/canvasAuthUrl'
 import type { PracticeSession, PracticeScore } from '@/types'
 import { IcaoSliders, type DimScores } from '@/features/scoring/IcaoSliders'
 import { Button } from '@/components/ui/button'
@@ -27,9 +29,11 @@ interface StoredSubmission {
 
 export function PracticeScorePage() {
   const { code } = useParams<{ code: string }>()
+  const { user, loading: authLoading } = useAuth()
   const [pageState, setPageState] = useState<PageState>('loading')
   const [session, setSession] = useState<PracticeSession | null>(null)
   const [name, setName] = useState('')
+  const [showAnonymousForm, setShowAnonymousForm] = useState(false)
   const [scores, setScores] = useState<DimScores>([null, null, null, null, null, null])
   const [showErrors, setShowErrors] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -37,6 +41,7 @@ export function PracticeScorePage() {
   const [existingDocId, setExistingDocId] = useState<string | null>(null)
   const audioRef = useRef<HTMLAudioElement>(null)
 
+  // Load and validate the session itself — independent of identity.
   useEffect(() => {
     if (!code) { setPageState('not-found'); return }
 
@@ -46,21 +51,52 @@ export function PracticeScorePage() {
 
       const s = { id: snap.docs[0].id, ...snap.docs[0].data() } as PracticeSession
       setSession(s)
-
-      if (s.status === 'closed') { setPageState('closed'); return }
-
-      const stored: StoredSubmission | null = JSON.parse(localStorage.getItem(LS_KEY(code!)) ?? 'null')
-      if (stored) {
-        setName(stored.name)
-        setExistingDocId(stored.docId)
-        setPageState('done')
-      } else {
-        setPageState('name-entry')
-      }
+      if (s.status === 'closed') setPageState('closed')
+      // otherwise stays 'loading' — the identity-resolution effect below picks up from here
     }
 
     load()
   }, [code])
+
+  // Once the session is confirmed open AND auth state has settled, decide
+  // whether this is a Canvas-identified participant (skip straight to
+  // scoring, or straight to 'done' if they already have a score) or an
+  // anonymous one (falls back to the existing localStorage-based flow).
+  useEffect(() => {
+    if (!session || session.status === 'closed' || authLoading || pageState !== 'loading') return
+
+    async function resolveIdentity() {
+      if (user) {
+        const personSnap = await getDoc(doc(db, 'people', user.uid))
+        setName((personSnap.data()?.name as string | undefined) ?? user.email ?? 'You')
+
+        const scoresSnap = await getDocs(query(collection(db, 'practice_scores'), where('sessionId', '==', session!.id)))
+        const mine = scoresSnap.docs
+          .map(d => ({ id: d.id, ...d.data() }) as PracticeScore)
+          .find(s => s.raterId === user.uid)
+
+        if (mine) {
+          setExistingDocId(mine.id)
+          setPageState('done')
+        } else {
+          setExistingDocId(null)
+          setScores([null, null, null, null, null, null])
+          setPageState('scoring')
+        }
+      } else {
+        const stored: StoredSubmission | null = JSON.parse(localStorage.getItem(LS_KEY(code!)) ?? 'null')
+        if (stored) {
+          setName(stored.name)
+          setExistingDocId(stored.docId)
+          setPageState('done')
+        } else {
+          setPageState('name-entry')
+        }
+      }
+    }
+
+    resolveIdentity()
+  }, [session, user, authLoading, pageState, code])
 
   // Keyboard shortcut: 1–6 fills next unscored dimension
   useEffect(() => {
@@ -103,6 +139,7 @@ export function PracticeScorePage() {
         sessionId: session.id,
         sessionCode: session.code,
         participantName: name.trim(),
+        ...(user ? { raterId: user.uid, raterName: name.trim() } : {}),
         pronunciation: p, structure: st, vocabulary: v,
         fluency: fl, comprehension: c, interactions: inter,
         overallLevel: overall,
@@ -123,7 +160,12 @@ export function PracticeScorePage() {
         docId = ref.id
       }
 
-      localStorage.setItem(LS_KEY(code!), JSON.stringify({ name: name.trim(), docId }))
+      // Identified participants are looked up fresh from Firestore each
+      // load (works across devices), so only the anonymous path needs the
+      // localStorage fallback.
+      if (!user) {
+        localStorage.setItem(LS_KEY(code!), JSON.stringify({ name: name.trim(), docId }))
+      }
       setExistingDocId(docId)
       setPageState('done')
     } finally {
@@ -219,23 +261,52 @@ export function PracticeScorePage() {
       <Shell>
         <div className="space-y-6">
           <div>
-            <h1 className="text-xl font-semibold">Enter your name</h1>
-            <p className="text-sm text-muted-foreground mt-1">Your trainer will see this next to your scores.</p>
+            <h1 className="text-xl font-semibold">Sign in to start</h1>
+            <p className="text-sm text-muted-foreground mt-1">Your trainer will see your name next to your scores.</p>
           </div>
-          <div className="space-y-3">
-            <input
-              type="text"
-              placeholder="Your name"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') startScoring() }}
-              autoFocus
-              className="w-full border border-input rounded-lg px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-primary"
-            />
-            <Button className="w-full" disabled={!name.trim()} onClick={startScoring}>
-              Start scoring
-            </Button>
-          </div>
+
+          {!showAnonymousForm ? (
+            <div className="space-y-3">
+              <a
+                href={canvasOAuthUrl(`practice:${encodeURIComponent(session!.code)}`)}
+                className="flex w-full items-center justify-center gap-2 rounded-lg border border-input bg-white px-4 py-3 text-sm font-medium shadow-sm hover:bg-muted/50 transition-colors"
+              >
+                Continue with Canvas
+              </a>
+              <button
+                type="button"
+                onClick={() => setShowAnonymousForm(true)}
+                className="w-full text-center text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+              >
+                I don't have a Canvas account
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <input
+                type="text"
+                placeholder="Your name"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') startScoring() }}
+                autoFocus
+                className="w-full border border-input rounded-lg px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              <Button className="w-full" disabled={!name.trim()} onClick={startScoring}>
+                Start scoring
+              </Button>
+              <p className="text-xs text-muted-foreground text-center">
+                Scores submitted this way can't be added to the standardization pool.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowAnonymousForm(false)}
+                className="w-full text-center text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+              >
+                Back
+              </button>
+            </div>
+          )}
         </div>
       </Shell>
     )

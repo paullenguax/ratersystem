@@ -5,9 +5,10 @@ import {
   useReactTable, getCoreRowModel, getSortedRowModel, getFilteredRowModel,
   flexRender, type ColumnDef, type SortingState,
 } from '@tanstack/react-table'
-import { ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
+import { ChevronUp, ChevronDown, ChevronsUpDown, Play, Square } from 'lucide-react'
 import { db } from '@/lib/firebase'
-import type { StandardizationScore } from '@/types'
+import type { StandardizationScore, Test } from '@/types'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
@@ -34,14 +35,26 @@ async function fetchStandardizationScores(): Promise<StandardizationScore[]> {
     .sort((a, b) => ((b.createdAt as any)?.seconds ?? 0) - ((a.createdAt as any)?.seconds ?? 0))
 }
 
+async function fetchTests(): Promise<Test[]> {
+  const snap = await getDocs(collection(db, 'test_bank'))
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }) as Test)
+}
+
 export function StandardizationResultsPage() {
   const [search, setSearch] = useState('')
   const [sorting, setSorting] = useState<SortingState>([])
+  const [playingUrl, setPlayingUrl] = useState<string | null>(null)
 
   const { data: scores = [], isLoading } = useQuery({
     queryKey: ['standardization-scores'],
     queryFn: fetchStandardizationScores,
   })
+
+  const { data: tests = [] } = useQuery({ queryKey: ['tests'], queryFn: fetchTests })
+  const recordingUrlByTestId = useMemo(
+    () => new Map(tests.map(t => [t.id, t.recordingUrl])),
+    [tests]
+  )
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
@@ -54,6 +67,25 @@ export function StandardizationResultsPage() {
   }, [scores, search])
 
   const columns: ColumnDef<StandardizationScore>[] = [
+    {
+      id: 'audio',
+      header: '',
+      enableSorting: false,
+      cell: ({ row }) => {
+        const url = recordingUrlByTestId.get(row.original.testDocId)
+        if (!url) return null
+        const isPlaying = playingUrl === url
+        return (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setPlayingUrl(isPlaying ? null : url)}
+          >
+            {isPlaying ? <Square className="size-4" /> : <Play className="size-4" />}
+          </Button>
+        )
+      },
+    },
     {
       id: 'sessionName',
       accessorKey: 'sessionName',
@@ -133,6 +165,10 @@ export function StandardizationResultsPage() {
         <h1 className="text-2xl font-semibold">Standardization Results</h1>
       </div>
 
+      {playingUrl && (
+        <audio controls autoPlay src={playingUrl} className="w-full" onEnded={() => setPlayingUrl(null)} />
+      )}
+
       <div className="flex items-center gap-3 flex-wrap">
         <Input
           placeholder="Search rater, candidate, event…"
@@ -190,7 +226,7 @@ export function StandardizationResultsPage() {
                 table.getRowModel().rows.map(row => (
                   <TableRow key={row.id}>
                     {row.getVisibleCells().map(cell => (
-                      <TableCell key={cell.id} className="text-center first:text-left last:text-left [&:nth-child(-n+3)]:text-left">
+                      <TableCell key={cell.id} className="text-center first:text-left last:text-left [&:nth-child(-n+4)]:text-left">
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
                       </TableCell>
                     ))}

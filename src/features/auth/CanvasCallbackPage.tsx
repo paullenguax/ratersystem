@@ -12,7 +12,12 @@ export function CanvasCallbackPage() {
     const params = new URLSearchParams(window.location.search)
     const code = params.get('code')
     const state = params.get('state')
-    const selfServe = state === 'self_serve'
+    const isSelfServeExam = state === 'self_serve'
+    // Practice Sessions round-trips its own code through the same `state`
+    // channel (Canvas always redirects to this one fixed callback URL, so
+    // `state` is the only way the originating page says "come back to X").
+    const practiceCode = state?.startsWith('practice:') ? decodeURIComponent(state.slice('practice:'.length)) : null
+    const selfServe = isSelfServeExam || !!practiceCode
     if (!code) { setError('No authorisation code received from Canvas.'); return }
 
     const canvasAuth = httpsCallable<{ code: string; selfServe: boolean }, { token: string }>(functions, 'canvasAuth')
@@ -21,9 +26,11 @@ export function CanvasCallbackPage() {
     canvasAuth({ code, selfServe })
       .then(result => signInWithCustomToken(auth, result.data.token))
       .then(async () => {
-        if (selfServe) {
+        if (isSelfServeExam) {
           const result = await requestSelfAssignment({})
           navigate('/scoring', { replace: true, state: { assignmentId: result.data.assignmentId } })
+        } else if (practiceCode) {
+          navigate(`/practice/${practiceCode}`, { replace: true })
         } else {
           navigate('/', { replace: true })
         }
