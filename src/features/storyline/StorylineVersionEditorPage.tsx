@@ -168,7 +168,7 @@ export function StorylineVersionEditorPage() {
       <div className="space-y-3">
         {wholeTestSlides.map(slide => {
           const slot = slotContent[slide.id] ?? {}
-          const storagePathPrefix = `storylines/${testId}/${versionId}/`
+          const storagePathPrefix = `storylines/versions/${testId}/${versionId}/`
           return (
             <div key={slide.id} className="rounded-md border p-4 space-y-3">
               <div className="flex items-center justify-between">

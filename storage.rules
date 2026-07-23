@@ -61,7 +61,7 @@ service firebase.storage {
     // SDK access stays admin-only in both directions — test content is
     // confidential, unlike test-bank recordings.
 
-    match /storylines/{testId}/{versionId}/{fileName} {
+    match /storylines/versions/{testId}/{versionId}/{fileName} {
       allow read, write: if isAdmin();
     }
 
