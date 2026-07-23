@@ -1,5 +1,5 @@
 const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https')
-const { onDocumentUpdated } = require('firebase-functions/v2/firestore')
+const { onDocumentUpdated, onDocumentWritten } = require('firebase-functions/v2/firestore')
 const { defineSecret } = require('firebase-functions/params')
 const admin = require('firebase-admin')
 
@@ -35,6 +35,28 @@ async function assertAdmin(request) {
     throw new HttpsError('permission-denied', 'Admin access required')
   }
 }
+
+// ── syncAdminClaim ────────────────────────────────────────────────────────────
+// Mirrors people/{uid}.role onto an `admin: true` Auth custom claim, so
+// Storage Security Rules can check request.auth.token.admin directly instead
+// of doing a cross-service Firestore read (firestore.get()/exists() from
+// Storage rules was found to silently fail in this project — root cause
+// unresolved, but custom claims are the standard, documented pattern for
+// this anyway and sidestep it entirely). Firestore rules keep using the
+// direct people/{uid} lookup as before — this only affects Storage.
+// Custom claims only take effect on a user's NEXT ID token — an already
+// signed-in session needs to sign out/in (or wait for the ~hourly refresh)
+// to pick up a change made here.
+exports.syncAdminClaim = onDocumentWritten('people/{personId}', async (event) => {
+  const uid = event.params.personId
+  const isAdmin = event.data.after?.data()?.role === 'admin'
+  try {
+    await admin.auth().setCustomUserClaims(uid, isAdmin ? { admin: true } : null)
+  } catch (err) {
+    // Auth user may not exist yet (e.g. people doc created before first login) — safe to ignore.
+    console.error(`syncAdminClaim: failed to set claim for ${uid}`, err.message)
+  }
+})
 
 function getBenchmarkAdminApp() {
   const existing = admin.apps.find(a => a?.name === 'benchmarkAdmin')

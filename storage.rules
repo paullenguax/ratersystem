@@ -9,9 +9,13 @@ service firebase.storage {
       return request.auth != null;
     }
 
+    // Checks the `admin` custom claim (kept in sync with people/{uid}.role by
+    // the syncAdminClaim Cloud Function) rather than a cross-service
+    // Firestore read — that pattern was found to silently fail in this
+    // project, and custom claims are the standard approach for Storage
+    // rules anyway.
     function isAdmin() {
-      return isSignedIn() &&
-        firestore.get(/databases/(default)/documents/people/$(request.auth.uid)).data.role == 'admin';
+      return isSignedIn() && request.auth.token.admin == true;
     }
 
     // ── tests ────────────────────────────────────────────────────────────────
