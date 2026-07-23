@@ -1,4 +1,5 @@
 import type { TemplateSlide, StorylineSlotContent, StorylineItem, StorylinePart, StorylinePartNumber } from '@/types'
+import { deriveComboImages, type ComboImageResult } from './deriveComboImages'
 
 function substituteVariables(text: string, variables?: Record<string, string>): string {
   if (!variables) return text
@@ -66,21 +67,40 @@ export function resolveItems(
   versionSlotContent: Record<string, StorylineSlotContent>,
   parts: Partial<Record<StorylinePartNumber, StorylinePart>>,
 ): StorylineItem[] {
-  return [...slides]
-    .sort((a, b) => a.order - b.order)
-    .map(slide => {
-      const slot = slide.partNumber
-        ? parts[slide.partNumber]?.slotContent[slide.id]
-        : versionSlotContent[slide.id]
-      const item: StorylineItem = {
-        id: slide.id,
-        order: slide.order,
-        candidateState: slide.candidateState ?? '',
-        examinerText: resolveScriptText(slide, testVariables, slot),
-        timing: slide.timing,
-      }
-      const media = resolveMedia(slide, slot)
-      if (media) item.media = media
-      return item
-    })
+  const sorted = [...slides].sort((a, b) => a.order - b.order)
+
+  // A multi-image slide (e.g. "show both pictures together") always reuses
+  // the images from the single-image slides before it in the same scope —
+  // computed once here, per scope, rather than trusting each slide's own
+  // slotContent (which the author never fills for these).
+  const wholeTestCombo = deriveComboImages(
+    sorted.filter(s => !s.partNumber),
+    id => versionSlotContent[id]?.images?.[0],
+  )
+  const partCombos: Partial<Record<StorylinePartNumber, Record<string, ComboImageResult>>> = {}
+  for (const n of [1, 2, 3, 4] as StorylinePartNumber[]) {
+    const part = parts[n]
+    partCombos[n] = deriveComboImages(
+      sorted.filter(s => s.partNumber === n),
+      id => part?.slotContent[id]?.images?.[0],
+    )
+  }
+
+  return sorted.map(slide => {
+    const slot = slide.partNumber
+      ? parts[slide.partNumber]?.slotContent[slide.id]
+      : versionSlotContent[slide.id]
+    const item: StorylineItem = {
+      id: slide.id,
+      order: slide.order,
+      candidateState: slide.candidateState ?? '',
+      examinerText: resolveScriptText(slide, testVariables, slot),
+      timing: slide.timing,
+    }
+    let media = resolveMedia(slide, slot)
+    const combo = slide.partNumber ? partCombos[slide.partNumber]?.[slide.id] : wholeTestCombo[slide.id]
+    if (combo) media = { ...media, images: combo.images }
+    if (media) item.media = media
+    return item
+  })
 }

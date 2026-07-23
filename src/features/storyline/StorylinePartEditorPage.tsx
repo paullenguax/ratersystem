@@ -7,6 +7,7 @@ import { db } from '@/lib/firebase'
 import type { StorylinePart, StorylineSlotContent, StorylineTemplate } from '@/types'
 import { QuestionListField } from './QuestionListField'
 import { MediaUploadField } from './MediaUploadField'
+import { deriveComboImages } from './deriveComboImages'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -74,6 +75,10 @@ export function StorylinePartEditorPage() {
 
   const slides = template.slides.filter(s => s.partNumber === part.partNumber).sort((a, b) => a.order - b.order)
   const storagePathPrefix = `storylines/parts/${partId}/`
+  // A slide needing >1 images (e.g. Part 4's "show both pictures together")
+  // always reuses the images from the single-image slides above it — no
+  // separate upload for it, see deriveComboImages.
+  const comboImages = deriveComboImages(slides, id => slotContent[id]?.images?.[0])
 
   return (
     <div className="space-y-4">
@@ -140,12 +145,32 @@ export function StorylinePartEditorPage() {
                 />
               )}
 
-              {!!slide.slotSpec.images && (
+              {!!slide.slotSpec.images && slide.slotSpec.images > 1 ? (
+                <div className="space-y-1">
+                  <Label>Images</Label>
+                  {comboImages[slide.id] ? (
+                    <>
+                      <p className="text-xs text-muted-foreground">
+                        Automatically reuses: {comboImages[slide.id].sourceLabels.join(', ')}
+                      </p>
+                      <div className="grid grid-cols-2 gap-3">
+                        {comboImages[slide.id].images.map((url, i) => (
+                          <img key={i} src={url} alt="" className="max-h-32 rounded border object-contain" />
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Waiting for the image(s) from the slide(s) above to be uploaded first.
+                    </p>
+                  )}
+                </div>
+              ) : !!slide.slotSpec.images && (
                 <div className="grid grid-cols-2 gap-3">
                   {Array.from({ length: slide.slotSpec.images }).map((_, i) => (
                     <MediaUploadField
                       key={i}
-                      label={slide.slotSpec.images! > 1 ? `Image ${i + 1}` : 'Image'}
+                      label="Image"
                       accept="image/*"
                       value={slot.images?.[i]}
                       storagePathPrefix={storagePathPrefix}

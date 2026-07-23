@@ -10,6 +10,7 @@ import type {
 } from '@/types'
 import { QuestionListField } from './QuestionListField'
 import { MediaUploadField } from './MediaUploadField'
+import { deriveComboImages } from './deriveComboImages'
 import { resolveItems } from './resolveItems'
 import { previewStorylineVersion } from './useStorylinePreview'
 import { Button } from '@/components/ui/button'
@@ -105,6 +106,9 @@ export function StorylineVersionEditorPage() {
   }
 
   const wholeTestSlides = template.slides.filter(s => !s.partNumber).sort((a, b) => a.order - b.order)
+  // A slide needing >1 images always reuses the images from the single-image
+  // slides above it — no separate upload for it, see deriveComboImages.
+  const comboImages = deriveComboImages(wholeTestSlides, id => slotContent[id]?.images?.[0])
 
   return (
     <div className="space-y-4">
@@ -136,7 +140,7 @@ export function StorylineVersionEditorPage() {
 
       <div className="rounded-md border p-4 space-y-3">
         <span className="font-medium">Parts</span>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3">
           {PART_NUMBERS.map(n => {
             // Only offer Parts that are actually ready for normal use — published,
             // active, and not a reserve/backup — but keep an already-selected Part
@@ -146,6 +150,11 @@ export function StorylineVersionEditorPage() {
               p.partNumber === n &&
               (p.id === partRefs[n] || (p.status === 'published' && p.active !== false && !p.isBackup))
             )
+            const formatOption = (p: StorylinePart) =>
+              `${p.label}` +
+              (p.status !== 'published' ? ` (${p.status})` : '') +
+              (p.active === false ? ' (inactive)' : '') +
+              (p.isBackup ? ' (backup)' : '')
             return (
               <div key={n} className="space-y-1">
                 <label className="text-sm font-medium">Part {n}</label>
@@ -154,15 +163,17 @@ export function StorylineVersionEditorPage() {
                   onValueChange={v => setPartRefs(prev => ({ ...prev, [n]: v }))}
                   disabled={disabled}
                 >
-                  <SelectTrigger><SelectValue placeholder="Choose a Part…" /></SelectTrigger>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Choose a Part…">
+                      {(v: string) => {
+                        const selected = options.find(p => p.id === v)
+                        return selected ? formatOption(selected) : v
+                      }}
+                    </SelectValue>
+                  </SelectTrigger>
                   <SelectContent>
                     {options.map(p => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.label}
-                        {p.status !== 'published' ? ` (${p.status})` : ''}
-                        {p.active === false ? ' (inactive)' : ''}
-                        {p.isBackup ? ' (backup)' : ''}
-                      </SelectItem>
+                      <SelectItem key={p.id} value={p.id}>{formatOption(p)}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -210,12 +221,32 @@ export function StorylineVersionEditorPage() {
                 />
               )}
 
-              {!!slide.slotSpec.images && (
+              {!!slide.slotSpec.images && slide.slotSpec.images > 1 ? (
+                <div className="space-y-1">
+                  <Label>Images</Label>
+                  {comboImages[slide.id] ? (
+                    <>
+                      <p className="text-xs text-muted-foreground">
+                        Automatically reuses: {comboImages[slide.id].sourceLabels.join(', ')}
+                      </p>
+                      <div className="grid grid-cols-2 gap-3">
+                        {comboImages[slide.id].images.map((url, i) => (
+                          <img key={i} src={url} alt="" className="max-h-32 rounded border object-contain" />
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Waiting for the image(s) from the slide(s) above to be uploaded first.
+                    </p>
+                  )}
+                </div>
+              ) : !!slide.slotSpec.images && (
                 <div className="grid grid-cols-2 gap-3">
                   {Array.from({ length: slide.slotSpec.images }).map((_, i) => (
                     <MediaUploadField
                       key={i}
-                      label={slide.slotSpec.images! > 1 ? `Image ${i + 1}` : 'Image'}
+                      label="Image"
                       accept="image/*"
                       value={slot.images?.[i]}
                       storagePathPrefix={storagePathPrefix}

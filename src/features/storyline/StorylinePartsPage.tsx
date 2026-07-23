@@ -17,6 +17,15 @@ async function fetchParts(): Promise<StorylinePart[]> {
   return snap.docs.map(d => ({ id: d.id, ...d.data() }) as StorylinePart)
 }
 
+// Base UI's <Select.Value> displays the raw `value` unless given a render
+// function — it does not look up the matching <SelectItem>'s children.
+const STATUS_FILTER_LABELS: Record<string, string> = {
+  all: 'All statuses', draft: 'Draft', published: 'Published', archived: 'Archived',
+}
+const BACKUP_FILTER_LABELS: Record<string, string> = {
+  all: 'Normal + backup', normal: 'Normal only', backup: 'Backups only',
+}
+
 function statusVariant(status: StorylinePart['status']) {
   if (status === 'published') return 'default'
   if (status === 'archived') return 'secondary'
@@ -127,7 +136,9 @@ export function StorylinePartsPage() {
             className="w-48"
           />
           <Select value={statusFilter} onValueChange={v => setStatusFilter(v as typeof statusFilter)}>
-            <SelectTrigger className="w-32"><SelectValue placeholder="All statuses" /></SelectTrigger>
+            <SelectTrigger className="w-32">
+              <SelectValue placeholder="All statuses">{(v: string) => STATUS_FILTER_LABELS[v] ?? v}</SelectValue>
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All statuses</SelectItem>
               <SelectItem value="draft">Draft</SelectItem>
@@ -136,7 +147,9 @@ export function StorylinePartsPage() {
             </SelectContent>
           </Select>
           <Select value={backupFilter} onValueChange={v => setBackupFilter(v as typeof backupFilter)}>
-            <SelectTrigger className="w-36"><SelectValue placeholder="All Parts" /></SelectTrigger>
+            <SelectTrigger className="w-36">
+              <SelectValue placeholder="All Parts">{(v: string) => BACKUP_FILTER_LABELS[v] ?? v}</SelectValue>
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Normal + backup</SelectItem>
               <SelectItem value="normal">Normal only</SelectItem>
@@ -147,7 +160,7 @@ export function StorylinePartsPage() {
         <div className="flex gap-2">
           <div className="w-28">
             <Select value={String(newPartNumber)} onValueChange={v => setNewPartNumber(Number(v) as StorylinePartNumber)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger><SelectValue>{(v: string) => `Part ${v}`}</SelectValue></SelectTrigger>
               <SelectContent>
                 <SelectItem value="1">Part 1</SelectItem>
                 <SelectItem value="2">Part 2</SelectItem>

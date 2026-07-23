@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
-const SLIDE_KINDS: { value: TemplateSlideKind; label: string }[] = [
+export const SLIDE_KINDS: { value: TemplateSlideKind; label: string }[] = [
   { value: 'admin_checklist', label: 'Admin checklist (examiner-only)' },
   { value: 'examiner_preview', label: 'Examiner preview (examiner-only)' },
   { value: 'instruction', label: 'Instruction' },
@@ -49,7 +49,9 @@ export function TemplateSlideRow({ slide, disabled, canMoveUp, canMoveDown, onCh
       <div className="flex items-center justify-between gap-2">
         <div className="w-64">
           <Select value={slide.kind} onValueChange={v => set('kind', v as TemplateSlideKind)} disabled={disabled}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectTrigger>
+              <SelectValue>{(v: TemplateSlideKind) => SLIDE_KINDS.find(k => k.value === v)?.label ?? v}</SelectValue>
+            </SelectTrigger>
             <SelectContent>
               {SLIDE_KINDS.map(k => <SelectItem key={k.value} value={k.value}>{k.label}</SelectItem>)}
             </SelectContent>
@@ -89,7 +91,9 @@ export function TemplateSlideRow({ slide, disabled, canMoveUp, canMoveDown, onCh
             onValueChange={v => set('partNumber', v === 'none' ? undefined : (Number(v) as TemplateSlide['partNumber']))}
             disabled={disabled}
           >
-            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectTrigger>
+              <SelectValue>{(v: string) => v === 'none' ? 'Whole-test (not pooled)' : `Part ${v}`}</SelectValue>
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="none">Whole-test (not pooled)</SelectItem>
               <SelectItem value="1">Part 1</SelectItem>
@@ -171,7 +175,9 @@ export function TemplateSlideRow({ slide, disabled, canMoveUp, canMoveDown, onCh
             onValueChange={v => setSlotSpec('audio', v === 'none' ? undefined : (v as 'single' | 'set'))}
             disabled={disabled}
           >
-            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectTrigger>
+              <SelectValue>{(v: string) => ({ none: 'None', single: 'Single clip', set: 'Set (intro + recordings)' })[v] ?? v}</SelectValue>
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="none">None</SelectItem>
               <SelectItem value="single">Single clip</SelectItem>

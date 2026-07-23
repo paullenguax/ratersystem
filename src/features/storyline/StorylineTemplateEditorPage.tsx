@@ -5,7 +5,7 @@ import { Plus, Save, Sparkles } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
 import type { TemplateSlide, TemplateSlideKind, StorylineTemplate } from '@/types'
-import { TemplateSlideRow } from './TemplateSlideRow'
+import { TemplateSlideRow, SLIDE_KINDS } from './TemplateSlideRow'
 import { buildSeedTemplateSlides } from './templateSeed'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -110,17 +110,11 @@ export function StorylineTemplateEditorPage() {
       <div className="flex items-center gap-2">
         <div className="w-64">
           <Select value={addKind} onValueChange={v => setAddKind(v as TemplateSlideKind)}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectTrigger>
+              <SelectValue>{(v: TemplateSlideKind) => SLIDE_KINDS.find(k => k.value === v)?.label ?? v}</SelectValue>
+            </SelectTrigger>
             <SelectContent>
-              <SelectItem value="admin_checklist">Admin checklist (examiner-only)</SelectItem>
-              <SelectItem value="examiner_preview">Examiner preview (examiner-only)</SelectItem>
-              <SelectItem value="instruction">Instruction</SelectItem>
-              <SelectItem value="question_set">Question set</SelectItem>
-              <SelectItem value="image_question_set">Image + question set</SelectItem>
-              <SelectItem value="timed_picture_description">Timed picture description</SelectItem>
-              <SelectItem value="audio_response">Audio + response</SelectItem>
-              <SelectItem value="audio_set">Audio set (intro + recordings)</SelectItem>
-              <SelectItem value="closing">Closing</SelectItem>
+              {SLIDE_KINDS.map(k => <SelectItem key={k.value} value={k.value}>{k.label}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
