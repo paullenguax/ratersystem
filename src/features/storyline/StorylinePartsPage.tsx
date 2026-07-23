@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'
-import { ArrowLeft, Plus, Pencil, Rocket, Copy, Archive as ArchiveIcon, Trash2 } from 'lucide-react'
+import { ArrowLeft, Plus, Pencil, Rocket, Copy, Archive as ArchiveIcon, Trash2, PauseCircle, PlayCircle, Shield, ShieldOff } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
 import type { StorylinePart, StorylinePartNumber } from '@/types'
@@ -28,6 +28,7 @@ export function StorylinePartsPage() {
   const { user } = useAuth()
   const [filter, setFilter] = useState<'all' | StorylinePartNumber>('all')
   const [statusFilter, setStatusFilter] = useState<'all' | StorylinePart['status']>('all')
+  const [backupFilter, setBackupFilter] = useState<'all' | 'backup' | 'normal'>('all')
   const [search, setSearch] = useState('')
   const [newPartNumber, setNewPartNumber] = useState<StorylinePartNumber>(1)
 
@@ -38,9 +39,10 @@ export function StorylinePartsPage() {
     return parts
       .filter(p => filter === 'all' || p.partNumber === filter)
       .filter(p => statusFilter === 'all' || p.status === statusFilter)
+      .filter(p => backupFilter === 'all' || (backupFilter === 'backup' ? !!p.isBackup : !p.isBackup))
       .filter(p => s === '' || p.label.toLowerCase().includes(s))
       .sort((a, b) => a.partNumber - b.partNumber || a.label.localeCompare(b.label))
-  }, [parts, filter, statusFilter, search])
+  }, [parts, filter, statusFilter, backupFilter, search])
 
   async function handleNewPart() {
     await addDoc(collection(db, 'storyline_parts'), {
@@ -84,6 +86,17 @@ export function StorylinePartsPage() {
     queryClient.invalidateQueries({ queryKey: ['storyline_parts'] })
   }
 
+  async function handleToggleActive(part: StorylinePart) {
+    const nextActive = part.active === false
+    await updateDoc(doc(db, 'storyline_parts', part.id), { active: nextActive })
+    queryClient.invalidateQueries({ queryKey: ['storyline_parts'] })
+  }
+
+  async function handleToggleBackup(part: StorylinePart) {
+    await updateDoc(doc(db, 'storyline_parts', part.id), { isBackup: !part.isBackup })
+    queryClient.invalidateQueries({ queryKey: ['storyline_parts'] })
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
@@ -122,6 +135,14 @@ export function StorylinePartsPage() {
               <SelectItem value="archived">Archived</SelectItem>
             </SelectContent>
           </Select>
+          <Select value={backupFilter} onValueChange={v => setBackupFilter(v as typeof backupFilter)}>
+            <SelectTrigger className="w-36"><SelectValue placeholder="All Parts" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Normal + backup</SelectItem>
+              <SelectItem value="normal">Normal only</SelectItem>
+              <SelectItem value="backup">Backups only</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <div className="flex gap-2">
           <div className="w-28">
@@ -151,13 +172,15 @@ export function StorylinePartsPage() {
                 <TableHead>Part</TableHead>
                 <TableHead>Label</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Active</TableHead>
+                <TableHead>Backup</TableHead>
                 <TableHead />
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                     {parts.length === 0 ? 'No Parts yet.' : 'No Parts match this filter.'}
                   </TableCell>
                 </TableRow>
@@ -167,6 +190,18 @@ export function StorylinePartsPage() {
                     <TableCell>Part {part.partNumber}</TableCell>
                     <TableCell>{part.label}</TableCell>
                     <TableCell><Badge variant={statusVariant(part.status)}>{part.status}</Badge></TableCell>
+                    <TableCell>
+                      {part.status === 'published' ? (
+                        <Badge variant={part.active === false ? 'secondary' : 'default'}>
+                          {part.active === false ? 'inactive' : 'active'}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {part.isBackup ? <Badge variant="outline">backup</Badge> : <span className="text-muted-foreground text-sm">—</span>}
+                    </TableCell>
                     <TableCell>
                       <div className="flex gap-1 justify-end">
                         {part.status === 'draft' && (
@@ -182,6 +217,20 @@ export function StorylinePartsPage() {
                         <Button variant="ghost" size="sm" onClick={() => handleDuplicate(part)}>
                           <Copy className="size-4 mr-1" /> Duplicate
                         </Button>
+                        {part.status === 'published' && (
+                          <Button variant="ghost" size="sm" onClick={() => handleToggleActive(part)}>
+                            {part.active === false
+                              ? <><PlayCircle className="size-4 mr-1" /> Reactivate</>
+                              : <><PauseCircle className="size-4 mr-1" /> Deactivate</>}
+                          </Button>
+                        )}
+                        {part.status !== 'archived' && (
+                          <Button variant="ghost" size="sm" onClick={() => handleToggleBackup(part)}>
+                            {part.isBackup
+                              ? <><ShieldOff className="size-4 mr-1" /> Unmark backup</>
+                              : <><Shield className="size-4 mr-1" /> Mark as backup</>}
+                          </Button>
+                        )}
                         {part.status === 'published' && (
                           <Button variant="ghost" size="sm" onClick={() => handleArchive(part)}>
                             <ArchiveIcon className="size-4 mr-1" /> Archive

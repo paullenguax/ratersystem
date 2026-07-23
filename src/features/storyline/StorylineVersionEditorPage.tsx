@@ -138,7 +138,14 @@ export function StorylineVersionEditorPage() {
         <span className="font-medium">Parts</span>
         <div className="grid grid-cols-2 gap-3">
           {PART_NUMBERS.map(n => {
-            const options = parts.filter(p => p.partNumber === n)
+            // Only offer Parts that are actually ready for normal use — published,
+            // active, and not a reserve/backup — but keep an already-selected Part
+            // visible even if it's since been deactivated/archived/marked backup,
+            // so an existing draft doesn't silently lose its selection.
+            const options = parts.filter(p =>
+              p.partNumber === n &&
+              (p.id === partRefs[n] || (p.status === 'published' && p.active !== false && !p.isBackup))
+            )
             return (
               <div key={n} className="space-y-1">
                 <label className="text-sm font-medium">Part {n}</label>
@@ -150,7 +157,12 @@ export function StorylineVersionEditorPage() {
                   <SelectTrigger><SelectValue placeholder="Choose a Part…" /></SelectTrigger>
                   <SelectContent>
                     {options.map(p => (
-                      <SelectItem key={p.id} value={p.id}>{p.label} ({p.status})</SelectItem>
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.label}
+                        {p.status !== 'published' ? ` (${p.status})` : ''}
+                        {p.active === false ? ' (inactive)' : ''}
+                        {p.isBackup ? ' (backup)' : ''}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

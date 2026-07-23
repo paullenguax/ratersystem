@@ -215,7 +215,20 @@ export interface StorylinePart {
   id: string
   partNumber: StorylinePartNumber
   label: string
+  // draft -> published -> archived is the authoring lifecycle (archived =
+  // permanently retired, matches the spreadsheet's retired versions).
   status: 'draft' | 'published' | 'archived'
+  // Quick pause toggle for an otherwise-published Part — pulls it out of
+  // normal selection without retiring it outright (e.g. a flagged image
+  // pending review). Undefined/true = active. Distinct from `status` so it
+  // doesn't require duplicating/re-publishing to temporarily stand it down.
+  active?: boolean
+  // Reserve/emergency-only content, matching the spreadsheet's "Back Up"
+  // versions — never offered as a normal selection, kept in case primary
+  // content fails at a real test centre. Independent of active/status: a
+  // backup Part is still fully published and ready, just excluded from the
+  // ordinary picker.
+  isBackup?: boolean
   // Keyed by TemplateSlide.id, only for slides whose partNumber matches.
   slotContent: Record<string, StorylineSlotContent>
   createdAt?: Timestamp
