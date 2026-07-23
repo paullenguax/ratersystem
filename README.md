@@ -63,7 +63,7 @@ Role is determined by the `people` Firestore collection — the doc ID **must** 
 | `pronunciation_config/status` | Active languages for GPronTool |
 | `config/canvas` | Canvas API token, Canvas Sync course list, `excludedCourseIds`, `notificationEmail` for self-serve alerts |
 | `canvasEnrollmentLog` | Unified log of Canvas enrollments from both WooCommerce (`CanvasCohortEnrollment` WP plugin) and the manual `/admin/canvas-enroll` wizard |
-| `practice_sessions` / `practice_scores` | Ad-hoc live-course practice player (`/practice`), joined via a 6-character code, no login required |
+| `practice_sessions` / `practice_scores` | Ad-hoc live-course practice player (`/practice`), joined via a 6-character code; login is now optional (Canvas SSO) — see "Practice Sessions" below |
 | `storyline_tests` / `storyline_versions` | Storyline Replacement test authoring — see "Storyline Replacement" section below |
 
 ## Local dev
@@ -187,6 +187,16 @@ A second, entirely separate test/assignment/score pipeline for standardization e
 - **Results** (`StandardizationResultsPage.tsx`, `/standardization-results`, admin-only): writes go to `standardization_scores`, a separate collection from `scores` (same shape minus `published`, plus `comments`) — modeled on `ScoresPage.tsx`'s fetch-all + client-side substring filter pattern (filter by rater/candidate/event name), without the Rasch-export/permanent-rater-number logic, which is a rater-course-specific psychometric concern.
 - **Access**: gated by `ProtectedRoute`'s `requireStandardization` prop — `role === 'admin' || role === 'interlocutor' || canStandardize`. `AuthContext` carries `canStandardize` alongside `role` from the same `people/{uid}` read. `AppShell`'s nav uses the same OR-condition for the "Standardization" sidebar item.
 - **Onboarding**: interlocutors (and any existing rater given `canStandardize: true`) are created via the "Invite" flow — see "Adding a person" above.
+- **Results audio**: `StandardizationResultsPage.tsx` also has an inline play/stop button per row (same toggle pattern as Test Bank), so a score can be reviewed against its recording without leaving the page.
+- **Fed by Practice Sessions too**: see below — a trainer can promote Canvas-identified Practice Session scores straight into `standardization_scores`.
+
+## Practice Sessions (`/practice`, public `/practice/:code`)
+
+Ad-hoc live-course exercise: a trainer creates a session (optionally linked to a `test_bank` recording), shares the 6-character-code link, and participants score along in real time — no account required by default.
+
+- **Identity is optional**: on landing at `/practice/:code`, an unauthenticated participant sees a prominent "Continue with Canvas" link before the old free-text name field. It reuses the self-serve exam's Canvas OAuth plumbing as-is (`canvasOAuthUrl`/`canvasAuth`/`CanvasCallbackPage.tsx`) via a second recognized `state` shape, `practice:<code>` — Canvas always redirects to the one fixed callback URL, so this opaque `state` string is what tells the callback "come back to this practice session" instead of the exam flow. A "I don't have a Canvas account" toggle still exposes the original anonymous name-entry, with a note that those scores can't be promoted.
+- **Identified scores** carry `raterId`/`raterName` on the `PracticeScore` doc (anonymous ones omit both) and are looked up fresh from Firestore on reload (works across devices) instead of the `localStorage` check the anonymous path still uses.
+- **Promote to standardization pool**: in the trainer's results view (`PracticePage.tsx`), a "Save to standardization pool" button sits next to the existing "Clear scores" delete — two independent choices, not a combined action. It copies every Canvas-identified, not-yet-promoted score into `standardization_scores` (stamping `promotedToStandardization: true` on the source so re-clicking is idempotent), using the session's linked `test_bank` doc for `candidateName`/`testType`/`testNumber`. Only available when the session was built from a real Test Bank recording — an ad-hoc session with no linked test has nothing to attach a standardization record to. Written as the signed-in admin, so the existing `standardization_scores` create rule's `isAdmin()` branch already covers it — **no Firestore rules changes were needed for any of this.**
 
 ## Storyline Replacement (`/storyline`)
 
@@ -252,4 +262,4 @@ WordPress auth/redirect integration, which is a later phase.
 
 ## Last updated
 
-2026-07-23
+2026-07-24
