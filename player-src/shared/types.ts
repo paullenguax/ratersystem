@@ -12,7 +12,10 @@ export interface StorylineItem {
   candidateState: string
   media?: {
     images?: string[]
-    audioClips?: { label: string; url: string }[]
+    // maxPlays: soft play-count ceiling — examiner.ts warns past it but
+    // never blocks playback. Audio plays from the examiner's own console
+    // (everyone in the room hears it), never on the candidate screen.
+    audioClips?: { label: string; url: string; maxPlays?: number }[]
   }
   timing?: {
     prepSeconds?: number

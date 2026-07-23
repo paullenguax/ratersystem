@@ -138,6 +138,11 @@ export interface TemplateSlide {
     images?: number
     audio?: 'none' | 'single' | 'set'
     audioSetSize?: number
+    // Soft play-count limit for this slide's audio clip(s) — same ceiling
+    // applies to every clip the slide produces (the intro + all numbered
+    // recordings for a 'set'). The player warns past this count but never
+    // blocks playback. Undefined = unlimited.
+    maxPlays?: number
     variables?: string[]
   }
 }
@@ -174,7 +179,10 @@ export interface StorylineItem {
   candidateState: string
   media?: {
     images?: string[]
-    audioClips?: { label: string; url: string }[]
+    // maxPlays carries over from the slide's slotSpec — the exported item
+    // is self-contained, so the player never needs the template to enforce
+    // the soft play-count warning.
+    audioClips?: { label: string; url: string; maxPlays?: number }[]
   }
   timing?: {
     prepSeconds?: number

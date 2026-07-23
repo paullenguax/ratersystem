@@ -114,7 +114,7 @@ export function buildSeedTemplateSlides(): TemplateSlide[] {
         '[Play Volume check in Menu above]\n' +
         'How is the volume?\n' +
         'OK, I will now play the first section of the communication.',
-      slotSpec: { audio: 'single' },
+      slotSpec: { audio: 'single', maxPlays: 1 },
     },
     {
       kind: 'audio_response',
@@ -130,7 +130,7 @@ export function buildSeedTemplateSlides(): TemplateSlide[] {
         'to help you explain the exchanges to me in as much detail as possible.\n' +
         'OK, please now explain those communications in as much detail as you can.\n' +
         'OK thank you. That completes Part 2, we will now move on to Part 3.',
-      slotSpec: { audio: 'single' },
+      slotSpec: { audio: 'single', maxPlays: 1 },
     },
     {
       kind: 'audio_response',
@@ -147,7 +147,7 @@ export function buildSeedTemplateSlides(): TemplateSlide[] {
         'You will hear each recording once. If you want to hear the message again, just ask and I will play it ' +
         'once more only.\n' +
         "Before we start, let's listen to an example so you know what to expect.",
-      slotSpec: { audio: 'single' },
+      slotSpec: { audio: 'single', maxPlays: 2 },
     },
     {
       kind: 'audio_set',
@@ -155,7 +155,7 @@ export function buildSeedTemplateSlides(): TemplateSlide[] {
       candidateState: 'Task3',
       partNumber: 3,
       scriptText: 'Do you have any questions?\nOK, I will now play Set 1.',
-      slotSpec: { audio: 'set', audioSetSize: 3 },
+      slotSpec: { audio: 'set', audioSetSize: 3, maxPlays: 2 },
     },
     {
       kind: 'audio_set',
@@ -163,7 +163,7 @@ export function buildSeedTemplateSlides(): TemplateSlide[] {
       candidateState: 'Task3',
       partNumber: 3,
       scriptText: 'OK, I will now play Set 2.',
-      slotSpec: { audio: 'set', audioSetSize: 3 },
+      slotSpec: { audio: 'set', audioSetSize: 3, maxPlays: 2 },
     },
     {
       kind: 'audio_set',
@@ -171,7 +171,7 @@ export function buildSeedTemplateSlides(): TemplateSlide[] {
       candidateState: 'Task3',
       partNumber: 3,
       scriptText: 'OK, I will now play Set 3.',
-      slotSpec: { audio: 'set', audioSetSize: 3 },
+      slotSpec: { audio: 'set', audioSetSize: 3, maxPlays: 2 },
     },
     {
       kind: 'timed_picture_description',

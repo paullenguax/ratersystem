@@ -37,13 +37,9 @@ function renderPanels(items: StorylineItem[]) {
       panel.appendChild(imageRow)
     }
 
-    item.media?.audioClips?.forEach(clip => {
-      const audio = document.createElement('audio')
-      audio.src = clip.url
-      audio.controls = true
-      audio.className = 'panel-audio'
-      panel.appendChild(audio)
-    })
+    // Audio plays from the examiner's own console (same room, one set of
+    // speakers) — see examiner.ts. The candidate screen only ever shows
+    // images.
 
     const caption = document.createElement('div')
     caption.className = 'container'

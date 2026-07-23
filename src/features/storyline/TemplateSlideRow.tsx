@@ -163,8 +163,8 @@ export function TemplateSlideRow({ slide, disabled, canMoveUp, canMoveDown, onCh
         <span>Needs a topic/title (use {'{topic}'} in the script text above)</span>
       </label>
 
-      <div className="grid grid-cols-3 gap-3 items-end">
-        <div className="space-y-1">
+      <div className="flex flex-wrap gap-3 items-end">
+        <div className="space-y-1 w-40">
           <Label>Audio</Label>
           <Select
             value={slide.slotSpec.audio ?? 'none'}
@@ -180,7 +180,7 @@ export function TemplateSlideRow({ slide, disabled, canMoveUp, canMoveDown, onCh
           </Select>
         </div>
         {isAudioSet && (
-          <div className="space-y-1">
+          <div className="space-y-1 w-36">
             <Label>Recordings per set</Label>
             <Input
               type="number" min={1}
@@ -190,7 +190,19 @@ export function TemplateSlideRow({ slide, disabled, canMoveUp, canMoveDown, onCh
             />
           </div>
         )}
-        <div className="space-y-1">
+        {slide.slotSpec.audio && slide.slotSpec.audio !== 'none' && (
+          <div className="space-y-1 w-32">
+            <Label>Max plays</Label>
+            <Input
+              type="number" min={1}
+              value={slide.slotSpec.maxPlays ?? ''}
+              onChange={e => setSlotSpec('maxPlays', e.target.value === '' ? undefined : Number(e.target.value))}
+              placeholder="Unlimited"
+              disabled={disabled}
+            />
+          </div>
+        )}
+        <div className="space-y-1 flex-1 min-w-40">
           <Label>Variables (comma-separated)</Label>
           <Input
             value={slide.slotSpec.variables?.join(', ') ?? ''}

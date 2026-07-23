@@ -30,15 +30,16 @@ function resolveScriptText(slide: TemplateSlide, testVariables: Record<string, s
 
 function resolveMedia(slide: TemplateSlide, slot?: StorylineSlotContent): StorylineItem['media'] {
   const images = slot?.images?.filter(Boolean)
-  const audioClips: { label: string; url: string }[] = []
+  const audioClips: { label: string; url: string; maxPlays?: number }[] = []
+  const maxPlays = slide.slotSpec.maxPlays
 
   if (slide.slotSpec.audio === 'single' && slot?.audio?.recordings?.[0]) {
-    audioClips.push({ label: slide.label, url: slot.audio.recordings[0] })
+    audioClips.push({ label: slide.label, url: slot.audio.recordings[0], maxPlays })
   }
   if (slide.slotSpec.audio === 'set') {
-    if (slot?.audio?.intro) audioClips.push({ label: 'Introduction', url: slot.audio.intro })
+    if (slot?.audio?.intro) audioClips.push({ label: 'Introduction', url: slot.audio.intro, maxPlays })
     slot?.audio?.recordings?.forEach((url, i) => {
-      if (url) audioClips.push({ label: `Recording ${i + 1}`, url })
+      if (url) audioClips.push({ label: `Recording ${i + 1}`, url, maxPlays })
     })
   }
 

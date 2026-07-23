@@ -1,10 +1,24 @@
 import { useRef, useState } from 'react'
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage'
-import { Upload } from 'lucide-react'
+import { Upload, CheckCircle2 } from 'lucide-react'
 import { storage } from '@/lib/firebase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+
+// Firebase Storage download URLs are opaque (encoded path + token) — pull
+// the original filename back out so the author can see at a glance which
+// file is attached, rather than an unreadable URL. Strips the
+// `{Date.now()}_` prefix handleFileUpload adds to keep uploads unique.
+function filenameFromUrl(url: string): string {
+  try {
+    const decodedPath = decodeURIComponent(new URL(url).pathname)
+    const last = decodedPath.split('/').pop() ?? ''
+    return last.replace(/^\d+_/, '') || url
+  } catch {
+    return url
+  }
+}
 
 interface Props {
   label: string
@@ -67,6 +81,12 @@ export function MediaUploadField({ label, accept, value, storagePathPrefix, onCh
       {uploadProgress !== null && (
         <div className="w-full bg-muted rounded-full h-1.5 mt-1">
           <div className="bg-primary h-1.5 rounded-full transition-all" style={{ width: `${uploadProgress}%` }} />
+        </div>
+      )}
+      {value && (
+        <div className="flex items-center gap-1.5 text-sm text-green-700 mt-1">
+          <CheckCircle2 className="size-4 shrink-0" />
+          <span className="truncate">{filenameFromUrl(value)}</span>
         </div>
       )}
       {value && accept.startsWith('image') && (
