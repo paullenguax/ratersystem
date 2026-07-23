@@ -183,7 +183,10 @@ export function TestDrawer({ open, onClose, test }: Props) {
             </div>
             <div className="space-y-1">
               <Label>Duration (seconds)</Label>
-              <Input type="number" min={0} {...register('durationSeconds', { valueAsNumber: true })} />
+              <Input type="number" min={0} {...register('durationSeconds', {
+                setValueAs: v => (v === '' ? undefined : Number(v)),
+              })} />
+              {errors.durationSeconds && <p className="text-xs text-destructive">{errors.durationSeconds.message}</p>}
             </div>
           </div>
 
