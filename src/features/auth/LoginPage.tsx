@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { signInWithEmailAndPassword } from 'firebase/auth'
+import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth'
 import { auth } from '@/lib/firebase'
 import { canvasOAuthUrl } from '@/lib/canvasAuthUrl'
 import { Button } from '@/components/ui/button'
@@ -11,6 +11,7 @@ export function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [resetMessage, setResetMessage] = useState('')
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
 
@@ -25,6 +26,21 @@ export function LoginPage() {
       setError('Invalid email or password.')
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleForgotPassword() {
+    setError('')
+    setResetMessage('')
+    if (!email) {
+      setError('Enter your email above first, then click "Forgot password?"')
+      return
+    }
+    try {
+      await sendPasswordResetEmail(auth, email)
+      setResetMessage('Check your email for a link to reset your password.')
+    } catch {
+      setResetMessage('If an account exists for that email, a reset link has been sent.')
     }
   }
 
@@ -60,7 +76,15 @@ export function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               required
             />
+            <button
+              type="button"
+              onClick={handleForgotPassword}
+              className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+            >
+              Forgot password?
+            </button>
             {error && <p className="text-sm text-destructive">{error}</p>}
+            {resetMessage && <p className="text-sm text-green-700">{resetMessage}</p>}
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? 'Signing in…' : 'Sign in'}
             </Button>

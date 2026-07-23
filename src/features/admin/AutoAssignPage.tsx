@@ -170,7 +170,7 @@ export function AutoAssignPage() {
     queryKey: ['tests'],
     queryFn: async () => (await getDocs(collection(db, 'test_bank'))).docs
       .map(d => ({ id: d.id, ...d.data() }) as Test)
-      .filter(t => t.status === 'active' && !t.excludeFromPool),
+      .filter(t => t.status === 'active' && !t.excludeFromPool && (t.category ?? 'rater_course') !== 'standardization'),
   })
   const { data: allScores = [] } = useQuery({
     queryKey: ['scores'],

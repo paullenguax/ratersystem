@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, FileAudio, CalendarDays,
   ClipboardList, SlidersHorizontal, Star, BarChart2,
   FileText, Award, Settings, LogOut, MessageSquare, FileCheck, Activity,
-  MonitorPlay,
+  MonitorPlay, Gauge,
 } from 'lucide-react'
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup,
@@ -17,13 +17,15 @@ import { auth } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
 
 const ALL_NAV = [
-  { label: 'Dashboard',   path: '/',            icon: LayoutDashboard,    roles: ['admin', 'senior_rater', 'trainee'] },
+  { label: 'Dashboard',   path: '/',            icon: LayoutDashboard,    roles: ['admin', 'senior_rater', 'trainee', 'interlocutor'] },
   { label: 'People',      path: '/people',      icon: Users,               roles: ['admin'] },
   { label: 'Test Bank',   path: '/test-bank',   icon: FileAudio,           roles: ['admin'] },
   { label: 'Events',      path: '/sessions',    icon: CalendarDays,        roles: ['admin'] },
   { label: 'Assignments', path: '/assignments', icon: ClipboardList,       roles: ['admin'] },
   { label: 'Scoring',     path: '/scoring',     icon: SlidersHorizontal,   roles: ['admin', 'senior_rater', 'trainee'] },
+  { label: 'Standardization', path: '/standardization', icon: Gauge,       standardizationOnly: true },
   { label: 'Scores',      path: '/scores',      icon: Star,                roles: ['admin'] },
+  { label: 'Standardization Results', path: '/standardization-results', icon: Gauge, roles: ['admin'] },
   { label: 'Statistics',  path: '/statistics',  icon: BarChart2,           roles: ['admin'] },
   { label: 'Reports',         path: '/reports',         icon: FileText,       roles: ['admin'] },
   { label: 'Feedback',        path: '/feedback-report', icon: MessageSquare,  roles: ['admin', 'senior_rater'] },
@@ -35,12 +37,14 @@ const ALL_NAV = [
 ] as const
 
 export function AppShell() {
-  const { user, role } = useAuth()
+  const { user, role, canStandardize } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
 
-  const navItems = ALL_NAV.filter(
-    (item) => role && (item.roles as readonly string[]).includes(role)
+  const navItems = ALL_NAV.filter((item) =>
+    'standardizationOnly' in item
+      ? role === 'admin' || role === 'interlocutor' || canStandardize
+      : role && (item.roles as readonly string[]).includes(role)
   )
 
   function isActive(path: string) {

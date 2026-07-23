@@ -9,6 +9,7 @@ import { TestDrawer } from './TestDrawer'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { CategoryBadge } from '@/components/CategoryBadge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
@@ -22,6 +23,7 @@ export function TestBankPage() {
   const [typeFilter, setLicenceFilter] = useState<'all' | Test['testType']>('all')
   const [statusFilter, setStatusFilter] = useState<'all' | Test['status']>('all')
   const [poolFilter, setPoolFilter] = useState<'all' | 'pool' | 'excluded'>('all')
+  const [categoryFilter, setCategoryFilter] = useState<'all' | NonNullable<Test['category']>>('all')
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [selectedTest, setSelectedTest] = useState<Test | undefined>()
   const [playingUrl, setPlayingUrl] = useState<string | null>(null)
@@ -35,9 +37,10 @@ export function TestBankPage() {
       (s === '' || t.candidateName.toLowerCase().includes(s) || t.candidateNationality.toLowerCase().includes(s)) &&
       (typeFilter === 'all' || t.testType === typeFilter) &&
       (statusFilter === 'all' || t.status === statusFilter) &&
-      (poolFilter === 'all' || (poolFilter === 'excluded' ? !!t.excludeFromPool : !t.excludeFromPool))
+      (poolFilter === 'all' || (poolFilter === 'excluded' ? !!t.excludeFromPool : !t.excludeFromPool)) &&
+      (categoryFilter === 'all' || (t.category ?? 'rater_course') === categoryFilter)
     )
-  }), [tests, search, typeFilter, statusFilter])
+  }), [tests, search, typeFilter, statusFilter, categoryFilter])
 
   const columns: ColumnDef<Test>[] = [
     {
@@ -65,6 +68,12 @@ export function TestBankPage() {
           {row.original.status}
         </Badge>
       ),
+    },
+    {
+      id: 'category',
+      header: 'Category',
+      enableSorting: false,
+      cell: ({ row }) => <CategoryBadge category={row.original.category} />,
     },
     {
       id: 'excludeFromPool',
@@ -163,6 +172,14 @@ export function TestBankPage() {
             <SelectItem value="all">All tests</SelectItem>
             <SelectItem value="pool">In pool</SelectItem>
             <SelectItem value="excluded">Excluded</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={categoryFilter} onValueChange={v => setCategoryFilter(v as typeof categoryFilter)}>
+          <SelectTrigger className="w-40"><SelectValue placeholder="All categories" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All categories</SelectItem>
+            <SelectItem value="rater_course">Rater course</SelectItem>
+            <SelectItem value="standardization">Standardization</SelectItem>
           </SelectContent>
         </Select>
       </div>

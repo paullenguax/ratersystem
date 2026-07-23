@@ -20,24 +20,28 @@ Manages the full workflow of ICAO English rating: assigning tests to raters, ent
 
 ## Roles
 
-| Page | admin | senior_rater | trainee |
-|---|---|---|---|
-| Dashboard | ✓ | ✓ | ✓ |
-| People | ✓ | | |
-| Test Bank | ✓ | | |
-| Storyline | ✓ | | |
-| Events (Sessions) | ✓ | | |
-| Assignments | ✓ | | |
-| Scoring | ✓ | ✓ | ✓ |
-| Scores | ✓ | | |
-| Statistics | ✓ | | |
-| Reports | ✓ | | |
-| Feedback | ✓ | ✓ | |
-| Certificates | ✓ | | |
-| Official Forms | ✓ | | |
-| Benchmark | ✓ | | |
-| Practice Sessions | ✓ | | |
-| Admin (incl. Canvas Sync/Enroll/Audit, Enrollment Log, Auto-assign, Import Rasch, Cert Assets, Pronunciation) | ✓ | | |
+| Page | admin | senior_rater | trainee | interlocutor |
+|---|---|---|---|---|
+| Dashboard | ✓ | ✓ | ✓ | ✓ |
+| People | ✓ | | | |
+| Test Bank | ✓ | | | |
+| Storyline | ✓ | | | |
+| Events (Sessions) | ✓ | | | |
+| Assignments | ✓ | | | |
+| Scoring | ✓ | ✓ | ✓ | |
+| Standardization | ✓* | ✓* | ✓* | ✓ |
+| Scores | ✓ | | | |
+| Standardization Results | ✓ | | | |
+| Statistics | ✓ | | | |
+| Reports | ✓ | | | |
+| Feedback | ✓ | ✓ | | |
+| Certificates | ✓ | | | |
+| Official Forms | ✓ | | | |
+| Benchmark | ✓ | | | |
+| Practice Sessions | ✓ | | | |
+| Admin (incl. Canvas Sync/Enroll/Audit, Enrollment Log, Auto-assign, Import Rasch, Cert Assets, Pronunciation) | ✓ | | | |
+
+\* admin always has access; senior_rater/trainee only if their `people` doc has `canStandardize: true` — see "Standardization" below.
 
 Role is determined by the `people` Firestore collection — the doc ID **must** equal the Firebase Auth UID.
 
@@ -46,10 +50,11 @@ Role is determined by the `people` Firestore collection — the doc ID **must** 
 | Collection | Purpose |
 |---|---|
 | `people` | Raters + admins, keyed by Firebase Auth UID |
-| `test_bank` | ICAO test recordings (51+ imported); `canonicalDifficulty`/`canonicalSE` from Rasch imports drive both Auto-assign and the self-serve picker |
+| `test_bank` | ICAO test recordings (51+ imported); `canonicalDifficulty`/`canonicalSE` from Rasch imports drive both Auto-assign and the self-serve picker; `category` (`'rater_course'` default, or `'standardization'`) separates the standardization test pool — every other test-pool consumer (Auto-assign, self-serve picker, Quick Entry, manual Score entry) excludes `'standardization'` tests |
 | `sessions` | Named groups of scoring work; `canvasSectionId` links a session to a Canvas section for self-serve assignments |
-| `assignments` | session + rater + tests; unit of work; `source: 'self_serve'` marks ones created by the self-serve flow; `confirmedAt` is the rater's explicit "yes, these are my answers" lock-in — distinct from `status: 'submitted'`, which just means all tests are scored |
-| `scores` | Individual ICAO scores per rater per test |
+| `assignments` | session + rater + tests; unit of work; `source: 'self_serve'` marks ones created by the self-serve flow; `category` (`'rater_course'` default, or `'standardization'`) determines which test pool and player the assignment uses; `confirmedAt` is the rater's explicit "yes, these are my answers" lock-in — distinct from `status: 'submitted'`, which just means all tests are scored |
+| `scores` | Individual ICAO scores per rater per test (rater-course assignments only) |
+| `standardization_scores` | Same shape as `scores` plus a `comments` field (≤250 chars), kept in a separate collection so standardization results never mix with rater-course scores — see "Standardization" below |
 | `certificates` | Lenguax cert records (L-prefix numbers) |
 | `official_forms` | CAA 5012 and DGAC 87i records |
 | `cert_config/templates` | Storage URL overrides per cert type |
@@ -95,14 +100,18 @@ All env vars above must be set as GitHub Actions secrets. Also needs `FTP_HOST`,
 
 Build runs `tsc -b && vite build` — TypeScript strict mode is on, unused imports fail the build.
 
-## Adding a rater (manual)
+## Adding a person
 
-The Firestore `people` doc ID must equal the Firebase Auth UID:
+**Invite (recommended, any role)** — People page → "Invite": takes name/email/role/`canStandardize`, calls the `invitePerson` Cloud Function, which creates the Firebase Auth user + matching `people` doc (UID = doc ID) together and emails the person a link to set their own password. Works for `admin`/`senior_rater`/`trainee`/`interlocutor`.
+
+**Manual (fallback)** — the Firestore `people` doc ID must equal the Firebase Auth UID:
 1. Firebase Console → Auth → Add user → copy UID
-2. Firestore → `people` → new doc with that UID as the document ID; fields: `name`, `email`, `role` (`admin`/`senior_rater`/`trainee`), `status` (`active`)
+2. Firestore → `people` → new doc with that UID as the document ID; fields: `name`, `email`, `role`, `status` (`active`)
 3. Firebase Console → Auth → send password reset to the user
 
-Canvas SSO users: run Canvas Sync (Admin page) — it creates the `people` doc automatically.
+Canvas SSO users: run Canvas Sync (Admin page) — it creates the `people` doc automatically, no password ever needed.
+
+Any already-active user can reset their own password anytime via "Forgot password?" on the login page (`sendPasswordResetEmail`, no Cloud Function involved).
 
 ## PDF generation
 
@@ -139,6 +148,7 @@ Certificate validation is public at `/validate/:certNumber` (no auth required).
 | `notifySelfServeSubmission` | Fires when a self-serve rater explicitly confirms their scores (`confirmedAt` newly set — not just all 4 tests being scored, which only flips `status` to `submitted`); emails `config/canvas.notificationEmail` via Resend (`RESEND_API_KEY` secret) — skipped silently if either isn't configured |
 | `mintBenchmarkAdminToken` | Bridges an admin's identity into the separate `lenguax-benchmark-32392` Firebase project. Checks `people/{uid}.role === 'admin'`, then mints a custom token with an `admin: true` claim via a second `admin.app()` credentialed with the `BENCHMARK_SERVICE_ACCOUNT_KEY` secret — that claim is what the benchmark project's Firestore rules use to distinguish an admin from a training centre's scoped login (see Benchmark Check's README) |
 | `createBenchmarkCentreAccount` / `deleteBenchmarkCentreAccount` | Backs the Benchmark page's Centres tab — creates/removes a centre's Firebase Auth user and matching `centre_accounts/{uid}` doc together in the benchmark project. Rejects a `centreId` already in use by a different account |
+| `invitePerson` | Backs the People page's "Invite" action — creates a Firebase Auth user + matching `people/{uid}` doc (any role) in one step, then emails a password-reset link via Resend (`RESEND_API_KEY`) so the person can set their own password. Rejects a duplicate email. Email-send failure is logged but non-fatal — the account/doc are already valid at that point |
 
 See the full Canvas integration write-up (WP plugin ↔ Firebase ↔ RaterSystemNew) for the complete enrollment picture — ask Claude to regenerate it from `CanvasCohortEnrollment/canvas-cohort-enrollment.php` and this file if it's gone stale.
 
@@ -166,6 +176,17 @@ Shared by all three roles for working through an assignment's 4 tests — used b
 - **Accessibility**: the amber "you changed this" state is backed by a pencil icon and screen-reader-only text, not colour alone; an `aria-live` region announces candidate changes (switching tests updates content in place rather than navigating to a new page); icon-only nav buttons have `aria-label`s. The main button shows a shorter label on narrow screens (`sm:` breakpoint) since the full destination-aware label ("Continue to Candidate C") can overflow next to the flanking arrows.
 
 `PracticeScorePage.tsx` (`/practice/:code` — the separate live-practice player for in-course group exercises, joined via a 6-character code, no login) reuses only the ready-to-submit banner/bar-colour treatment from this page, not the rest of it — it's always a single test with no multi-candidate navigation, review, or confirm step.
+
+## Standardization (`StandardizationPlayerPage.tsx`, `/standardization` + `/standardization-results`)
+
+A second, entirely separate test/assignment/score pipeline for standardization exercises, kept deliberately isolated from the rater-course one so the two pools can never cross-contaminate:
+
+- **Test pool**: `test_bank` docs get `category: 'rater_course' | 'standardization'` (undefined = `'rater_course'`). Shown as a coloured pill (`CategoryBadge.tsx`) in Test Bank and Assignments. Every existing test-pool consumer (Auto-assign, the self-serve trainee-exam picker, Quick Entry, manual Score entry) filters standardization tests out — they were never standardization-aware before this feature existed, so each needed an explicit exclusion.
+- **Assignments**: `assignments` docs get the same `category` field, chosen as the *first* field when creating one (locked once created — can't be changed after tests are picked). Choosing "Standardization" filters the test checklist to that pool and the rater picker to people with `role === 'interlocutor'` or `canStandardize: true`; choosing "Rater course" excludes interlocutors from the rater picker. Sessions are **not** category-scoped — `Session.type` already means something else (`calibration`/`reliability` etc. are rater-course work), so any session can host either category.
+- **Player** (`StandardizationPlayerPage.tsx`, `/standardization`): an independent copy of `ScoringPage.tsx`'s mechanics (drafts, auto-save-on-navigate-away, single "Continue" button, review → confirm → lock via `assignment.confirmedAt`) — not shared code, same precedent as `PracticeScorePage.tsx`. Differences from `ScoringPage.tsx`: no trainee Candidate-A/B/C/D anonymisation (never a blind exam here), no self-serve auto-open, and an added free-text comments field per test (`maxLength 250`, tracked in the same draft map alongside the 6 ICAO scores).
+- **Results** (`StandardizationResultsPage.tsx`, `/standardization-results`, admin-only): writes go to `standardization_scores`, a separate collection from `scores` (same shape minus `published`, plus `comments`) — modeled on `ScoresPage.tsx`'s fetch-all + client-side substring filter pattern (filter by rater/candidate/event name), without the Rasch-export/permanent-rater-number logic, which is a rater-course-specific psychometric concern.
+- **Access**: gated by `ProtectedRoute`'s `requireStandardization` prop — `role === 'admin' || role === 'interlocutor' || canStandardize`. `AuthContext` carries `canStandardize` alongside `role` from the same `people/{uid}` read. `AppShell`'s nav uses the same OR-condition for the "Standardization" sidebar item.
+- **Onboarding**: interlocutors (and any existing rater given `canStandardize: true`) are created via the "Invite" flow — see "Adding a person" above.
 
 ## Storyline Replacement (`/storyline`)
 
@@ -231,4 +252,4 @@ WordPress auth/redirect integration, which is a later phase.
 
 ## Last updated
 
-2026-07-22
+2026-07-23

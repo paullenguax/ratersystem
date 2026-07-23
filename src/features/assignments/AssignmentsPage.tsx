@@ -13,7 +13,9 @@ import { useAuth } from '@/context/AuthContext'
 import { AssignmentDrawer } from './AssignmentDrawer'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { CategoryBadge } from '@/components/CategoryBadge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 const STATUS_VARIANT: Record<Assignment['status'], 'default' | 'secondary' | 'outline' | 'destructive'> = {
   pending:   'secondary',
@@ -40,6 +42,7 @@ export function AssignmentsPage() {
   const [publishing, setPublishing] = useState<string | null>(null)
   const [hidePublished, setHidePublished] = useState(true)
   const [seniorOnly, setSeniorOnly] = useState(false)
+  const [categoryFilter, setCategoryFilter] = useState<'all' | 'rater_course' | 'standardization'>('all')
   const [sorting, setSorting] = useState<SortingState>([])
   const queryClient = useQueryClient()
 
@@ -77,16 +80,22 @@ export function AssignmentsPage() {
     return assignments.filter(a => {
       if (hidePublished && a.status === 'published') return false
       if (seniorOnly && !(['senior_rater', 'admin'] as Person['role'][]).includes(personRole.get(a.raterId)!)) return false
+      if (categoryFilter !== 'all' && (a.category ?? 'rater_course') !== categoryFilter) return false
       return true
     })
-  }, [assignments, hidePublished, seniorOnly, personRole])
+  }, [assignments, hidePublished, seniorOnly, categoryFilter, personRole])
 
   const columns: ColumnDef<Assignment>[] = [
     {
       id: 'sessionName',
       accessorKey: 'sessionName',
       header: 'Event',
-      cell: ({ getValue }) => <span className="text-muted-foreground text-sm">{getValue() as string}</span>,
+      cell: ({ row, getValue }) => (
+        <span className="text-muted-foreground text-sm flex items-center gap-1.5">
+          {getValue() as string}
+          <CategoryBadge category={row.original.category} />
+        </span>
+      ),
     },
     {
       id: 'raterName',
@@ -146,7 +155,7 @@ export function AssignmentsPage() {
         const a = row.original
         return (
           <div className="flex items-center gap-2 justify-end">
-            {a.status !== 'published' && (
+            {a.status !== 'published' && (a.category ?? 'rater_course') === 'rater_course' && (
               <Button
                 variant="outline"
                 size="sm"
@@ -216,6 +225,14 @@ export function AssignmentsPage() {
           />
           Senior raters only
         </label>
+        <Select value={categoryFilter} onValueChange={v => setCategoryFilter(v as typeof categoryFilter)}>
+          <SelectTrigger className="w-40"><SelectValue placeholder="All types" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All types</SelectItem>
+            <SelectItem value="rater_course">Rater course</SelectItem>
+            <SelectItem value="standardization">Standardization</SelectItem>
+          </SelectContent>
+        </Select>
         <span className="text-xs text-muted-foreground ml-auto">
           {filtered.length} of {assignments.length} assignments
         </span>

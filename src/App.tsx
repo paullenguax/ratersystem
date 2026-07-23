@@ -21,6 +21,8 @@ import { AssignmentsPage } from '@/features/assignments/AssignmentsPage'
 import { AssignmentReviewPage } from '@/features/assignments/AssignmentReviewPage'
 import { QuickEntryPage } from '@/features/assignments/QuickEntryPage'
 import { ScoringPage } from '@/features/scoring/ScoringPage'
+import { StandardizationPlayerPage } from '@/features/standardization/StandardizationPlayerPage'
+import { StandardizationResultsPage } from '@/features/standardization/StandardizationResultsPage'
 import { StatisticsPage } from '@/features/statistics/StatisticsPage'
 import { ReportsPage } from '@/features/reports/ReportsPage'
 import { ScoresPage } from '@/features/scores/ScoresPage'
@@ -79,6 +81,8 @@ export default function App() {
                 <Route path="assignments/quick-entry" element={<ProtectedRoute allowedRoles={['admin']}><QuickEntryPage /></ProtectedRoute>} />
                 <Route path="assignments/:assignmentId" element={<ProtectedRoute allowedRoles={['admin']}><AssignmentReviewPage /></ProtectedRoute>} />
                 <Route path="scoring"     element={<ScoringPage />} />
+                <Route path="standardization" element={<ProtectedRoute requireStandardization><StandardizationPlayerPage /></ProtectedRoute>} />
+                <Route path="standardization-results" element={<ProtectedRoute allowedRoles={['admin']}><StandardizationResultsPage /></ProtectedRoute>} />
                 <Route path="scores"      element={<ProtectedRoute allowedRoles={['admin']}><ScoresPage /></ProtectedRoute>} />
                 <Route path="statistics"  element={<ProtectedRoute allowedRoles={['admin']}><StatisticsPage /></ProtectedRoute>} />
                 <Route path="reports"          element={<ProtectedRoute allowedRoles={['admin']}><ReportsPage /></ProtectedRoute>} />

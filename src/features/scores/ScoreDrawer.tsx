@@ -55,6 +55,7 @@ async function fetchTests(): Promise<Test[]> {
   const snap = await getDocs(collection(db, 'test_bank'))
   return snap.docs
     .map(d => ({ id: d.id, ...d.data() }) as Test)
+    .filter(t => (t.category ?? 'rater_course') !== 'standardization')
     .sort((a, b) => (a.testId ?? 999) - (b.testId ?? 999))
 }
 

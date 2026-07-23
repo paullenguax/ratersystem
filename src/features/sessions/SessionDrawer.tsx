@@ -53,8 +53,10 @@ export function SessionDrawer({ open, onClose, session }: Props) {
       : EMPTY
     )
     if (session) {
-      getDocs(query(collection(db, 'scores'), where('sessionId', '==', session.id), limit(1)))
-        .then(snap => setHasScores(!snap.empty))
+      Promise.all([
+        getDocs(query(collection(db, 'scores'), where('sessionId', '==', session.id), limit(1))),
+        getDocs(query(collection(db, 'standardization_scores'), where('sessionId', '==', session.id), limit(1))),
+      ]).then(([scoresSnap, stdScoresSnap]) => setHasScores(!scoresSnap.empty || !stdScoresSnap.empty))
     } else {
       setHasScores(false)
     }

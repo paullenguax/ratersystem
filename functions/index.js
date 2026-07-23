@@ -319,6 +319,76 @@ exports.deleteBenchmarkCentreAccount = onCall({ secrets: [BENCHMARK_SERVICE_ACCO
   return { ok: true }
 })
 
+// Creates a RaterSystem login: a Firebase Auth user in this project plus its
+// matching people/{uid} doc, then emails a password-reset link so the person
+// can set their own password — replaces the manual Console + Firestore +
+// "send reset email" three-step process described in the README by hand.
+// Works for any role (admin/senior_rater/trainee/interlocutor); Canvas SSO
+// users still get provisioned automatically via canvasAuth/Canvas Sync and
+// never need this, since they never set a password at all.
+exports.invitePerson = onCall({ secrets: [RESEND_API_KEY] }, async (request) => {
+  await assertAdmin(request)
+  const { name, email, role, canStandardize } = request.data
+  if (!name || !email || !role) {
+    throw new HttpsError('invalid-argument', 'name, email, and role are all required')
+  }
+  if (!['admin', 'senior_rater', 'trainee', 'interlocutor'].includes(role)) {
+    throw new HttpsError('invalid-argument', 'Invalid role')
+  }
+
+  const db = admin.firestore()
+  const dup = await db.collection('people').where('email', '==', email).limit(1).get()
+  if (!dup.empty) throw new HttpsError('already-exists', 'A person with this email already exists')
+
+  let userRecord
+  try {
+    userRecord = await admin.auth().createUser({ email, displayName: name })
+  } catch (err) {
+    if (err.code === 'auth/email-already-exists') {
+      throw new HttpsError('already-exists', 'This email is already registered in Firebase Auth')
+    }
+    throw new HttpsError('internal', 'Failed to create account')
+  }
+
+  await db.doc(`people/${userRecord.uid}`).set({
+    name,
+    email,
+    role,
+    status: 'active',
+    canStandardize: !!canStandardize,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  })
+
+  const resetLink = await admin.auth().generatePasswordResetLink(email, {
+    url: 'https://lenguax.com/ratersystem/login',
+  })
+
+  const apiKey = RESEND_API_KEY.value()
+  if (apiKey) {
+    try {
+      await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: 'RaterSystem <notifications@lenguax.com>',
+          to: email,
+          subject: 'Set your RaterSystem password',
+          text: `You've been added to the Lenguax RaterSystem. Set your password here:\n\n${resetLink}`,
+        }),
+      })
+    } catch (err) {
+      // Don't fail the call over this — the account + people doc already
+      // exist; the admin can trigger another reset email if it didn't land.
+      console.error('invitePerson: failed to send invite email', err)
+    }
+  }
+
+  return { uid: userRecord.uid }
+})
+
 exports.canvasEnrollments = onCall(async (request) => {
   const { courseId } = request.data
   if (!courseId) throw new HttpsError('invalid-argument', 'Missing courseId')
@@ -791,7 +861,7 @@ exports.requestSelfAssignment = onCall(async (request) => {
   ])
   const pool = testsSnap.docs
     .map(d => ({ id: d.id, ...d.data() }))
-    .filter(t => t.status === 'active' && !t.excludeFromPool)
+    .filter(t => t.status === 'active' && !t.excludeFromPool && (t.category ?? 'rater_course') !== 'standardization')
 
   const seenTestIds = new Set()
   const ratersByTest = new Map()

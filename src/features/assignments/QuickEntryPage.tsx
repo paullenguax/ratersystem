@@ -55,7 +55,7 @@ export function QuickEntryPage() {
     queryKey: ['tests'],
     queryFn: async () => (await getDocs(collection(db, 'test_bank'))).docs
       .map(d => ({ id: d.id, ...d.data() }) as Test)
-      .filter(t => t.status !== 'retired')
+      .filter(t => t.status !== 'retired' && (t.category ?? 'rater_course') !== 'standardization')
       .sort((a, b) => (a.testId ?? 999) - (b.testId ?? 999)),
   })
 

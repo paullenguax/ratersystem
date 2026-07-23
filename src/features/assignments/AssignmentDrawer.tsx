@@ -21,6 +21,7 @@ const STATUS_LABELS: Record<Assignment['status'], string> = {
 }
 
 const schema = z.object({
+  category:  z.enum(['rater_course', 'standardization']),
   sessionId: z.string().min(1, 'Required'),
   raterId:   z.string().min(1, 'Required'),
   status:    z.enum(['pending', 'submitted', 'reviewed', 'published']),
@@ -28,7 +29,7 @@ const schema = z.object({
 })
 type FormData = z.infer<typeof schema>
 
-const EMPTY: FormData = { sessionId: '', raterId: '', status: 'pending', notes: '' }
+const EMPTY: FormData = { category: 'rater_course', sessionId: '', raterId: '', status: 'pending', notes: '' }
 
 async function fetchSessions(): Promise<Session[]> {
   const snap = await getDocs(collection(db, 'sessions'))
@@ -71,10 +72,17 @@ export function AssignmentDrawer({ open, onClose, assignment }: Props) {
   const { data: people = [] } = useQuery({ queryKey: ['people'], queryFn: fetchPeople })
   const { data: tests = [] } = useQuery({ queryKey: ['tests'], queryFn: fetchTests })
 
-  const { register, handleSubmit, control, reset, formState: { errors, isSubmitting } } =
+  const { register, handleSubmit, control, reset, setValue, formState: { errors, isSubmitting } } =
     useForm<FormData>({ resolver: zodResolver(schema), defaultValues: EMPTY })
 
   const raterId = useWatch({ control, name: 'raterId' })
+  const category = useWatch({ control, name: 'category' })
+
+  const filteredPeople = people.filter(p =>
+    category === 'standardization'
+      ? p.role === 'interlocutor' || p.canStandardize
+      : p.role !== 'interlocutor'
+  )
 
   // Fetch test IDs this rater has already scored (new assignments only)
   const { data: ratedTestIds = new Set<string>() } = useQuery({
@@ -92,6 +100,7 @@ export function AssignmentDrawer({ open, onClose, assignment }: Props) {
   const alreadyRatedCount = isEdit ? 0 : tests.filter(t => ratedTestIds.has(t.id)).length
 
   const filteredTests = tests.filter(t => {
+    if ((t.category ?? 'rater_course') !== category) return false
     if (!isEdit && !showRated && ratedTestIds.has(t.id)) return false
     if (!testSearch) return true
     const q = testSearch.toLowerCase()
@@ -102,10 +111,25 @@ export function AssignmentDrawer({ open, onClose, assignment }: Props) {
     )
   })
 
+  function handleCategoryChange(value: string | null) {
+    if (!value) return
+    setValue('category', value as FormData['category'])
+    if (!isEdit) {
+      setValue('raterId', '')
+      setSelectedTestIds([])
+    }
+  }
+
   useEffect(() => {
     if (!open) return
     if (assignment) {
-      reset({ sessionId: assignment.sessionId, raterId: assignment.raterId, status: assignment.status, notes: assignment.notes ?? '' })
+      reset({
+        category: assignment.category ?? 'rater_course',
+        sessionId: assignment.sessionId,
+        raterId: assignment.raterId,
+        status: assignment.status,
+        notes: assignment.notes ?? '',
+      })
       setSelectedTestIds(assignment.testDocIds)
     } else {
       reset(EMPTY)
@@ -135,6 +159,7 @@ export function AssignmentDrawer({ open, onClose, assignment }: Props) {
     if (!session || !rater) return
 
     const payload = {
+      category: data.category,
       sessionId: data.sessionId,
       sessionName: session.name,
       raterId: data.raterId,
@@ -164,6 +189,25 @@ export function AssignmentDrawer({ open, onClose, assignment }: Props) {
         </SheetHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4 py-4">
+
+          {/* Category */}
+          <div className="space-y-1">
+            <Label>Assignment type</Label>
+            <Controller name="category" control={control} render={({ field }) => (
+              <Select value={field.value} onValueChange={handleCategoryChange} disabled={isEdit}>
+                <SelectTrigger>
+                  <SelectValue>{field.value === 'standardization' ? 'Standardization' : 'Rater course'}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="rater_course">Rater course</SelectItem>
+                  <SelectItem value="standardization">Standardization</SelectItem>
+                </SelectContent>
+              </Select>
+            )} />
+            {isEdit && (
+              <p className="text-xs text-muted-foreground">Locked — an assignment's type can't be changed after creation.</p>
+            )}
+          </div>
 
           {/* Session */}
           <div className="space-y-1">
@@ -198,7 +242,7 @@ export function AssignmentDrawer({ open, onClose, assignment }: Props) {
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent className="max-h-60">
-                  {people.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                  {filteredPeople.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             )} />

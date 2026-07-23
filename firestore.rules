@@ -63,6 +63,18 @@ service cloud.firestore {
         (isSignedIn() && resource.data.raterId == request.auth.uid);
     }
 
+    // ── standardization_scores ────────────────────────────────────────────────
+    // Same access pattern as scores — kept as a separate collection so
+    // standardization results never mix with rater-course scores.
+
+    match /standardization_scores/{scoreId} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin() ||
+        (isSignedIn() && request.resource.data.raterId == request.auth.uid);
+      allow update, delete: if isAdmin() ||
+        (isSignedIn() && resource.data.raterId == request.auth.uid);
+    }
+
     // ── test_bank ─────────────────────────────────────────────────────────────
 
     match /test_bank/{testId} {

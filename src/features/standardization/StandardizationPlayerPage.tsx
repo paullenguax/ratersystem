@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react'
-import { useLocation } from 'react-router-dom'
 import {
   collection, getDocs, query, where,
   addDoc, updateDoc, doc, serverTimestamp, Timestamp,
@@ -8,12 +7,20 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Pencil } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
-import type { Assignment, Test, Score } from '@/types'
+import type { Assignment, Test, StandardizationScore } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { IcaoSliders, DIMENSIONS, type DimScores } from './IcaoSliders'
+import { Textarea } from '@/components/ui/textarea'
+import { IcaoSliders, DIMENSIONS, type DimScores } from '@/features/scoring/IcaoSliders'
 
-// ── helpers ────────────────────────────────────────────────────────────────
+// Independent copy of ScoringPage's fetch/save/confirm mechanics — same
+// review→confirm→lock pattern, but no trainee anonymisation (this is never a
+// blind exam) and no self-serve auto-open, plus a per-test comments field.
+// See ScoringPage.tsx / README.md "Scoring player" for why the mechanics
+// (drafts, auto-save-on-navigate-away, single Continue button) look the way
+// they do — kept intentionally, not simplified.
+
+const COMMENT_MAX = 250
 
 function levelColour(n: number) {
   if (n >= 5) return 'text-green-700 bg-green-50 border-green-300'
@@ -36,16 +43,16 @@ const STATUS_VARIANT: Record<Assignment['status'], 'secondary' | 'default' | 'ou
   published: 'outline',
 }
 
+type Draft = { scores: DimScores; comments: string }
+const EMPTY_SCORES: DimScores = [null, null, null, null, null, null]
+
 // ── data fetching ──────────────────────────────────────────────────────────
 
 async function fetchMyAssignments(uid: string): Promise<Assignment[]> {
   const snap = await getDocs(query(collection(db, 'assignments'), where('raterId', '==', uid)))
   return snap.docs
     .map(d => ({ id: d.id, ...d.data() }) as Assignment)
-    // Confirmed assignments have nothing left for the rater to act on —
-    // drop them the same way published ones already are, so "Assignments"
-    // doesn't loop back to something already finished.
-    .filter(a => a.status !== 'published' && !a.confirmedAt && (a.category ?? 'rater_course') !== 'standardization')
+    .filter(a => a.category === 'standardization' && a.status !== 'published' && !a.confirmedAt)
     .sort((a, b) => a.sessionName.localeCompare(b.sessionName))
 }
 
@@ -57,11 +64,11 @@ async function fetchTestsForAssignment(testDocIds: string[]): Promise<Test[]> {
     .sort((a, b) => (a.testId ?? 999) - (b.testId ?? 999))
 }
 
-async function fetchExistingScores(assignmentId: string): Promise<Map<string, Score>> {
-  const snap = await getDocs(query(collection(db, 'scores'), where('assignmentId', '==', assignmentId)))
-  const map = new Map<string, Score>()
+async function fetchExistingScores(assignmentId: string): Promise<Map<string, StandardizationScore>> {
+  const snap = await getDocs(query(collection(db, 'standardization_scores'), where('assignmentId', '==', assignmentId)))
+  const map = new Map<string, StandardizationScore>()
   snap.docs.forEach(d => {
-    const s = { id: d.id, ...d.data() } as Score
+    const s = { id: d.id, ...d.data() } as StandardizationScore
     map.set(s.testDocId, s)
   })
   return map
@@ -79,7 +86,7 @@ function AssignmentList({
   if (assignments.length === 0) {
     return (
       <div className="text-center py-16">
-        <p className="text-muted-foreground">No assignments pending.</p>
+        <p className="text-muted-foreground">No standardization assignments pending.</p>
         <p className="text-sm text-muted-foreground mt-1">Check back later or contact your administrator.</p>
       </div>
     )
@@ -107,48 +114,31 @@ function AssignmentList({
 
 // ── main page ──────────────────────────────────────────────────────────────
 
-export function ScoringPage() {
-  const { user, role } = useAuth()
+export function StandardizationPlayerPage() {
+  const { user } = useAuth()
   const queryClient = useQueryClient()
-  const location = useLocation()
-  const autoOpenAssignmentId = (location.state as { assignmentId?: string } | null)?.assignmentId
-  // Trainees are always here to sit their rater/refresher course exam — hide
-  // candidate-identifying info so they can't cross-reference which specific
-  // recordings they were assigned. Admins/senior raters scoring elsewhere
-  // still need the full detail, so this is scoped to role, not the page.
-  const isTraineeExam = role === 'trainee'
 
   const [assignment, setAssignment] = useState<Assignment | null>(null)
   const [tests, setTests] = useState<Test[]>([])
-  const [existingScores, setExistingScores] = useState<Map<string, Score>>(new Map())
+  const [existingScores, setExistingScores] = useState<Map<string, StandardizationScore>>(new Map())
   const [loadingPlayer, setLoadingPlayer] = useState(false)
   const [currentIdx, setCurrentIdx] = useState(0)
-  const [scores, setScores] = useState<DimScores>([null, null, null, null, null, null])
+  const [scores, setScores] = useState<DimScores>(EMPTY_SCORES)
+  const [comments, setComments] = useState('')
   const [showErrors, setShowErrors] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [playbackSpeed, setPlaybackSpeed] = useState(1)
   const [reviewing, setReviewing] = useState(false)
   const [confirming, setConfirming] = useState(false)
-  // In-memory drafts, keyed by testDocId — survive navigating between tests
-  // even before a save, so switching to another candidate and back doesn't
-  // silently discard what was just entered.
-  const [drafts, setDrafts] = useState<Map<string, DimScores>>(new Map())
-  // Label of whatever was just saved (including background auto-saves
-  // triggered by navigating away) — shown as a brief confirmation regardless
-  // of which screen you land on next, since the save and the navigation
-  // don't necessarily happen on the same screen.
+  const [drafts, setDrafts] = useState<Map<string, Draft>>(new Map())
   const [justSaved, setJustSaved] = useState<string | null>(null)
-  // Which candidate's sub-score breakdown is expanded on the summary screen
   const [expandedSummaryId, setExpandedSummaryId] = useState<string | null>(null)
-  // testDocIds edited (not just first-scored) during this session — unlike
-  // justSaved, this doesn't expire, so coming back to a test later still
-  // shows whether you're looking at your edit or the untouched original.
   const [editedThisSession, setEditedThisSession] = useState<Set<string>>(new Set())
   const audioRef = useRef<HTMLAudioElement>(null)
 
   const { data: assignments = [], isLoading } = useQuery({
-    queryKey: ['my-assignments', user?.uid],
+    queryKey: ['my-standardization-assignments', user?.uid],
     queryFn: () => fetchMyAssignments(user!.uid),
     enabled: !!user?.uid,
   })
@@ -169,51 +159,45 @@ export function ScoringPage() {
     setLoadingPlayer(false)
   }
 
-  // Auto-open the assignment the self-serve flow just created, once it's loaded
-  useEffect(() => {
-    if (!autoOpenAssignmentId || assignment) return
-    const match = assignments.find(a => a.id === autoOpenAssignmentId)
-    if (match) openAssignment(match)
-  }, [autoOpenAssignmentId, assignment, assignments]) // eslint-disable-line react-hooks/exhaustive-deps
-
   useEffect(() => {
     const test = tests[currentIdx]
     if (!test) return
     const draft = drafts.get(test.id)
     const existing = existingScores.get(test.id)
     if (draft) {
-      setScores(draft)
+      setScores(draft.scores)
+      setComments(draft.comments)
     } else if (existing) {
       setScores([
         existing.pronunciation, existing.structure, existing.vocabulary,
         existing.fluency, existing.comprehension, existing.interactions,
       ])
+      setComments(existing.comments ?? '')
     } else {
-      setScores([null, null, null, null, null, null])
+      setScores(EMPTY_SCORES)
+      setComments('')
     }
     setSubmitError(null)
     setShowErrors(false)
     if (audioRef.current) audioRef.current.load()
-    // drafts intentionally excluded — this should only re-run on actual test
-    // navigation, not every keystroke; the latest drafts value is still read
-    // via closure whenever it does run.
+    // drafts intentionally excluded — see ScoringPage.tsx for the same pattern
   }, [currentIdx, tests, existingScores]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Mirror the current test's in-progress scores into the draft map as they
-  // change, so navigating away and back restores them even if unsaved.
   useEffect(() => {
     const test = tests[currentIdx]
     if (!test) return
-    setDrafts(prev => new Map(prev).set(test.id, scores))
-    // currentIdx/tests intentionally excluded — only scores changing should
-    // trigger this; the effect above already reacts to navigation itself.
-  }, [scores]) // eslint-disable-line react-hooks/exhaustive-deps
+    setDrafts(prev => new Map(prev).set(test.id, { scores, comments }))
+    // currentIdx/tests intentionally excluded — only scores/comments changing
+    // should trigger this; the effect above already reacts to navigation.
+  }, [scores, comments]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Keyboard shortcut: 1-6 fills next unscored dimension
+  // Keyboard shortcut: 1-6 fills next unscored dimension (ignored while
+  // focus is in a text field, including the comments Textarea)
   useEffect(() => {
     if (!assignment) return
     function onKey(e: KeyboardEvent) {
-      if ((e.target as HTMLElement).tagName === 'INPUT') return
+      const tag = (e.target as HTMLElement).tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return
       if (e.ctrlKey || e.metaKey || e.altKey) return
       const n = parseInt(e.key)
       if (n >= 1 && n <= 6) {
@@ -229,11 +213,7 @@ export function ScoringPage() {
     return () => window.removeEventListener('keydown', onKey)
   }, [assignment])
 
-  // Searches forward from `fromIdx` (wrapping, never returning `fromIdx`
-  // itself) for the nearest test not yet present in `scoredMap`. Null means
-  // every other test already has a score — i.e., saving the current one (if
-  // it needs saving) would complete the whole assignment.
-  function findNextIncompleteIdx(fromIdx: number, scoredMap: Map<string, Score>): number | null {
+  function findNextIncompleteIdx(fromIdx: number, scoredMap: Map<string, StandardizationScore>): number | null {
     for (let offset = 1; offset < tests.length; offset++) {
       const idx = (fromIdx + offset) % tests.length
       if (!scoredMap.has(tests[idx].id)) return idx
@@ -241,14 +221,7 @@ export function ScoringPage() {
     return null
   }
 
-  // Persists tests[currentIdx]'s current `scores` to Firestore. Returns the
-  // post-save scores map on success (so callers can immediately compute
-  // "what's next" without waiting on React state to catch up), or ok:false
-  // if incomplete (shows validation errors) or on a write failure (shows the
-  // error banner). Deliberately has no opinion about navigation — callers
-  // decide that, so this is reused by the main continue action and by
-  // "save whatever's pending before navigating away" (goToTest etc. below).
-  async function saveCurrentTest(): Promise<{ ok: boolean; updatedScores?: Map<string, Score> }> {
+  async function saveCurrentTest(): Promise<{ ok: boolean; updatedScores?: Map<string, StandardizationScore> }> {
     const test = tests[currentIdx]
     if (!test || !assignment || !user) return { ok: false }
     if (scores.some(s => s === null)) {
@@ -258,6 +231,7 @@ export function ScoringPage() {
 
     const [p, st, v, fl, c, inter] = scores as number[]
     const overall = Math.min(p, st, v, fl, c, inter)
+    const trimmedComments = comments.slice(0, COMMENT_MAX)
 
     setSubmitting(true)
     setSubmitError(null)
@@ -267,14 +241,15 @@ export function ScoringPage() {
         pronunciation: p, structure: st, vocabulary: v,
         fluency: fl, comprehension: c, interactions: inter,
         overallLevel: overall,
+        comments: trimmedComments,
       }
 
       let scoreId = existing?.id
       if (existing) {
-        await updateDoc(doc(db, 'scores', existing.id), dimPayload)
+        await updateDoc(doc(db, 'standardization_scores', existing.id), dimPayload)
         setEditedThisSession(prev => new Set(prev).add(test.id))
       } else {
-        const newDocRef = await addDoc(collection(db, 'scores'), {
+        const newDocRef = await addDoc(collection(db, 'standardization_scores'), {
           ...dimPayload,
           assignmentId: assignment.id,
           sessionId: assignment.sessionId,
@@ -285,8 +260,6 @@ export function ScoringPage() {
           testNumber: test.testId ?? null,
           candidateName: test.candidateName,
           testType: test.testType,
-          published: false,
-          notes: '',
           createdAt: serverTimestamp(),
         })
         scoreId = newDocRef.id
@@ -298,7 +271,7 @@ export function ScoringPage() {
         id: scoreId!,
         testDocId: test.id,
         ...dimPayload,
-      } as Score)
+      } as StandardizationScore)
       setExistingScores(updatedScores)
       setDrafts(prev => {
         const next = new Map(prev)
@@ -306,14 +279,13 @@ export function ScoringPage() {
         return next
       })
 
-      const label = isTraineeExam ? `Candidate ${String.fromCharCode(65 + currentIdx)}` : test.candidateName
-      setJustSaved(label)
-      setTimeout(() => setJustSaved(prev => (prev === label ? null : prev)), 2500)
+      setJustSaved(test.candidateName)
+      setTimeout(() => setJustSaved(prev => (prev === test.candidateName ? null : prev)), 2500)
 
       if (assignment.testDocIds.every(id => updatedScores.has(id))) {
         await updateDoc(doc(db, 'assignments', assignment.id), { status: 'submitted' })
         setAssignment(prev => prev ? { ...prev, status: 'submitted' } : null)
-        queryClient.invalidateQueries({ queryKey: ['my-assignments', user.uid] })
+        queryClient.invalidateQueries({ queryKey: ['my-standardization-assignments', user.uid] })
       }
       return { ok: true, updatedScores }
     } catch (err) {
@@ -324,11 +296,6 @@ export function ScoringPage() {
     }
   }
 
-  // The one action the bottom bar's main button ever performs: save the
-  // current test if there's a complete change pending, then go to wherever
-  // makes sense next — back to the summary if reviewing, the next
-  // not-yet-scored candidate if one exists, or nowhere (the summary screen
-  // takes over on its own once everything's scored).
   async function handleContinue() {
     let scoredMap = existingScores
     if (hasChanges && allScored) {
@@ -344,19 +311,13 @@ export function ScoringPage() {
     if (nextIdx !== null) setCurrentIdx(nextIdx)
   }
 
-  // Used by every OTHER way of leaving the current test (arrows, "Back to
-  // summary," "← Assignments") — if there's a complete, unsaved change
-  // sitting on screen, save it first rather than silently stranding it in
-  // the draft map. Doesn't apply to a still-incomplete test (fewer than 6
-  // scored) — that's a legitimate "just browsing ahead" case, not an edit
-  // waiting to be saved.
   async function saveIfNeeded(): Promise<boolean> {
     if (!hasChanges || !allScored) return true
     return (await saveCurrentTest()).ok
   }
 
   async function goToTest(newIdx: number) {
-    if (!(await saveIfNeeded())) return // save failed — stay put, show the error
+    if (!(await saveIfNeeded())) return
     setCurrentIdx(newIdx)
   }
 
@@ -370,17 +331,13 @@ export function ScoringPage() {
     setAssignment(null)
   }
 
-  // Final, explicit lock-in — once set, the completion screen no longer
-  // offers a way back into edit mode. Distinct from `assignment.status`
-  // flipping to 'submitted' (which just means all 4 tests are scored) —
-  // this is the rater actively saying "yes, these are my answers."
   async function handleConfirm() {
     if (!assignment) return
     setConfirming(true)
     try {
       await updateDoc(doc(db, 'assignments', assignment.id), { confirmedAt: serverTimestamp() })
       setAssignment(prev => prev ? { ...prev, confirmedAt: Timestamp.now() } : null)
-      queryClient.invalidateQueries({ queryKey: ['my-assignments', user!.uid] })
+      queryClient.invalidateQueries({ queryKey: ['my-standardization-assignments', user!.uid] })
     } finally {
       setConfirming(false)
     }
@@ -390,14 +347,7 @@ export function ScoringPage() {
 
   if (!user) return null
 
-  const waitingForAutoOpen = !!autoOpenAssignmentId && !assignment
-
-  // isLoading reflects the outer "my assignments" list query, which gets
-  // invalidated (and silently refetches in the background) the moment the
-  // last test is saved or confirmed. That's only meant to gate the initial
-  // list view — once a specific assignment is open, its own view (player or
-  // summary) should never be preempted by that background refetch.
-  if ((isLoading && !assignment) || loadingPlayer || waitingForAutoOpen) {
+  if ((isLoading && !assignment) || loadingPlayer) {
     return (
       <div className="flex items-center justify-center py-20">
         <p className="text-muted-foreground text-sm">Loading…</p>
@@ -408,7 +358,7 @@ export function ScoringPage() {
   if (!assignment) {
     return (
       <div className="max-w-2xl space-y-4">
-        <h1 className="text-2xl font-semibold">My Assignments</h1>
+        <h1 className="text-2xl font-semibold">Standardization</h1>
         <AssignmentList assignments={assignments} onSelect={openAssignment} />
       </div>
     )
@@ -421,32 +371,24 @@ export function ScoringPage() {
   const isAlreadyScored = !!existingScore
   const totalScored = assignment.testDocIds.filter(id => existingScores.has(id)).length
   const assignmentComplete = tests.length > 0 && totalScored === tests.length
-  // Once already scored, "ready" only means something if the current sliders
-  // actually differ from what's saved — otherwise there's nothing to submit,
-  // just a prefilled view of the existing answer.
   const hasChanges = !isAlreadyScored || (allScored && (
     scores[0] !== existingScore!.pronunciation ||
     scores[1] !== existingScore!.structure ||
     scores[2] !== existingScore!.vocabulary ||
     scores[3] !== existingScore!.fluency ||
     scores[4] !== existingScore!.comprehension ||
-    scores[5] !== existingScore!.interactions
+    scores[5] !== existingScore!.interactions ||
+    comments !== (existingScore!.comments ?? '')
   ))
   const readyToSubmit = allScored && !submitting && hasChanges
-  // Where the main button goes next: back to the summary while reviewing;
-  // otherwise the nearest not-yet-scored candidate, or "Complete" if this is
-  // the last one left regardless of A/B/C/D order.
   const nextIncompleteIdx = findNextIncompleteIdx(currentIdx, existingScores)
   const canContinue = reviewing || (hasChanges && allScored) || nextIncompleteIdx !== null
-  // Full label describes the destination; short label is a fallback for
-  // narrow screens, where "Continue to Candidate C" (or a full real name)
-  // sitting next to two arrow buttons risks overflowing.
   const continueLabelShort = reviewing ? 'Back' : nextIncompleteIdx === null ? 'Complete' : 'Continue'
   const continueLabelFull = reviewing
     ? 'Back to summary'
     : nextIncompleteIdx === null
       ? 'Complete'
-      : `Continue to ${isTraineeExam ? `Candidate ${String.fromCharCode(65 + nextIncompleteIdx)}` : tests[nextIncompleteIdx].candidateName}`
+      : `Continue to ${tests[nextIncompleteIdx].candidateName}`
 
   return (
     <div className="max-w-2xl space-y-4">
@@ -471,9 +413,6 @@ export function ScoringPage() {
         <Badge variant={STATUS_VARIANT[assignment.status]}>{STATUS_LABEL[assignment.status]}</Badge>
       </div>
 
-      {/* Save confirmation — persists across the navigation that often
-          follows a save (including background auto-saves), so it's still
-          visible on whichever screen you land on next. */}
       {justSaved && (
         <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-2 text-sm text-green-800 font-medium">
           ✓ {justSaved} saved
@@ -493,11 +432,9 @@ export function ScoringPage() {
             </p>
           </div>
           <div className="flex flex-col gap-1.5 max-w-sm mx-auto">
-            {tests.map((t, i) => {
+            {tests.map(t => {
               const s = existingScores.get(t.id)
-              const label = isTraineeExam
-                ? `Candidate ${String.fromCharCode(65 + i)}`
-                : `${t.testId ? `#${t.testId} — ` : ''}${t.candidateName}`
+              const label = `${t.testId ? `#${t.testId} — ` : ''}${t.candidateName}`
               const isExpanded = expandedSummaryId === t.id
               return (
                 <div key={t.id} className="rounded-md bg-white border text-sm overflow-hidden">
@@ -520,16 +457,21 @@ export function ScoringPage() {
                     )}
                   </button>
                   {isExpanded && s && (
-                    <div className="grid grid-cols-3 gap-x-3 gap-y-1 px-3 pb-2 pt-1 border-t text-xs">
-                      {DIMENSIONS.map(dim => {
-                        const val = s[dim.key] as number
-                        return (
-                          <div key={dim.key} className="flex items-center justify-between">
-                            <span className="text-muted-foreground">{dim.label.slice(0, 3).toUpperCase()}</span>
-                            <span className={`font-mono font-bold px-1 rounded ${levelColour(val)}`}>{val}</span>
-                          </div>
-                        )
-                      })}
+                    <div className="px-3 pb-2 pt-1 border-t text-xs space-y-2">
+                      <div className="grid grid-cols-3 gap-x-3 gap-y-1">
+                        {DIMENSIONS.map(dim => {
+                          const val = s[dim.key] as number
+                          return (
+                            <div key={dim.key} className="flex items-center justify-between">
+                              <span className="text-muted-foreground">{dim.label.slice(0, 3).toUpperCase()}</span>
+                              <span className={`font-mono font-bold px-1 rounded ${levelColour(val)}`}>{val}</span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                      {s.comments && (
+                        <p className="text-muted-foreground whitespace-pre-wrap">{s.comments}</p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -555,39 +497,21 @@ export function ScoringPage() {
         </div>
       ) : (
       <>
-      {/* Announces test changes to screen readers — clicking an arrow or
-          Continue swaps content in place rather than navigating to a new
-          page, so without this a screen reader user gets no indication
-          they're now looking at a different candidate. */}
       <div className="sr-only" aria-live="polite">
-        {test && (isTraineeExam
-          ? `Now viewing Candidate ${String.fromCharCode(65 + currentIdx)}, ${currentIdx + 1} of ${tests.length}`
-          : `Now viewing ${test.candidateName}, ${currentIdx + 1} of ${tests.length}`)}
+        {test && `Now viewing ${test.candidateName}, ${currentIdx + 1} of ${tests.length}`}
       </div>
       <div className="rounded-xl border bg-card p-5 space-y-5">
 
         {/* Progress navigation */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            {isTraineeExam ? (
-              <span className="text-2xl font-bold">
-                Candidate {String.fromCharCode(65 + currentIdx)}{' '}
-                <span className="text-sm font-normal text-muted-foreground">({currentIdx + 1} of {tests.length})</span>
-              </span>
-            ) : (
-              <>
-                <span className="text-sm font-medium">Test {String.fromCharCode(65 + currentIdx)} of {tests.length}</span>
-                {test?.testId && (
-                  <span className="font-mono text-xs text-muted-foreground">#{test.testId}</span>
-                )}
-              </>
+            <span className="text-sm font-medium">Test {currentIdx + 1} of {tests.length}</span>
+            {test?.testId && (
+              <span className="font-mono text-xs text-muted-foreground">#{test.testId}</span>
             )}
             {isAlreadyScored && (
               <span className="text-xs text-green-700 bg-green-50 border border-green-200 rounded px-1.5 py-0.5">scored</span>
             )}
-            {/* Persists for the rest of the session, unlike the justSaved
-                toast — so coming back to this test later still shows
-                whether you're looking at your edit or the untouched original */}
             {test && editedThisSession.has(test.id) && (
               <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">✓ your edit saved</span>
             )}
@@ -602,8 +526,7 @@ export function ScoringPage() {
           </div>
         </div>
 
-        {/* Test info — hidden for trainees sitting the rater/refresher exam */}
-        {test && !isTraineeExam && (
+        {test && (
           <div className="text-sm">
             <p className="font-medium">{test.candidateName}</p>
             <p className="text-muted-foreground text-xs mt-0.5">
@@ -654,7 +577,6 @@ export function ScoringPage() {
           </p>
         ) : null}
 
-        {/* Error banner */}
         {submitError && (
           <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800 font-medium">
             Couldn't save your scores: {submitError}
@@ -663,9 +585,20 @@ export function ScoringPage() {
 
         <IcaoSliders scores={scores} onChange={setScores} showErrors={showErrors} />
 
-        {/* Ready-to-submit banner — bridges "I just finished the sliders"
-            and "there's a save action below," which was easy to miss.
-            Amber = you've changed an already-saved answer; green = new. */}
+        <div className="space-y-1">
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium">Comments (optional)</label>
+            <span className="text-xs text-muted-foreground">{comments.length}/{COMMENT_MAX}</span>
+          </div>
+          <Textarea
+            value={comments}
+            onChange={e => setComments(e.target.value.slice(0, COMMENT_MAX))}
+            maxLength={COMMENT_MAX}
+            rows={3}
+            placeholder="Any notes on this candidate…"
+          />
+        </div>
+
         {readyToSubmit && (
           <div className={`rounded-lg border px-4 py-3 text-sm font-medium ${
             isAlreadyScored ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-green-50 border-green-200 text-green-800'
@@ -678,8 +611,6 @@ export function ScoringPage() {
 
       </div>
 
-      {/* Sticky submit bar — visually shifts once ready, so the state change
-          itself catches the eye even on a glance downward */}
       <div className={`fixed bottom-0 left-0 right-0 z-40 border-t backdrop-blur px-4 py-3 transition-colors ${
         readyToSubmit
           ? (isAlreadyScored
@@ -712,10 +643,6 @@ export function ScoringPage() {
               disabled={!canContinue || submitting}
               className={`max-w-[45vw] sm:max-w-none ${readyToSubmit ? (isAlreadyScored ? 'ring-2 ring-amber-500 ring-offset-1' : 'ring-2 ring-green-500 ring-offset-1') : ''}`}
             >
-              {/* Pencil icon backs up the amber ring with a shape, not just
-                  colour, for "you're about to overwrite a saved answer" —
-                  and the sr-only text carries the same distinction for
-                  screen readers, who perceive neither the ring nor the icon */}
               {readyToSubmit && isAlreadyScored && <Pencil className="size-3.5 mr-1 shrink-0" aria-hidden="true" />}
               <span className="truncate sm:hidden">{submitting ? 'Saving…' : continueLabelShort}</span>
               <span className="hidden sm:inline">{submitting ? 'Saving…' : continueLabelFull}</span>

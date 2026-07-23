@@ -2,10 +2,11 @@ import { useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { collection, getDocs, deleteDoc, doc } from 'firebase/firestore'
 import { useReactTable, getCoreRowModel, getSortedRowModel, flexRender, type ColumnDef, type SortingState } from '@tanstack/react-table'
-import { Plus, ChevronUp, ChevronDown, ChevronsUpDown, Trash2 } from 'lucide-react'
+import { Plus, UserPlus, ChevronUp, ChevronDown, ChevronsUpDown, Trash2 } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import type { Person } from '@/types'
 import { PersonDrawer } from './PersonDrawer'
+import { InvitePersonDialog } from './InvitePersonDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -16,9 +17,10 @@ const ROLE_LABELS: Record<Person['role'], string> = {
   admin: 'Admin',
   senior_rater: 'Senior Rater',
   trainee: 'Trainee',
+  interlocutor: 'Interlocutor',
 }
 
-const ROLE_ORDER: Record<Person['role'], number> = { admin: 0, senior_rater: 1, trainee: 2 }
+const ROLE_ORDER: Record<Person['role'], number> = { admin: 0, senior_rater: 1, trainee: 2, interlocutor: 3 }
 
 async function fetchPeople(): Promise<Person[]> {
   const snap = await getDocs(collection(db, 'people'))
@@ -32,6 +34,7 @@ export function PeoplePage() {
   const [statusFilter, setStatusFilter] = useState<'all' | Person['status']>('all')
   const [hideTrainees, setHideTrainees] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [inviteOpen, setInviteOpen] = useState(false)
   const [selectedPerson, setSelectedPerson] = useState<Person | undefined>()
   const [sorting, setSorting] = useState<SortingState>([{ id: 'role', desc: false }])
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -151,9 +154,14 @@ export function PeoplePage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">People</h1>
-        <Button onClick={() => { setSelectedPerson(undefined); setDrawerOpen(true) }}>
-          <Plus className="size-4 mr-2" /> Add person
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setInviteOpen(true)}>
+            <UserPlus className="size-4 mr-2" /> Invite
+          </Button>
+          <Button onClick={() => { setSelectedPerson(undefined); setDrawerOpen(true) }}>
+            <Plus className="size-4 mr-2" /> Add person
+          </Button>
+        </div>
       </div>
 
       <div className="flex gap-2 flex-wrap items-center">
@@ -170,6 +178,7 @@ export function PeoplePage() {
             <SelectItem value="admin">Admin</SelectItem>
             <SelectItem value="senior_rater">Senior Rater</SelectItem>
             <SelectItem value="trainee">Trainee</SelectItem>
+            <SelectItem value="interlocutor">Interlocutor</SelectItem>
           </SelectContent>
         </Select>
         <Select value={statusFilter} onValueChange={v => setStatusFilter(v as typeof statusFilter)}>
@@ -238,6 +247,7 @@ export function PeoplePage() {
       )}
 
       <PersonDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} person={selectedPerson} />
+      <InvitePersonDialog open={inviteOpen} onClose={() => setInviteOpen(false)} />
     </div>
   )
 }

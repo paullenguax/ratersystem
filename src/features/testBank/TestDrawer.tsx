@@ -24,13 +24,14 @@ const schema = z.object({
   testType: z.enum(TEST_TYPES),
   durationSeconds: z.number().min(0).optional(),
   status: z.enum(['active', 'retired']),
+  category: z.enum(['rater_course', 'standardization']),
   notes: z.string().optional(),
 })
 type FormData = z.infer<typeof schema>
 
 const EMPTY: FormData = {
   recordingUrl: '', candidateName: '', candidateNationality: '',
-  testType: 'PPL', durationSeconds: undefined, status: 'active', notes: '',
+  testType: 'PPL', durationSeconds: undefined, status: 'active', category: 'rater_course', notes: '',
 }
 
 interface Props {
@@ -78,6 +79,7 @@ export function TestDrawer({ open, onClose, test }: Props) {
         testType: test.testType,
         durationSeconds: test.durationSeconds,
         status: test.status,
+        category: test.category ?? 'rater_course',
         notes: test.notes ?? '',
       } : EMPTY
       reset(vals)
@@ -96,6 +98,7 @@ export function TestDrawer({ open, onClose, test }: Props) {
       testType: data.testType,
       durationSeconds: data.durationSeconds ?? null,
       status: data.status,
+      category: data.category,
       excludeFromPool,
       notes: data.notes ?? '',
     }
@@ -184,17 +187,31 @@ export function TestDrawer({ open, onClose, test }: Props) {
             </div>
           </div>
 
-          <div className="space-y-1">
-            <Label>Status</Label>
-            <Controller name="status" control={control} render={({ field }) => (
-              <Select value={field.value} onValueChange={field.onChange}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="retired">Retired</SelectItem>
-                </SelectContent>
-              </Select>
-            )} />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label>Status</Label>
+              <Controller name="status" control={control} render={({ field }) => (
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="retired">Retired</SelectItem>
+                  </SelectContent>
+                </Select>
+              )} />
+            </div>
+            <div className="space-y-1">
+              <Label>Category</Label>
+              <Controller name="category" control={control} render={({ field }) => (
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="rater_course">Rater course</SelectItem>
+                    <SelectItem value="standardization">Standardization</SelectItem>
+                  </SelectContent>
+                </Select>
+              )} />
+            </div>
           </div>
 
           <label className="flex items-center gap-2 text-sm cursor-pointer select-none">

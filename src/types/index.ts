@@ -4,12 +4,15 @@ export interface Person {
   id: string
   name: string
   email: string
-  role: 'admin' | 'senior_rater' | 'trainee'
+  role: 'admin' | 'senior_rater' | 'trainee' | 'interlocutor'
   status: 'active' | 'inactive' | 'suspended'
   raterNumber?: number
   notes?: string
   linkedAt?: Timestamp
   createdVia?: 'self_serve_auto'
+  // Lets an admin/senior_rater/trainee also take on standardization work,
+  // in addition to the dedicated 'interlocutor' role.
+  canStandardize?: boolean
   createdAt?: Timestamp
 }
 
@@ -23,6 +26,8 @@ export interface Assignment {
   status: 'pending' | 'submitted' | 'reviewed' | 'published'
   notes?: string
   source?: 'admin' | 'self_serve'
+  // Undefined is treated as 'rater_course' everywhere this is read.
+  category?: 'rater_course' | 'standardization'
   confirmedAt?: Timestamp
   createdAt?: Timestamp
 }
@@ -57,6 +62,30 @@ export interface Score {
   overallLevel: number
   published: boolean
   notes?: string
+  createdAt?: Timestamp
+}
+
+// Standardization-exercise results, kept entirely separate from `Score`/
+// `scores` (no published/Rasch-export concerns here — see StandardizationPlayerPage).
+export interface StandardizationScore {
+  id: string
+  assignmentId: string
+  sessionId: string
+  sessionName: string
+  raterId: string
+  raterName: string
+  testDocId: string
+  testNumber?: number
+  candidateName: string
+  testType: string
+  pronunciation: number
+  structure: number
+  vocabulary: number
+  fluency: number
+  comprehension: number
+  interactions: number
+  overallLevel: number
+  comments?: string
   createdAt?: Timestamp
 }
 
@@ -264,6 +293,8 @@ export interface Test {
   durationSeconds?: number
   status: 'active' | 'retired'
   excludeFromPool?: boolean
+  // Undefined is treated as 'rater_course' everywhere this is read.
+  category?: 'rater_course' | 'standardization'
   canonicalDifficulty?: number | null
   canonicalSE?: number | null
   notes?: string
