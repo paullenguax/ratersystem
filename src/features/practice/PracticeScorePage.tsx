@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import {
   collection, getDocs, getDoc, query, where,
@@ -37,9 +37,7 @@ export function PracticeScorePage() {
   const [scores, setScores] = useState<DimScores>([null, null, null, null, null, null])
   const [showErrors, setShowErrors] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [playbackSpeed, setPlaybackSpeed] = useState(1)
   const [existingDocId, setExistingDocId] = useState<string | null>(null)
-  const audioRef = useRef<HTMLAudioElement>(null)
 
   // Load and validate the session itself — independent of identity.
   useEffect(() => {
@@ -328,47 +326,12 @@ export function PracticeScorePage() {
 
       <div className="px-4 py-6 max-w-lg mx-auto space-y-5">
 
-        {/* Audio player */}
-        {session?.audioUrl ? (
-          <div className="rounded-lg bg-muted/40 p-4 space-y-2 border">
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-muted-foreground font-medium">Recording</p>
-              <div className="flex gap-1">
-                {[0.75, 1, 1.25, 1.5].map(speed => (
-                  <button
-                    key={speed}
-                    type="button"
-                    onClick={() => {
-                      setPlaybackSpeed(speed)
-                      if (audioRef.current) audioRef.current.playbackRate = speed
-                    }}
-                    className={`px-2 py-0.5 text-xs rounded font-medium border transition-colors ${
-                      playbackSpeed === speed
-                        ? 'bg-primary text-primary-foreground border-primary'
-                        : 'border-input text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    {speed}×
-                  </button>
-                ))}
-              </div>
-            </div>
-            <audio
-              ref={audioRef}
-              controls
-              controlsList="nodownload"
-              onContextMenu={e => e.preventDefault()}
-              onLoadedMetadata={() => { if (audioRef.current) audioRef.current.playbackRate = playbackSpeed }}
-              className="w-full"
-              src={session.audioUrl}
-              preload="metadata"
-            />
-          </div>
-        ) : (
-          <div className="rounded-lg bg-muted/40 px-4 py-3 border text-sm text-muted-foreground">
-            Your trainer is playing the recording — listen and score below.
-          </div>
-        )}
+        {/* The trainer plays the recording (e.g. over speakers in the room)
+            for the whole group from the admin session view — participants
+            just listen and score, they don't get their own player. */}
+        <div className="rounded-lg bg-muted/40 px-4 py-3 border text-sm text-muted-foreground">
+          Your trainer is playing the recording — listen and score below.
+        </div>
 
         <IcaoSliders scores={scores} onChange={setScores} showErrors={showErrors} />
 

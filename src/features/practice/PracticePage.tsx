@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   collection, getDocs, getDoc, addDoc, updateDoc, deleteDoc,
   doc, query, where, onSnapshot, serverTimestamp,
@@ -204,6 +204,8 @@ function ResultsView({ session, onBack }: { session: PracticeSession; onBack: ()
   const [copied, setCopied] = useState(false)
   const [clearing, setClearing] = useState(false)
   const [promoting, setPromoting] = useState(false)
+  const [playbackSpeed, setPlaybackSpeed] = useState(1)
+  const audioRef = useRef<HTMLAudioElement>(null)
 
   // The Test this session was built from (if any) — needed to supply
   // candidateName/testType/testNumber when promoting scores, since
@@ -338,6 +340,44 @@ function ResultsView({ session, onBack }: { session: PracticeSession; onBack: ()
           </div>
         </div>
       </div>
+
+      {/* Recording — the trainer plays this here (e.g. over speakers in the
+          room) for the whole group; participants only submit scores, they
+          don't get their own audio player. */}
+      {session.audioUrl && (
+        <div className="rounded-lg bg-muted/40 p-4 space-y-2 border">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-muted-foreground font-medium">Recording</p>
+            <div className="flex gap-1">
+              {[0.75, 1, 1.25, 1.5].map(speed => (
+                <button
+                  key={speed}
+                  type="button"
+                  onClick={() => {
+                    setPlaybackSpeed(speed)
+                    if (audioRef.current) audioRef.current.playbackRate = speed
+                  }}
+                  className={`px-2 py-0.5 text-xs rounded font-medium border transition-colors ${
+                    playbackSpeed === speed
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'border-input text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {speed}×
+                </button>
+              ))}
+            </div>
+          </div>
+          <audio
+            ref={audioRef}
+            controls
+            onLoadedMetadata={() => { if (audioRef.current) audioRef.current.playbackRate = playbackSpeed }}
+            className="w-full"
+            src={session.audioUrl}
+            preload="metadata"
+          />
+        </div>
+      )}
 
       {/* Action bar */}
       <div className="flex flex-wrap gap-2">
