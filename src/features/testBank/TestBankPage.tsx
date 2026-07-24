@@ -49,7 +49,7 @@ export function TestBankPage() {
       (categoryFilter === 'all' || (t.category ?? 'rater_course') === categoryFilter) &&
       (courseTagFilter === 'all' || t.courseTag === courseTagFilter)
     )
-  }), [tests, search, typeFilter, statusFilter, categoryFilter, courseTagFilter])
+  }), [tests, search, typeFilter, statusFilter, poolFilter, categoryFilter, courseTagFilter])
 
   const columns: ColumnDef<Test>[] = [
     {
