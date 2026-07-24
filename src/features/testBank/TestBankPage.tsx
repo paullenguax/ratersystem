@@ -156,6 +156,30 @@ export function TestBankPage() {
         </Button>
       </div>
 
+      {/* Rater-course and standardization tests are really two separate
+          pools — this is the primary way to switch between them, rather
+          than burying it in the filter row below. */}
+      <div className="flex gap-1">
+        {([
+          ['all', 'Both'],
+          ['rater_course', 'Rater Course'],
+          ['standardization', 'Standardization'],
+        ] as const).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setCategoryFilter(value)}
+            className={`px-3 py-1.5 text-sm rounded-md border font-medium transition-colors ${
+              categoryFilter === value
+                ? 'bg-primary text-primary-foreground border-primary'
+                : 'border-input text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {playingUrl && (
         <audio controls autoPlay src={playingUrl} className="w-full" onEnded={() => setPlayingUrl(null)} />
       )}
@@ -197,14 +221,6 @@ export function TestBankPage() {
             <SelectItem value="all">All tests</SelectItem>
             <SelectItem value="pool">In pool</SelectItem>
             <SelectItem value="excluded">Excluded</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={categoryFilter} onValueChange={v => setCategoryFilter(v as typeof categoryFilter)}>
-          <SelectTrigger className="w-40"><SelectValue placeholder="All categories" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All categories</SelectItem>
-            <SelectItem value="rater_course">Rater course</SelectItem>
-            <SelectItem value="standardization">Standardization</SelectItem>
           </SelectContent>
         </Select>
         <Select value={courseTagFilter} onValueChange={v => setCourseTagFilter(v as typeof courseTagFilter)}>
