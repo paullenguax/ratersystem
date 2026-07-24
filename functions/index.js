@@ -199,6 +199,15 @@ exports.canvasAuth = onCall({ secrets: [CANVAS_CLIENT_SECRET] }, async (request)
   if (!userRes.ok) throw new HttpsError('internal', 'Failed to fetch Canvas user profile')
 
   const canvasUser = await userRes.json()
+
+  // The access token is only needed for the profile lookup above — revoke it
+  // immediately so Canvas doesn't accumulate a never-expiring "RaterSystem"
+  // entry under Approved Integrations on every single SSO login. Best-effort:
+  // a failed revoke shouldn't block sign-in.
+  fetch(`${CANVAS_URL}/login/oauth2/token`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${access_token}` },
+  }).catch(() => {})
   const email = (canvasUser.login_id || canvasUser.primary_email || '').toLowerCase().trim()
 
   if (!email) throw new HttpsError('internal', 'Could not determine email from Canvas profile')
