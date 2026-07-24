@@ -66,10 +66,12 @@ async function fetchTests(): Promise<Test[]> {
   const snap = await getDocs(query(collection(db, 'test_bank'), where('status', '==', 'active')))
   return snap.docs
     .map(d => ({ id: d.id, ...d.data() }) as Test)
-    // Practice Sessions are a rater-course trainee exercise — standardization
-    // tests are reserved for real interlocutor calibration assignments, not
-    // previewed/practiced on ahead of time.
-    .filter(t => (t.category ?? 'rater_course') !== 'standardization')
+    // rater_course-category tests are reserved for the real final assignment
+    // at the end of the course — they must stay unseen by trainees until
+    // then, so they're never offered here. Only the standardization pool
+    // (safe to reuse for live practice) is selectable; `courseTag`
+    // (rater course / refresher course / other) still filters within it.
+    .filter(t => (t.category ?? 'rater_course') === 'standardization')
     .sort((a, b) => (a.testId ?? 999) - (b.testId ?? 999))
 }
 
