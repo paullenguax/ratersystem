@@ -38,6 +38,7 @@ export function buildSeedTemplateSlides(): TemplateSlide[] {
       kind: 'instruction',
       label: 'Invite candidate',
       candidateState: 'Logo',
+      startsTestTimer: true,
       scriptText:
         'Invite the Candidate into the test room.\n' +
         'Place the recorder on the desk with the microphone directed towards the candidate and press record. ' +
@@ -77,6 +78,9 @@ export function buildSeedTemplateSlides(): TemplateSlide[] {
       label: 'Part 1 — Experience questions',
       candidateState: 'Task1',
       partNumber: 1,
+      notes:
+        'This is PART 1 of the Test. Ask the questions, along with appropriate extension questions, ' +
+        'to elicit an interactive sample of 2 to 3 minutes maximum.',
       scriptText: "OK, this is Part 1.\n{questions}\nNow I'm going to show you an image related to a(n) [role]'s role...",
       slotSpec: { questions: true, variables: ['role'] },
     },

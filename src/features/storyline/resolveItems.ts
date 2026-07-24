@@ -95,6 +95,8 @@ export function resolveItems(
       order: slide.order,
       candidateState: slide.candidateState ?? '',
       examinerText: resolveScriptText(slide, testVariables, slot),
+      notes: slide.notes ? substituteVariables(slide.notes, testVariables) : undefined,
+      startsTestTimer: slide.startsTestTimer,
       timing: slide.timing,
     }
     let media = resolveMedia(slide, slot)

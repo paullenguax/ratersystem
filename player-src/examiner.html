@@ -8,16 +8,40 @@
 <body>
   <div id="internet-status"></div>
   <div class="examiner-shell">
-    <h1>Examiner control</h1>
-    <div class="primary-actions">
-      <button id="open-candidate">Open candidate window</button>
-    </div>
-    <div id="items"></div>
-    <div class="log-panel">
-      <h2>Event Log</h2>
+    <header class="exam-header">
+      <div class="exam-progress">
+        <div class="exam-progress-label" id="progress-label">Slide 1/1</div>
+        <div class="exam-progress-bar"><div class="exam-progress-fill" id="progress-fill"></div></div>
+      </div>
+      <div class="exam-timers">
+        <span class="exam-timer" id="global-timer" hidden>00:00</span>
+        <span class="exam-timer exam-timer-slide" id="slide-timer" hidden>00:00</span>
+      </div>
+      <button id="notes-toggle" class="notes-toggle" type="button">Notes</button>
+    </header>
+
+    <main class="slide-card" id="slide-card"></main>
+
+    <nav class="slide-nav">
+      <button id="prev-btn" type="button">◀ Back</button>
+      <button id="open-candidate" type="button">Open candidate window</button>
+      <button id="next-btn" type="button">Next ▶</button>
+    </nav>
+
+    <details class="log-panel">
+      <summary>Event Log</summary>
       <ul id="event-log"></ul>
-    </div>
+    </details>
   </div>
+
+  <aside class="notes-drawer" id="notes-drawer">
+    <div class="notes-drawer-header">
+      <h2>Notes</h2>
+      <button id="notes-close" type="button" aria-label="Close notes">✕</button>
+    </div>
+    <div id="notes-content"></div>
+  </aside>
+
   <script type="module" src="./examiner.ts"></script>
 </body>
 </html>

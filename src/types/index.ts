@@ -164,6 +164,15 @@ export interface TemplateSlide {
   // (e.g. "Effective Radio Communications") — content, not fixed wording,
   // so it's a slot like {questions} rather than baked into scriptText.
   scriptText: string
+  // Examiner-only contextual guidance, shown in the player's collapsible
+  // notes drawer — distinct from scriptText (what's said aloud to the
+  // candidate). [placeholder] tokens named in slotSpec.variables are filled
+  // the same way as in scriptText.
+  notes?: string
+  // Arriving at this slide starts the continuous session timer, which then
+  // runs for the rest of the test. Exactly one slide (typically the
+  // "invite candidate into the room" slide) should set this.
+  startsTestTimer?: boolean
   timing?: {
     prepSeconds?: number
     responseSeconds?: number
@@ -213,6 +222,8 @@ export interface StorylineItem {
   order: number
   examinerText?: string
   candidateState: string
+  notes?: string
+  startsTestTimer?: boolean
   media?: {
     images?: string[]
     // maxPlays carries over from the slide's slotSpec — the exported item

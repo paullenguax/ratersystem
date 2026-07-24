@@ -25,7 +25,7 @@ Manages the full workflow of ICAO English rating: assigning tests to raters, ent
 | Dashboard | ✓ | ✓ | ✓ | ✓ |
 | People | ✓ | | | |
 | Test Bank | ✓ | | | |
-| Storyline | ✓ | | | |
+| Test Versions | ✓ | | | |
 | Events (Sessions) | ✓ | | | |
 | Assignments | ✓ | | | |
 | Scoring | ✓ | ✓ | ✓ | |
@@ -64,7 +64,7 @@ Role is determined by the `people` Firestore collection — the doc ID **must** 
 | `config/canvas` | Canvas API token, Canvas Sync course list, `excludedCourseIds`, `notificationEmail` for self-serve alerts |
 | `canvasEnrollmentLog` | Unified log of Canvas enrollments from both WooCommerce (`CanvasCohortEnrollment` WP plugin) and the manual `/admin/canvas-enroll` wizard |
 | `practice_sessions` / `practice_scores` | Ad-hoc live-course practice player (`/practice`), joined via a 6-character code; login is now optional (Canvas SSO) — see "Practice Sessions" below |
-| `storyline_tests` / `storyline_versions` | Storyline Replacement test authoring — see "Storyline Replacement" section below |
+| `storyline_tests` / `storyline_versions` / `storyline_parts` / `storyline_template` | Test Versions (Storyline Replacement) authoring — see "Storyline Replacement" section below |
 
 ## Local dev
 
@@ -203,52 +203,85 @@ Ad-hoc live-course exercise: a trainer creates a session (optionally linked to a
 - **Promote to standardization pool**: in the trainer's results view (`PracticePage.tsx`), a "Save to standardization pool" button sits next to the existing "Clear scores" delete — two independent choices, not a combined action. It copies every Canvas-identified, not-yet-promoted score into `standardization_scores` (stamping `promotedToStandardization: true` on the source so re-clicking is idempotent), using the session's linked `test_bank` doc for `candidateName`/`testType`/`testNumber`. Only available when the session was built from a real Test Bank recording — an ad-hoc session with no linked test has nothing to attach a standardization record to. Written as the signed-in admin, so the existing `standardization_scores` create rule's `isAdmin()` branch already covers it — **no Firestore rules changes were needed for any of this.**
 - **Finding the right test to link**: the "New session" dialog's test picker only ever offers `category: 'standardization'` tests — `rater_course`-category tests are reserved for the trainee's real final assignment at the end of the course and must never be previewed in a live practice session ahead of time. Within that pool, the picker is filterable by `Test.courseTag` (`rater_course`/`refresher_course`/`other` — an independent sub-classification of *which course* the test is used in, unrelated to `category`) and sorted by `Test.dayLabel` (a free-text field like "Day 1", plain string-sorted) then test number.
 
-## Storyline Replacement (`/storyline`)
+## Storyline Replacement / Test Versions (`/test-versions`)
 
 Phase 1 of replacing Articulate Storyline as the tool used to author and run
-aviation English speaking tests (full background:
-`/home/paul/Programs/Storyline-Replacement/storyline-replacement-spec.md`).
-This phase covers authoring, in-app preview, and export — **not** the
-WordPress auth/redirect integration, which is a later phase.
+TEAC (Test of English for Aeronautical Communication) speaking tests (full
+background: `/home/paul/Programs/Storyline-Replacement/storyline-replacement-
+spec.md` and its `Spec Updates/` revision). Branded "Test Versions" in the
+nav (bottom of the sidebar, admin-only); folder/component names still say
+"Storyline" internally. This phase covers authoring, in-app preview, and
+export — **not** the WordPress auth/redirect integration, which is a later
+phase.
 
-- **Data model**: `storyline_tests` (a named test series, e.g. "Approach") →
-  `storyline_versions` (an immutable-once-published version, `testId` +
-  `status: 'draft'|'published'|'archived'` + an embedded `items[]` array).
-  `StorylineItem` = `{ id, type: 'logo'|'task_prompt'|'picture_prompt', order,
-  examinerText?, candidateState, media?: {imageUrl?, audioUrl?}, timing?:
-  {prepSeconds?, responseSeconds?} }`. Task types are structurally identical
-  across tests — only content differs — so the item form doesn't branch on
-  `type`; it's mainly a content-organisation label.
+- **Data model**: a `storyline_tests` doc is a role type (e.g. "Approach");
+  each `storyline_versions` doc is one immutable-once-published assembly of
+  content for that test. The real test content is 4 **Parts**, each a
+  globally-shared, pooled unit in its own `storyline_parts` collection (not
+  scoped to any Test — matches real cross-role-type content sharing found in
+  the TEAC tracking spreadsheet), with `draft`/`published`/`archived` status
+  plus `active`/`isBackup` flags. A Version just references one Part per
+  number (`partRefs`) and supplies its own whole-test slide content directly.
+  A single shared `storyline_template/current` doc (`StorylineTemplate`,
+  edited on `StorylineTemplateEditorPage`) holds the fixed examiner wording
+  as an ordered list of `TemplateSlide`s — `{questions}`/`{topic}` are
+  content slots filled per-Version/Part, `[placeholder]` tokens are filled
+  once per Test (`StorylineTest.variables`), `notes` is examiner-only
+  guidance shown in the player's notes drawer, and `startsTestTimer` marks
+  the one slide (normally "invite candidate into the room") that starts the
+  session timer. `resolveItems.ts` is the single function that merges
+  template + Test variables + a Version's whole-test content + its 4 Parts'
+  content into the final flat `StorylineItem[]` — used identically by
+  Preview, Publish (snapshots the result into `version.items`), and Export.
 - **Pages**: `StorylineTestsPage` → `StorylineVersionsPage` (draft/publish/
-  duplicate-as-new-draft/archive lifecycle) → `StorylineVersionEditorPage`
-  (add/reorder/remove items, per-item media upload via `MediaUploadField`).
-  A published version's editor is read-only — edits require "Duplicate" to
-  spin up a new draft.
-- **Access**: `storyline_tests`/`storyline_versions`/`storylines/` Storage are
-  admin-only for read *and* write (unlike `test_bank`'s `isSignedIn()`-read —
-  test content should stay confidential, and the exported player never
-  queries Firestore directly).
+  duplicate-as-new-draft/archive lifecycle, Part picker, Preview, Export) →
+  `StorylineVersionEditorPage` (whole-test slot-filling + per-Part Select).
+  `StorylinePartsPage` (Parts Library, filterable by Part number/status/
+  backup) → `StorylinePartEditorPage` (slot-filling for that Part's slides
+  only). A published Version or Part is read-only — edits require
+  "Duplicate" to spin up a new draft.
+- **Access**: `storyline_tests`/`storyline_versions`/`storyline_parts`/
+  `storyline_template`/`storylines/` Storage are admin-only for read *and*
+  write (unlike `test_bank`'s `isSignedIn()`-read — test content should stay
+  confidential, and the exported player never queries Firestore directly).
+  Storage's `isAdmin()` checks an `admin: true` Auth custom claim (synced
+  from `people.role` by the `syncAdminClaim` Cloud Function) rather than a
+  cross-service Firestore read — see "Gotchas" below.
 - **Player shell** (`player-src/` at the repo root, sibling to `src/`, its own
   minimal `tsconfig.json` — deliberately outside the main `tsc -b` graph):
-  plain HTML/TS `examiner.html`/`examiner.ts` (control view, triggers
-  candidate-state changes) and `candidate.html`/`candidate.ts` (builds one
-  hidden panel per item, toggles visibility on incoming messages) — no React
-  or Firebase dependency, so an exported test runs standalone. Sync is via
-  `BroadcastChannel` (replacing the old system's fragile direct cross-window
-  JS reference); both windows independently load the same item list at
-  startup (no ready/handshake race), and the channel carries only the
-  runtime "advance to state X" signal.
+  `examiner.html`/`examiner.ts` is a single-slide-at-a-time navigator (one
+  fixed-size card, a segmented progress bar, Back/Next) and `candidate.html`/
+  `candidate.ts` builds one hidden image-only panel per item and toggles
+  visibility on incoming messages — no React or Firebase dependency, so an
+  exported test runs standalone. Sync is via `BroadcastChannel` (replacing
+  the old system's fragile direct cross-window JS reference); both windows
+  independently load the same item list at startup (no ready/handshake
+  race), and the channel carries only the runtime "advance to state X"
+  signal, sent automatically on every Next/Back — there's no separate "Show"
+  action. Audio plays from the **examiner's own console** (everyone in the
+  room hears it via one set of speakers, matching the real in-person,
+  single-room setup) with a soft play-count limit (warns and logs past
+  `maxPlays`, never blocks) and a visible in-session Event Log; Next is
+  disabled until every audio clip on the current slide has been played at
+  least once, except in Preview mode, which bypasses this so an admin can
+  click through freely while the candidate window still tracks the current
+  slide. A collapsible notes drawer (collapsed by default) shows each
+  slide's `notes`. A continuous timer starts the moment the slide tagged
+  `startsTestTimer` is reached and runs for the rest of the session; a
+  slide's own `timing.prepSeconds`/`responseSeconds` (if set) auto-starts a
+  second countdown the moment that slide becomes current — purely
+  informational, it never gates navigation.
 - **Build**: a *separate* `vite.config.player.ts` (multi-page, fixed asset
   names via a manifest, `outDir` pointed straight at `public/player-shell`)
   builds this shell. Wired as an npm `prebuild` script, so `public/player-
   shell/` can never drift from `player-src/` source — safe because it never
   touches `dist/` beyond what the main build's static-asset copy already
   does, and `.github/workflows/deploy.yml` only FTPs `dist/`.
-- **Preview**: `useStorylinePreview.ts` writes the current (possibly unsaved)
-  draft items to `localStorage` under a random per-launch session ID and
-  opens `player-shell/examiner.html?preview=1&session=…` — the *exact* same
-  built artifact used for export, so there's no drift between what's tested
-  and what's shipped.
+- **Preview**: `useStorylinePreview.ts` writes the resolved items to
+  `localStorage` under a random per-launch session ID and opens `player-
+  shell/examiner.html?preview=1&session=…` — the *exact* same built artifact
+  used for export, so there's no drift between what's tested and what's
+  shipped.
 - **Export**: `exportStoryline.ts` reads `public/player-shell/.vite/
   manifest.json` (emitted by the player build) to discover every built file
   without hardcoding filenames, zips them with `jszip` alongside a generated
@@ -257,6 +290,9 @@ WordPress auth/redirect integration, which is a later phase.
   no-offline-first posture), and downloads it. v1 publish is manual: an admin
   uploads this zip to the WordPress tests folder and pastes the URL into the
   existing TEAC-Plugin admin, same as the current Storyline workflow.
+- **Not built yet**: the real WordPress portal integration (Phase 2), actual
+  pooling/random-selection logic for picking an unseen Part per candidate,
+  and historical exposure backfill from old version-code naming conventions.
 
 ## Notes
 

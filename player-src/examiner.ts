@@ -37,14 +37,94 @@ function logEvent(message: string) {
   list.insertBefore(li, list.firstChild)
 }
 
-// Audio plays from the examiner's own console — everyone in the room hears
-// it via the examiner's speakers, matching the in-person, single-room setup
-// (recorder on the desk, one device). The candidate screen never plays
-// audio itself (candidate.ts is images-only). Play is a soft lock: past
-// maxPlays it still plays, just warns and logs it — never blocks.
+function formatTime(totalSeconds: number): string {
+  const s = Math.max(0, Math.round(totalSeconds))
+  const m = Math.floor(s / 60)
+  const sec = s % 60
+  return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
+}
+
+// --- Continuous session timer ------------------------------------------
+// Starts the moment the examiner reaches the slide tagged
+// `startsTestTimer` (see TemplateSlide) and runs for the rest of the test.
+
+let globalTimerStart: number | null = null
+
+function tickGlobalTimer() {
+  if (globalTimerStart === null) return
+  const el = document.getElementById('global-timer')
+  if (!el) return
+  el.textContent = formatTime((Date.now() - globalTimerStart) / 1000)
+}
+
+function startGlobalTimer() {
+  if (globalTimerStart !== null) return
+  globalTimerStart = Date.now()
+  const el = document.getElementById('global-timer')
+  if (el) el.hidden = false
+  tickGlobalTimer()
+  window.setInterval(tickGlobalTimer, 1000)
+}
+
+// --- Per-slide timer ------------------------------------------------------
+// Auto-starts the moment a slide with timing.prepSeconds/responseSeconds
+// becomes current. Prep counts down first, then response, if both are set.
+// Purely informational — never gates navigation.
+
+let slideTimerHandle: number | undefined
+let slideTimerRemaining = 0
+
+function clearSlideTimer() {
+  if (slideTimerHandle !== undefined) window.clearInterval(slideTimerHandle)
+  slideTimerHandle = undefined
+  const el = document.getElementById('slide-timer')
+  if (el) {
+    el.hidden = true
+    el.classList.remove('exam-timer-done')
+  }
+}
+
+function runSlideTimerPhase(phase: 'Prep' | 'Response', seconds: number, then?: () => void) {
+  slideTimerRemaining = seconds
+  const el = document.getElementById('slide-timer')
+  if (!el) return
+  el.hidden = false
+  el.classList.remove('exam-timer-done')
+  el.textContent = `${phase} ${formatTime(slideTimerRemaining)}`
+  slideTimerHandle = window.setInterval(() => {
+    slideTimerRemaining--
+    if (slideTimerRemaining < 0) {
+      window.clearInterval(slideTimerHandle)
+      if (then) {
+        then()
+      } else {
+        el.textContent = `${phase} 00:00`
+        el.classList.add('exam-timer-done')
+      }
+      return
+    }
+    el.textContent = `${phase} ${formatTime(slideTimerRemaining)}`
+  }, 1000)
+}
+
+function startSlideTimer(item: StorylineItem) {
+  clearSlideTimer()
+  const { prepSeconds, responseSeconds } = item.timing ?? {}
+  if (prepSeconds) {
+    runSlideTimerPhase('Prep', prepSeconds, responseSeconds ? () => runSlideTimerPhase('Response', responseSeconds) : undefined)
+  } else if (responseSeconds) {
+    runSlideTimerPhase('Response', responseSeconds)
+  }
+}
+
+// --- Audio playback (from the examiner's own console — everyone in the ---
+// room hears it via the examiner's speakers, matching the in-person,
+// single-room setup). Soft lock: past maxPlays it still plays, just warns
+// and logs it — never blocks. `onPlay` lets the caller re-check whether
+// Next should now be enabled (every clip needs >=1 play).
 const playCounts = new Map<string, number>()
 
-function createAudioControls(clip: { label: string; url: string; maxPlays?: number }): HTMLElement {
+function createAudioControls(clip: { label: string; url: string; maxPlays?: number }, onPlay: () => void): HTMLElement {
   const audio = new Audio(clip.url)
   const wrap = document.createElement('div')
   wrap.className = 'audio-controls'
@@ -76,6 +156,7 @@ function createAudioControls(clip: { label: string; url: string; maxPlays?: numb
     } else {
       logEvent(`Played "${clip.label}" (${count}${clip.maxPlays ? '/' + clip.maxPlays : ''}).`)
     }
+    onPlay()
   })
 
   const pauseBtn = document.createElement('button')
@@ -91,53 +172,100 @@ function createAudioControls(clip: { label: string; url: string; maxPlays?: numb
   return wrap
 }
 
-function renderItems(items: StorylineItem[]) {
-  const container = document.getElementById('items')
-  if (!container) return
-  container.innerHTML = ''
+// --- Slide navigator --------------------------------------------------
+
+let items: StorylineItem[] = []
+let currentIndex = 0
+
+function sendAdvance(item: StorylineItem) {
+  if (!item.candidateState) return
+  if (candidateWindow && !candidateWindow.closed) {
+    channel.postMessage({ type: 'advance', candidateState: item.candidateState })
+    logEvent(`Advanced candidate screen to "${item.candidateState}".`)
+  } else {
+    logEvent(`Candidate window is not open — "${item.candidateState}" was not shown.`)
+  }
+}
+
+function updateNavState() {
+  const prevBtn = document.getElementById('prev-btn') as HTMLButtonElement | null
+  const nextBtn = document.getElementById('next-btn') as HTMLButtonElement | null
+  if (!prevBtn || !nextBtn) return
+  prevBtn.disabled = currentIndex === 0
+  const item = items[currentIndex]
+  const clips = item?.media?.audioClips ?? []
+  const allPlayed = clips.every(c => (playCounts.get(c.url) ?? 0) > 0)
+  const isLast = currentIndex >= items.length - 1
+  // Preview mode lets an admin click through freely regardless of audio gating.
+  nextBtn.disabled = isLast || (!isPreview && !allPlayed)
+}
+
+function renderCurrentSlide() {
+  const card = document.getElementById('slide-card')
+  const progressLabel = document.getElementById('progress-label')
+  const progressFill = document.getElementById('progress-fill') as HTMLElement | null
+  const notesContent = document.getElementById('notes-content')
+  if (!card) return
 
   if (items.length === 0) {
-    container.textContent = 'No items in this version.'
+    card.textContent = 'No items in this version.'
     return
   }
 
-  for (const item of items) {
-    const row = document.createElement('div')
-    row.className = 'item-row'
+  const item = items[currentIndex]
 
-    const label = document.createElement('div')
-    label.innerHTML = `<strong>${item.candidateState || '(no state)'}</strong>` +
-      (item.examinerText ? `<div class="meta">${escapeHtml(item.examinerText)}</div>` : '')
-    row.appendChild(label)
+  if (progressLabel) progressLabel.textContent = `Slide ${currentIndex + 1}/${items.length}`
+  if (progressFill) progressFill.style.width = `${((currentIndex + 1) / items.length) * 100}%`
 
-    item.media?.audioClips?.forEach(clip => {
-      row.appendChild(createAudioControls(clip))
-    })
+  card.innerHTML = ''
+  const heading = document.createElement('div')
+  heading.className = 'slide-heading'
+  heading.textContent = item.candidateState || '(examiner-only)'
+  card.appendChild(heading)
 
-    const button = document.createElement('button')
-    button.textContent = 'Show'
-    button.disabled = !item.candidateState
-    button.addEventListener('click', () => {
-      if (candidateWindow && !candidateWindow.closed) {
-        channel.postMessage({ type: 'advance', candidateState: item.candidateState })
-        logEvent(`Advanced candidate screen to "${item.candidateState}".`)
-      } else if (window.confirm('The candidate window has been closed. Reopen it?')) {
-        openCandidateWindow()
-      }
-    })
-    row.appendChild(button)
-
-    container.appendChild(row)
+  if (item.examinerText) {
+    const text = document.createElement('div')
+    text.className = 'slide-text'
+    text.textContent = item.examinerText
+    card.appendChild(text)
   }
+
+  item.media?.audioClips?.forEach(clip => {
+    card.appendChild(createAudioControls(clip, updateNavState))
+  })
+
+  if (notesContent) notesContent.textContent = item.notes || 'No notes for this slide.'
+
+  if (item.startsTestTimer) startGlobalTimer()
+  startSlideTimer(item)
+  sendAdvance(item)
+  updateNavState()
 }
 
-function escapeHtml(s: string): string {
-  const div = document.createElement('div')
-  div.textContent = s
-  return div.innerHTML
-}
+document.getElementById('prev-btn')?.addEventListener('click', () => {
+  if (currentIndex === 0) return
+  currentIndex--
+  renderCurrentSlide()
+})
 
-loadItems().then(renderItems).catch(err => {
-  const container = document.getElementById('items')
-  if (container) container.textContent = `Failed to load items: ${String(err)}`
+document.getElementById('next-btn')?.addEventListener('click', () => {
+  const nextBtn = document.getElementById('next-btn') as HTMLButtonElement | null
+  if (nextBtn?.disabled || currentIndex >= items.length - 1) return
+  currentIndex++
+  renderCurrentSlide()
+})
+
+document.getElementById('notes-toggle')?.addEventListener('click', () => {
+  document.getElementById('notes-drawer')?.classList.toggle('open')
+})
+document.getElementById('notes-close')?.addEventListener('click', () => {
+  document.getElementById('notes-drawer')?.classList.remove('open')
+})
+
+loadItems().then(loaded => {
+  items = loaded
+  renderCurrentSlide()
+}).catch(err => {
+  const card = document.getElementById('slide-card')
+  if (card) card.textContent = `Failed to load items: ${String(err)}`
 })

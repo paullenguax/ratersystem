@@ -116,6 +116,28 @@ export function TemplateSlideRow({ slide, disabled, canMoveUp, canMoveDown, onCh
         />
       </div>
 
+      <div className="space-y-1">
+        <Label>Examiner notes (shown in the player&apos;s notes drawer)</Label>
+        <Textarea
+          value={slide.notes ?? ''}
+          onChange={e => set('notes', e.target.value || undefined)}
+          rows={2}
+          placeholder="Contextual advice for the examiner only — separate from what's said aloud above."
+          disabled={disabled}
+        />
+      </div>
+
+      <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={!!slide.startsTestTimer}
+          onChange={e => set('startsTestTimer', e.target.checked || undefined)}
+          className="rounded"
+          disabled={disabled}
+        />
+        <span>Starts the continuous test timer when reached</span>
+      </label>
+
       <div className="grid grid-cols-4 gap-3 items-end">
         <div className="space-y-1">
           <Label>Prep (s)</Label>
