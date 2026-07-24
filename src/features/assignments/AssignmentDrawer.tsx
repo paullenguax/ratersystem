@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { collection, addDoc, doc, updateDoc, deleteDoc, getDocs, query, where, serverTimestamp } from 'firebase/firestore'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { db } from '@/lib/firebase'
+import { formatTestNumber } from '@/lib/testNumber'
 import type { Assignment, Person, Test, Session } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -286,7 +287,7 @@ export function AssignmentDrawer({ open, onClose, assignment }: Props) {
                       className="rounded"
                     />
                     <span className="text-sm">
-                      {t.testId ? <span className="font-mono text-xs text-muted-foreground mr-1">#{t.testId}</span> : null}
+                      {t.testId ? <span className="font-mono text-xs text-muted-foreground mr-1">{formatTestNumber(t.testId, t.category)}</span> : null}
                       {t.candidateName}
                       <span className="text-muted-foreground ml-1 text-xs">({t.testType})</span>
                     </span>

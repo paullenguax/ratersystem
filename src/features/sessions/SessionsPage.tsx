@@ -16,6 +16,7 @@ const TYPE_LABELS: Record<Session['type'], string> = {
   calibration:  'Calibration',
   historical:   'Historical Import',
   ad_hoc:       'Ad hoc',
+  examiner_standardization: 'Examiner Standardization',
 }
 
 const STATUS_VARIANT: Record<Session['status'], 'default' | 'secondary' | 'outline'> = {

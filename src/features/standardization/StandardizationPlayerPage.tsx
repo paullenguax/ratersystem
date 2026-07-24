@@ -6,6 +6,7 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Pencil } from 'lucide-react'
 import { db } from '@/lib/firebase'
+import { formatTestNumber } from '@/lib/testNumber'
 import { useAuth } from '@/context/AuthContext'
 import type { Assignment, Test, StandardizationScore } from '@/types'
 import { Button } from '@/components/ui/button'
@@ -507,7 +508,7 @@ export function StandardizationPlayerPage() {
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium">Test {currentIdx + 1} of {tests.length}</span>
             {test?.testId && (
-              <span className="font-mono text-xs text-muted-foreground">#{test.testId}</span>
+              <span className="font-mono text-xs text-muted-foreground">{formatTestNumber(test.testId, test.category)}</span>
             )}
             {isAlreadyScored && (
               <span className="text-xs text-green-700 bg-green-50 border border-green-200 rounded px-1.5 py-0.5">scored</span>

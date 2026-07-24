@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { collection, addDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, addDoc, doc, updateDoc, getDocs, query, where, serverTimestamp } from 'firebase/firestore'
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage'
 import { useQueryClient } from '@tanstack/react-query'
 import { Upload } from 'lucide-react'
 import { db, storage } from '@/lib/firebase'
 import type { Test } from '@/types'
+import { formatTestNumber } from '@/lib/testNumber'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -97,6 +98,15 @@ export function TestDrawer({ open, onClose, test }: Props) {
 
   useEffect(() => { setPreviewUrl(recordingUrlValue) }, [recordingUrlValue])
 
+  // Standardization tests are numbered in their own sequence (S1, S2…),
+  // separate from the legacy rater-course numbers — auto-assigned here since
+  // nothing else in the app assigns testId for a newly-created test.
+  async function nextStandardizationNumber(): Promise<number> {
+    const snap = await getDocs(query(collection(db, 'test_bank'), where('category', '==', 'standardization')))
+    const nums = snap.docs.map(d => (d.data().testId as number | undefined) ?? 0)
+    return Math.max(0, ...nums) + 1
+  }
+
   async function onSubmit(data: FormData) {
     const payload = {
       recordingUrl: data.recordingUrl,
@@ -114,8 +124,11 @@ export function TestDrawer({ open, onClose, test }: Props) {
     if (isEdit) {
       await updateDoc(doc(db, 'test_bank', test.id), payload)
     } else {
+      const testId = data.category === 'standardization' ? await nextStandardizationNumber() : undefined
       await addDoc(collection(db, 'test_bank'), {
-        ...payload, canonicalDifficulty: null, canonicalSE: null, anchoredAt: null,
+        ...payload,
+        ...(testId !== undefined ? { testId } : {}),
+        canonicalDifficulty: null, canonicalSE: null, anchoredAt: null,
         createdAt: serverTimestamp(),
       })
     }
@@ -132,7 +145,7 @@ export function TestDrawer({ open, onClose, test }: Props) {
 
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4 py-4">
           {isEdit && test?.testId && (
-            <p className="text-xs text-muted-foreground">Test #{test.testId}</p>
+            <p className="text-xs text-muted-foreground">Test {formatTestNumber(test.testId, test.category)}</p>
           )}
           <div className="space-y-1">
             <Label>Recording</Label>

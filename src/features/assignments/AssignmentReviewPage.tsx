@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { collection, getDocs, doc, getDoc, query, where, updateDoc, arrayRemove, deleteDoc } from 'firebase/firestore'
 import { ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { db } from '@/lib/firebase'
+import { formatTestNumber } from '@/lib/testNumber'
 import type { Assignment, Person, Score, StandardizationScore, Test } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -295,7 +296,7 @@ export function AssignmentReviewPage() {
                         </button>
                       )}
                     </td>
-                    <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{test.testId ?? '—'}</td>
+                    <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{formatTestNumber(test.testId, test.category)}</td>
                     <td className="px-3 py-2 font-medium">{test.candidateName}</td>
                     {DIMS.map(d => (
                       <td key={d.key} className="px-2 py-2 text-center font-mono">

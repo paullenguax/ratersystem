@@ -35,7 +35,7 @@ export interface Assignment {
 export interface Session {
   id: string
   name: string
-  type: 'rater_course' | 'refresher' | 'reliability' | 'calibration' | 'historical' | 'ad_hoc'
+  type: 'rater_course' | 'refresher' | 'reliability' | 'calibration' | 'historical' | 'ad_hoc' | 'examiner_standardization'
   status: 'open' | 'closed' | 'published'
   notes?: string
   canvasSectionId?: number

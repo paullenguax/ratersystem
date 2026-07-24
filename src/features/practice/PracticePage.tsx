@@ -66,6 +66,10 @@ async function fetchTests(): Promise<Test[]> {
   const snap = await getDocs(query(collection(db, 'test_bank'), where('status', '==', 'active')))
   return snap.docs
     .map(d => ({ id: d.id, ...d.data() }) as Test)
+    // Practice Sessions are a rater-course trainee exercise — standardization
+    // tests are reserved for real interlocutor calibration assignments, not
+    // previewed/practiced on ahead of time.
+    .filter(t => (t.category ?? 'rater_course') !== 'standardization')
     .sort((a, b) => (a.testId ?? 999) - (b.testId ?? 999))
 }
 

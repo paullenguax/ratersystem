@@ -7,6 +7,7 @@ import {
 } from '@tanstack/react-table'
 import { ChevronUp, ChevronDown, ChevronsUpDown, Play, Square } from 'lucide-react'
 import { db } from '@/lib/firebase'
+import { formatTestNumber } from '@/lib/testNumber'
 import type { StandardizationScore, Test } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -106,7 +107,7 @@ export function StandardizationResultsPage() {
       cell: ({ row }) => (
         <span className="text-muted-foreground text-sm">
           {row.original.testNumber
-            ? <span className="font-mono text-xs mr-1">#{row.original.testNumber}</span>
+            ? <span className="font-mono text-xs mr-1">{formatTestNumber(row.original.testNumber, 'standardization')}</span>
             : null}
           {row.original.candidateName}
         </span>

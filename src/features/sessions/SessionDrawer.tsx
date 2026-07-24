@@ -20,11 +20,12 @@ const TYPE_LABELS: Record<Session['type'], string> = {
   calibration:  'Calibration',
   historical:   'Historical Import',
   ad_hoc:       'Ad hoc',
+  examiner_standardization: 'Examiner Standardization',
 }
 
 const schema = z.object({
   name:   z.string().min(1, 'Required'),
-  type:   z.enum(['rater_course', 'refresher', 'reliability', 'calibration', 'historical', 'ad_hoc']),
+  type:   z.enum(['rater_course', 'refresher', 'reliability', 'calibration', 'historical', 'ad_hoc', 'examiner_standardization']),
   status: z.enum(['open', 'closed', 'published']),
   notes:  z.string().optional(),
 })
