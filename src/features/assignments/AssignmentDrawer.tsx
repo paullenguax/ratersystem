@@ -81,8 +81,8 @@ export function AssignmentDrawer({ open, onClose, assignment }: Props) {
 
   const filteredPeople = people.filter(p =>
     category === 'standardization'
-      ? p.role === 'interlocutor' || p.canStandardize
-      : p.role !== 'interlocutor'
+      ? p.role === 'examiner' || p.canStandardize
+      : p.role !== 'examiner'
   )
 
   // Fetch test IDs this rater has already scored (new assignments only)

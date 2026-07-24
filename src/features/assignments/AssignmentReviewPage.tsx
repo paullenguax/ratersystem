@@ -140,14 +140,14 @@ export function AssignmentReviewPage() {
   // "Other raters" eligible to appear in the comparison dropdown — for
   // rater-course assignments that's senior_rater/admin (keeps trainee exam
   // noise out of the comparison); for standardization it's whoever can
-  // actually produce a standardization score: interlocutors, canStandardize
+  // actually produce a standardization score: examiners, canStandardize
   // raters, or admin.
   const srRaterIds = useMemo(() => {
     const isStandardization = assignment ? (assignment.category ?? 'rater_course') === 'standardization' : false
     return new Set(
       people
         .filter(p => isStandardization
-          ? p.role === 'interlocutor' || p.role === 'admin' || p.canStandardize
+          ? p.role === 'examiner' || p.role === 'admin' || p.canStandardize
           : p.role === 'senior_rater' || p.role === 'admin'
         )
         .map(p => p.id)

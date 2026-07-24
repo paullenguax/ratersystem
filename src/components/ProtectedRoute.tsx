@@ -5,7 +5,7 @@ interface Props {
   children: React.ReactNode
   allowedRoles?: Role[]
   // Gate for pages that any role can reach as long as they have standardization
-  // capability — either the dedicated 'interlocutor' role or an existing
+  // capability — either the dedicated 'examiner' role or an existing
   // rater's canStandardize flag. Admins always pass, so they can QA the page.
   requireStandardization?: boolean
 }
@@ -21,7 +21,7 @@ export function ProtectedRoute({ children, allowedRoles, requireStandardization 
     return <Navigate to="/" replace />
   }
 
-  if (requireStandardization && role !== 'admin' && role !== 'interlocutor' && !canStandardize) {
+  if (requireStandardization && role !== 'admin' && role !== 'examiner' && !canStandardize) {
     return <Navigate to="/" replace />
   }
 

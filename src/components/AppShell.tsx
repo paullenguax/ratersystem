@@ -17,7 +17,7 @@ import { auth } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
 
 const ALL_NAV = [
-  { label: 'Dashboard',   path: '/',            icon: LayoutDashboard,    roles: ['admin', 'senior_rater', 'trainee', 'interlocutor'] },
+  { label: 'Dashboard',   path: '/',            icon: LayoutDashboard,    roles: ['admin', 'senior_rater', 'trainee', 'examiner'] },
   { label: 'People',      path: '/people',      icon: Users,               roles: ['admin'] },
   { label: 'Test Bank',   path: '/test-bank',   icon: FileAudio,           roles: ['admin'] },
   { label: 'Events',      path: '/sessions',    icon: CalendarDays,        roles: ['admin'] },
@@ -43,7 +43,7 @@ export function AppShell() {
 
   const navItems = ALL_NAV.filter((item) =>
     'standardizationOnly' in item
-      ? role === 'admin' || role === 'interlocutor' || canStandardize
+      ? role === 'admin' || role === 'examiner' || canStandardize
       : role && (item.roles as readonly string[]).includes(role)
   )
 

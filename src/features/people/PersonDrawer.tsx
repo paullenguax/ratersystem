@@ -19,7 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 const schema = z.object({
   name: z.string().min(1, 'Required'),
   email: z.string().email('Invalid email'),
-  role: z.enum(['admin', 'senior_rater', 'trainee', 'interlocutor']),
+  role: z.enum(['admin', 'senior_rater', 'trainee', 'examiner']),
   status: z.enum(['active', 'inactive', 'suspended']),
   notes: z.string().optional(),
 })
@@ -196,7 +196,7 @@ export function PersonDrawer({ open, onClose, person }: Props) {
                   <SelectItem value="admin">Admin</SelectItem>
                   <SelectItem value="senior_rater">Senior Rater</SelectItem>
                   <SelectItem value="trainee">Trainee</SelectItem>
-                  <SelectItem value="interlocutor">Interlocutor</SelectItem>
+                  <SelectItem value="examiner">Examiner</SelectItem>
                 </SelectContent>
               </Select>
             )} />

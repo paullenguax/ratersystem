@@ -4,14 +4,14 @@ export interface Person {
   id: string
   name: string
   email: string
-  role: 'admin' | 'senior_rater' | 'trainee' | 'interlocutor'
+  role: 'admin' | 'senior_rater' | 'trainee' | 'examiner'
   status: 'active' | 'inactive' | 'suspended'
   raterNumber?: number
   notes?: string
   linkedAt?: Timestamp
   createdVia?: 'self_serve_auto'
   // Lets an admin/senior_rater/trainee also take on standardization work,
-  // in addition to the dedicated 'interlocutor' role.
+  // in addition to the dedicated 'examiner' role.
   canStandardize?: boolean
   createdAt?: Timestamp
 }

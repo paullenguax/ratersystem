@@ -332,7 +332,7 @@ exports.deleteBenchmarkCentreAccount = onCall({ secrets: [BENCHMARK_SERVICE_ACCO
 // matching people/{uid} doc, then emails a password-reset link so the person
 // can set their own password — replaces the manual Console + Firestore +
 // "send reset email" three-step process described in the README by hand.
-// Works for any role (admin/senior_rater/trainee/interlocutor); Canvas SSO
+// Works for any role (admin/senior_rater/trainee/examiner); Canvas SSO
 // users still get provisioned automatically via canvasAuth/Canvas Sync and
 // never need this, since they never set a password at all.
 exports.invitePerson = onCall({ secrets: [RESEND_API_KEY] }, async (request) => {
@@ -341,7 +341,7 @@ exports.invitePerson = onCall({ secrets: [RESEND_API_KEY] }, async (request) => 
   if (!name || !email || !role) {
     throw new HttpsError('invalid-argument', 'name, email, and role are all required')
   }
-  if (!['admin', 'senior_rater', 'trainee', 'interlocutor'].includes(role)) {
+  if (!['admin', 'senior_rater', 'trainee', 'examiner'].includes(role)) {
     throw new HttpsError('invalid-argument', 'Invalid role')
   }
 
@@ -962,7 +962,7 @@ exports.notifySelfServeSubmission = onDocumentUpdated(
 
 // ── notifyStandardizationSubmission ────────────────────────────────────────────
 // Same shape as notifySelfServeSubmission above, but for standardization
-// assignments (interlocutors don't have a `source: 'self_serve'` — every
+// assignments (examiners don't have a `source: 'self_serve'` — every
 // standardization assignment is admin-created — so this keys off `category`
 // instead). Reuses the same `config/canvas.notificationEmail` admin address;
 // split into its own config field later if a different recipient is ever needed.

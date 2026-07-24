@@ -17,10 +17,10 @@ const ROLE_LABELS: Record<Person['role'], string> = {
   admin: 'Admin',
   senior_rater: 'Senior Rater',
   trainee: 'Trainee',
-  interlocutor: 'Interlocutor',
+  examiner: 'Examiner',
 }
 
-const ROLE_ORDER: Record<Person['role'], number> = { admin: 0, senior_rater: 1, trainee: 2, interlocutor: 3 }
+const ROLE_ORDER: Record<Person['role'], number> = { admin: 0, senior_rater: 1, trainee: 2, examiner: 3 }
 
 async function fetchPeople(): Promise<Person[]> {
   const snap = await getDocs(collection(db, 'people'))
@@ -178,7 +178,7 @@ export function PeoplePage() {
             <SelectItem value="admin">Admin</SelectItem>
             <SelectItem value="senior_rater">Senior Rater</SelectItem>
             <SelectItem value="trainee">Trainee</SelectItem>
-            <SelectItem value="interlocutor">Interlocutor</SelectItem>
+            <SelectItem value="examiner">Examiner</SelectItem>
           </SelectContent>
         </Select>
         <Select value={statusFilter} onValueChange={v => setStatusFilter(v as typeof statusFilter)}>

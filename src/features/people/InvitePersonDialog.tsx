@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 const schema = z.object({
   name: z.string().min(1, 'Required'),
   email: z.string().email('Invalid email'),
-  role: z.enum(['admin', 'senior_rater', 'trainee', 'interlocutor']),
+  role: z.enum(['admin', 'senior_rater', 'trainee', 'examiner']),
 })
 type FormData = z.infer<typeof schema>
 
@@ -37,12 +37,12 @@ export function InvitePersonDialog({ open, onClose }: Props) {
   const { register, handleSubmit, control, reset, formState: { errors, isSubmitting } } =
     useForm<FormData>({
       resolver: zodResolver(schema),
-      defaultValues: { name: '', email: '', role: 'interlocutor' },
+      defaultValues: { name: '', email: '', role: 'examiner' },
     })
 
   useEffect(() => {
     if (open) {
-      reset({ name: '', email: '', role: 'interlocutor' })
+      reset({ name: '', email: '', role: 'examiner' })
       setCanStandardize(false)
       setSubmitError(null)
       setEmailWarning(null)
@@ -102,7 +102,7 @@ export function InvitePersonDialog({ open, onClose }: Props) {
                   <SelectItem value="admin">Admin</SelectItem>
                   <SelectItem value="senior_rater">Senior Rater</SelectItem>
                   <SelectItem value="trainee">Trainee</SelectItem>
-                  <SelectItem value="interlocutor">Interlocutor</SelectItem>
+                  <SelectItem value="examiner">Examiner</SelectItem>
                 </SelectContent>
               </Select>
             )} />

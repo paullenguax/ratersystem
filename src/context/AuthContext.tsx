@@ -3,7 +3,7 @@ import { onAuthStateChanged, type User } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
 import { auth, db } from '@/lib/firebase'
 
-export type Role = 'admin' | 'senior_rater' | 'trainee' | 'interlocutor'
+export type Role = 'admin' | 'senior_rater' | 'trainee' | 'examiner'
 
 interface AuthState {
   user: User | null
