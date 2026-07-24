@@ -951,6 +951,49 @@ exports.notifySelfServeSubmission = onDocumentUpdated(
   }
 )
 
+// ── notifyStandardizationSubmission ────────────────────────────────────────────
+// Same shape as notifySelfServeSubmission above, but for standardization
+// assignments (interlocutors don't have a `source: 'self_serve'` — every
+// standardization assignment is admin-created — so this keys off `category`
+// instead). Reuses the same `config/canvas.notificationEmail` admin address;
+// split into its own config field later if a different recipient is ever needed.
+
+exports.notifyStandardizationSubmission = onDocumentUpdated(
+  { document: 'assignments/{assignmentId}', secrets: [RESEND_API_KEY] },
+  async (event) => {
+    const before = event.data.before.data()
+    const after = event.data.after.data()
+
+    if ((after.category ?? 'rater_course') !== 'standardization') return
+    if (before.confirmedAt || !after.confirmedAt) return
+
+    const db = admin.firestore()
+    const configSnap = await db.doc('config/canvas').get()
+    const notificationEmail = configSnap.data()?.notificationEmail
+    const apiKey = RESEND_API_KEY.value()
+
+    if (!notificationEmail || !apiKey) return // not configured — skip silently
+
+    try {
+      await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: 'RaterSystem <notifications@lenguax.com>',
+          to: notificationEmail,
+          subject: `Standardization submission — ${after.raterName}`,
+          text: `${after.raterName} has confirmed their standardization scores for "${after.sessionName}".\n\nReview it here: https://lenguax.com/ratersystem/assignments/${event.params.assignmentId}`,
+        }),
+      })
+    } catch (err) {
+      console.error('notifyStandardizationSubmission: failed to send email', err)
+    }
+  }
+)
+
 // ── enrollmentWebhook ─────────────────────────────────────────────────────────
 // HTTP endpoint called by the WordPress plugin after each enrollment attempt.
 // Validates a shared secret then writes the event to canvasEnrollmentLog.

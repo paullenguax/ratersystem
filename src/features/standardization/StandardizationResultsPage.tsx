@@ -5,7 +5,7 @@ import {
   useReactTable, getCoreRowModel, getSortedRowModel, getFilteredRowModel,
   flexRender, type ColumnDef, type SortingState,
 } from '@tanstack/react-table'
-import { ChevronUp, ChevronDown, ChevronsUpDown, Play, Square } from 'lucide-react'
+import { ChevronUp, ChevronDown, ChevronsUpDown, Play, Square, Download } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { formatTestNumber } from '@/lib/testNumber'
 import type { StandardizationScore, Test } from '@/types'
@@ -21,6 +21,27 @@ const DIMS: { key: keyof StandardizationScore; abbr: string; label: string }[] =
   { key: 'comprehension',  abbr: 'COM', label: 'Comprehension' },
   { key: 'interactions',   abbr: 'INT', label: 'Interactions' },
 ]
+
+function exportCsv(scores: StandardizationScore[]) {
+  const header = ['Event', 'Rater', 'Test', 'Candidate', 'Pronunciation', 'Structure', 'Vocabulary', 'Fluency', 'Comprehension', 'Interactions', 'Overall', 'Comments', 'Submitted']
+  const rows = scores.map(s => [
+    s.sessionName,
+    s.raterName,
+    s.testNumber != null ? formatTestNumber(s.testNumber, 'standardization') : '',
+    s.candidateName,
+    s.pronunciation, s.structure, s.vocabulary,
+    s.fluency, s.comprehension, s.interactions,
+    s.overallLevel,
+    s.comments ?? '',
+    s.createdAt ? new Date((s.createdAt as unknown as { seconds: number }).seconds * 1000).toISOString() : '',
+  ])
+  const csv = [header, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
+  const blob = new Blob([csv], { type: 'text/csv' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = `standardization-results-${new Date().toISOString().split('T')[0]}.csv`
+  a.click()
+}
 
 function levelColour(n: number) {
   if (n >= 5) return 'text-green-700'
@@ -164,6 +185,9 @@ export function StandardizationResultsPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Standardization Results</h1>
+        <Button variant="outline" size="sm" onClick={() => exportCsv(filtered)} disabled={filtered.length === 0}>
+          <Download className="size-4 mr-2" /> Export CSV
+        </Button>
       </div>
 
       {playingUrl && (

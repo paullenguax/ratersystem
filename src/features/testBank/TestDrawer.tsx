@@ -53,7 +53,7 @@ export function TestDrawer({ open, onClose, test }: Props) {
   const [previewUrl, setPreviewUrl] = useState('')
   const [excludeFromPool, setExcludeFromPool] = useState(false)
 
-  const { register, handleSubmit, control, reset, watch, setValue, formState: { errors, isSubmitting } } =
+  const { register, handleSubmit, control, reset, watch, setValue, setError, formState: { errors, isSubmitting } } =
     useForm<FormData>({ resolver: zodResolver(schema), defaultValues: EMPTY })
 
   const recordingUrlValue = watch('recordingUrl')
@@ -109,6 +109,21 @@ export function TestDrawer({ open, onClose, test }: Props) {
     return Math.max(0, ...nums) + 1
   }
 
+  // "#3" and "S3" are separate namespaces (one per category) — a duplicate
+  // is only a problem within the same category, not across both. Fetches the
+  // whole collection rather than a `where('category', ...)` query because
+  // most legacy rater-course tests have no `category` field at all (it's
+  // treated as 'rater_course' by convention everywhere it's read) — a
+  // Firestore equality filter would miss them and let a collision through.
+  async function findDuplicateTestNumber(category: FormData['category'], testId: number): Promise<boolean> {
+    const snap = await getDocs(collection(db, 'test_bank'))
+    return snap.docs.some(d => {
+      if (d.id === test?.id) return false
+      const data = d.data()
+      return ((data.category as Test['category']) ?? 'rater_course') === category && data.testId === testId
+    })
+  }
+
   async function onSubmit(data: FormData) {
     // A manually typed number always wins (this is also how the 3
     // standardization tests created before auto-numbering existed get
@@ -118,6 +133,11 @@ export function TestDrawer({ open, onClose, test }: Props) {
     let testId = data.testId
     if (!isEdit && testId === undefined && data.category === 'standardization') {
       testId = await nextStandardizationNumber()
+    }
+
+    if (testId !== undefined && await findDuplicateTestNumber(data.category, testId)) {
+      setError('testId', { message: `${formatTestNumber(testId, data.category)} is already used by another test in this category` })
+      return
     }
 
     const payload = {
