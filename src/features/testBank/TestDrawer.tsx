@@ -25,6 +25,7 @@ const schema = z.object({
   testType: z.enum(TEST_TYPES),
   durationSeconds: z.number().min(0).optional(),
   status: z.enum(['active', 'retired']),
+  testId: z.number().min(1).optional(),
   category: z.enum(['rater_course', 'standardization']),
   // 'unset' is a form-only sentinel (Select can't bind to undefined) —
   // stripped back to undefined/null at the Firestore-payload boundary.
@@ -36,7 +37,7 @@ type FormData = z.infer<typeof schema>
 
 const EMPTY: FormData = {
   recordingUrl: '', candidateName: '', candidateNationality: '',
-  testType: 'PPL', durationSeconds: undefined, status: 'active', category: 'rater_course',
+  testType: 'PPL', durationSeconds: undefined, status: 'active', testId: undefined, category: 'rater_course',
   courseTag: 'unset', dayLabel: '', notes: '',
 }
 
@@ -85,6 +86,7 @@ export function TestDrawer({ open, onClose, test }: Props) {
         testType: test.testType,
         durationSeconds: test.durationSeconds,
         status: test.status,
+        testId: test.testId,
         category: test.category ?? 'rater_course',
         courseTag: test.courseTag ?? 'unset',
         dayLabel: test.dayLabel ?? '',
@@ -108,6 +110,16 @@ export function TestDrawer({ open, onClose, test }: Props) {
   }
 
   async function onSubmit(data: FormData) {
+    // A manually typed number always wins (this is also how the 3
+    // standardization tests created before auto-numbering existed get
+    // backfilled — just edit each one and type S1/S2/S3's plain number in).
+    // Otherwise, a brand-new standardization test gets the next number
+    // automatically; everything else is left unnumbered, same as always.
+    let testId = data.testId
+    if (!isEdit && testId === undefined && data.category === 'standardization') {
+      testId = await nextStandardizationNumber()
+    }
+
     const payload = {
       recordingUrl: data.recordingUrl,
       candidateName: data.candidateName,
@@ -115,6 +127,7 @@ export function TestDrawer({ open, onClose, test }: Props) {
       testType: data.testType,
       durationSeconds: data.durationSeconds ?? null,
       status: data.status,
+      testId: testId ?? null,
       category: data.category,
       courseTag: data.courseTag === 'unset' ? null : data.courseTag,
       dayLabel: data.dayLabel?.trim() || null,
@@ -124,10 +137,8 @@ export function TestDrawer({ open, onClose, test }: Props) {
     if (isEdit) {
       await updateDoc(doc(db, 'test_bank', test.id), payload)
     } else {
-      const testId = data.category === 'standardization' ? await nextStandardizationNumber() : undefined
       await addDoc(collection(db, 'test_bank'), {
         ...payload,
-        ...(testId !== undefined ? { testId } : {}),
         canonicalDifficulty: null, canonicalSE: null, anchoredAt: null,
         createdAt: serverTimestamp(),
       })
@@ -258,6 +269,14 @@ export function TestDrawer({ open, onClose, test }: Props) {
               <Label>Day</Label>
               <Input {...register('dayLabel')} placeholder="e.g. Day 1" />
             </div>
+          </div>
+
+          <div className="space-y-1">
+            <Label>Test number</Label>
+            <Input type="number" min={1} {...register('testId', {
+              setValueAs: v => (v === '' ? undefined : Number(v)),
+            })} placeholder="Auto-assigned for new standardization tests if left blank" />
+            {errors.testId && <p className="text-xs text-destructive">{errors.testId.message}</p>}
           </div>
 
           <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
