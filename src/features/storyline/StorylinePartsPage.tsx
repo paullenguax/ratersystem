@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, getDocs, getDoc, addDoc, doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'
 import { ArrowLeft, Plus, Pencil, Rocket, Copy, Archive as ArchiveIcon, Trash2, PauseCircle, PlayCircle, Shield, ShieldOff } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
-import type { StorylinePart, StorylinePartNumber } from '@/types'
+import type { StorylinePart, StorylinePartNumber, StorylineTemplate } from '@/types'
+import { missingPartContent } from './partCompleteness'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -15,6 +16,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 async function fetchParts(): Promise<StorylinePart[]> {
   const snap = await getDocs(collection(db, 'storyline_parts'))
   return snap.docs.map(d => ({ id: d.id, ...d.data() }) as StorylinePart)
+}
+
+async function fetchTemplate(): Promise<StorylineTemplate | null> {
+  const snap = await getDoc(doc(db, 'storyline_template', 'current'))
+  return snap.exists() ? ({ id: snap.id, ...snap.data() } as StorylineTemplate) : null
 }
 
 // Base UI's <Select.Value> displays the raw `value` unless given a render
@@ -42,6 +48,7 @@ export function StorylinePartsPage() {
   const [newPartNumber, setNewPartNumber] = useState<StorylinePartNumber>(1)
 
   const { data: parts = [], isLoading } = useQuery({ queryKey: ['storyline_parts'], queryFn: fetchParts })
+  const { data: template } = useQuery({ queryKey: ['storyline_template'], queryFn: fetchTemplate })
 
   const filtered = useMemo(() => {
     const s = search.trim().toLowerCase()
@@ -78,6 +85,15 @@ export function StorylinePartsPage() {
   }
 
   async function handlePublish(part: StorylinePart) {
+    if (!template) {
+      window.alert('No Script Template found — set one up first.')
+      return
+    }
+    const missing = missingPartContent(template.slides, part.partNumber, part.slotContent)
+    if (missing.length > 0) {
+      window.alert(`Can't publish "${part.label}" — still missing:\n${missing.map(m => `- ${m}`).join('\n')}`)
+      return
+    }
     if (!window.confirm(`Publish "${part.label}"? Published Parts are immutable — further edits require duplicating as a new draft.`)) return
     await updateDoc(doc(db, 'storyline_parts', part.id), { status: 'published', publishedAt: serverTimestamp() })
     queryClient.invalidateQueries({ queryKey: ['storyline_parts'] })
