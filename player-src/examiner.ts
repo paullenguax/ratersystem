@@ -313,7 +313,15 @@ function imageLabel(index: number): string {
 }
 
 function renderPreviewContent(card: HTMLElement, entries: NonNullable<StorylineItem['previewContent']>) {
+  let lastPartNumber: number | undefined
   for (const entry of entries) {
+    if (entry.partNumber !== lastPartNumber) {
+      lastPartNumber = entry.partNumber
+      const heading = document.createElement('div')
+      heading.className = 'preview-part-heading'
+      heading.textContent = `Preview Part ${entry.partNumber}`
+      card.appendChild(heading)
+    }
     const block = document.createElement('div')
     block.className = 'preview-entry'
     if (entry.topic) {

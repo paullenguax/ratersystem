@@ -37,7 +37,7 @@ export interface StorylineItem {
   testDisplayName?: string
   startsTestTimer?: boolean
   nextButtonLabel?: string
-  previewContent?: { label: string; topic?: string; questions?: string[] }[]
+  previewContent?: { label: string; topic?: string; questions?: string[]; partNumber: 1 | 2 | 3 | 4 }[]
   media?: {
     images?: string[]
     // maxPlays: soft play-count ceiling — examiner.ts warns past it but

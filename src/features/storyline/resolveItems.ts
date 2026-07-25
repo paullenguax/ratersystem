@@ -41,6 +41,8 @@ function slidePreviewEntry(slide: TemplateSlide, slot?: StorylineSlotContent): {
   return { label: slide.label, topic, questions }
 }
 
+type PreviewEntry = { label: string; topic?: string; questions?: string[]; partNumber: StorylinePartNumber }
+
 function resolveMedia(slide: TemplateSlide, slot?: StorylineSlotContent): StorylineItem['media'] {
   const images = slot?.images?.filter(Boolean)
   const audioClips: { label: string; url: string; maxPlays?: number }[] = []
@@ -113,11 +115,11 @@ export function resolveItems(
   // Pre-pass: compile each Part's actual topic/question content, keyed by
   // Part number, so an "examiner preview" slide elsewhere (previewParts) can
   // pull in real content regardless of where in the slide order it sits.
-  const previewByPart: Partial<Record<StorylinePartNumber, { label: string; topic?: string; questions?: string[] }[]>> = {}
+  const previewByPart: Partial<Record<StorylinePartNumber, PreviewEntry[]>> = {}
   for (const slide of sorted) {
     if (!slide.partNumber || slide.previewExclude) continue
     const entry = slidePreviewEntry(slide, slotFor(slide))
-    if (entry) (previewByPart[slide.partNumber] ??= []).push(entry)
+    if (entry) (previewByPart[slide.partNumber] ??= []).push({ ...entry, partNumber: slide.partNumber })
   }
 
   return sorted.map(slide => {

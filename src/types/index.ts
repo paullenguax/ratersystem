@@ -289,7 +289,7 @@ export interface StorylineItem {
   // slide declares previewParts (e.g. an "examiner preview" slide shown
   // before the test starts) — rendered distinctly from examinerText so the
   // player can visually set it apart (bold/italic, extra spacing).
-  previewContent?: { label: string; topic?: string; questions?: string[] }[]
+  previewContent?: { label: string; topic?: string; questions?: string[]; partNumber: StorylinePartNumber }[]
   media?: {
     images?: string[]
     // maxPlays carries over from the slide's slotSpec — the exported item

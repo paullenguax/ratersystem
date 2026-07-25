@@ -232,9 +232,18 @@ div.polaroid img {
 }
 
 .slide-text {
-  white-space: pre-line;
+  white-space: pre-wrap;
   line-height: 1.6;
   font-size: 1.05rem;
+}
+
+.preview-part-heading {
+  margin-top: 24px;
+  padding-bottom: 4px;
+  border-bottom: 2px solid #00528c;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #00528c;
 }
 
 .preview-entry {
@@ -493,7 +502,7 @@ div.polaroid img {
 }
 
 #notes-content {
-  white-space: pre-line;
+  white-space: pre-wrap;
   line-height: 1.5;
   color: #444;
 }
