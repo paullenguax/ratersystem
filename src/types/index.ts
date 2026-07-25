@@ -313,11 +313,31 @@ export interface StorylineItem {
   }
 }
 
+// The TEAC licence/role categories a Test Type (StorylineTest) groups by —
+// distinct from test_bank's `Test.testType` (individual scored recordings,
+// a different enum with different values/purpose).
+export type StorylineTestType =
+  | 'Airline Pilot'
+  | 'Private Pilot'
+  | 'Ab-Initio Pilot'
+  | 'Rotary Wing Pilot'
+  | 'Aerodrome ATC'
+  | 'Approach ATC'
+  | 'Area ATC'
+  | 'Student ATC'
+  | 'ADP Driver'
+  | 'Airport Operations'
+  | 'FISO/AFISO'
+
 export interface StorylineTest {
   id: string
   name: string
   description?: string
   active: boolean
+  // Which TEAC licence/role category this Test Type groups under — lets
+  // the list be sorted/scanned by category (e.g. all the ATC ones
+  // together) independent of `name`, which is free text.
+  testType?: StorylineTestType
   // Fills for every [placeholder] token referenced anywhere in the shared
   // template (e.g. { role: 'air traffic controller' }) — a role type is
   // fixed per Test, reused across every Version of it and every Part it

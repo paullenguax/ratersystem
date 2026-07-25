@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { collection, getDocs, getDoc, addDoc, doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'
-import { ArrowLeft, Plus, Pencil, Rocket, Copy, Archive as ArchiveIcon, Trash2, PauseCircle, PlayCircle, Shield, ShieldOff } from 'lucide-react'
+import { ArrowLeft, Plus, Pencil, Rocket, Copy, Archive as ArchiveIcon, Trash2, PauseCircle, PlayCircle, Shield, ShieldOff, Tag } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
 import type { StorylinePart, StorylinePartNumber, StorylineTemplate } from '@/types'
@@ -44,6 +44,7 @@ export function StorylinePartsPage() {
   const [filter, setFilter] = useState<'all' | StorylinePartNumber>('all')
   const [statusFilter, setStatusFilter] = useState<'all' | StorylinePart['status']>('all')
   const [backupFilter, setBackupFilter] = useState<'all' | 'backup' | 'normal'>('all')
+  const [showArchived, setShowArchived] = useState(false)
   const [search, setSearch] = useState('')
   const [newPartNumber, setNewPartNumber] = useState<StorylinePartNumber>(1)
 
@@ -55,10 +56,13 @@ export function StorylinePartsPage() {
     return parts
       .filter(p => filter === 'all' || p.partNumber === filter)
       .filter(p => statusFilter === 'all' || p.status === statusFilter)
+      // Archived Parts pile up and rarely matter day-to-day — hidden unless
+      // explicitly shown, or explicitly filtered to "Archived" above.
+      .filter(p => showArchived || statusFilter === 'archived' || p.status !== 'archived')
       .filter(p => backupFilter === 'all' || (backupFilter === 'backup' ? !!p.isBackup : !p.isBackup))
       .filter(p => s === '' || p.label.toLowerCase().includes(s))
       .sort((a, b) => a.partNumber - b.partNumber || a.label.localeCompare(b.label))
-  }, [parts, filter, statusFilter, backupFilter, search])
+  }, [parts, filter, statusFilter, backupFilter, showArchived, search])
 
   async function handleNewPart() {
     await addDoc(collection(db, 'storyline_parts'), {
@@ -122,6 +126,18 @@ export function StorylinePartsPage() {
     queryClient.invalidateQueries({ queryKey: ['storyline_parts'] })
   }
 
+  // Label is just an organizational name, not test content, so renaming is
+  // safe even on a published (otherwise-immutable) Part — mainly useful to
+  // clean up a Duplicate's default "(copy)" name.
+  async function handleRename(part: StorylinePart) {
+    const next = window.prompt('Rename this Part (label only — does not affect its content):', part.label)
+    if (next === null) return
+    const trimmed = next.trim()
+    if (trimmed === '' || trimmed === part.label) return
+    await updateDoc(doc(db, 'storyline_parts', part.id), { label: trimmed })
+    queryClient.invalidateQueries({ queryKey: ['storyline_parts'] })
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
@@ -172,6 +188,15 @@ export function StorylinePartsPage() {
               <SelectItem value="backup">Backups only</SelectItem>
             </SelectContent>
           </Select>
+          <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={showArchived}
+              onChange={e => setShowArchived(e.target.checked)}
+              className="rounded"
+            />
+            <span>Show archived</span>
+          </label>
         </div>
         <div className="flex gap-2">
           <div className="w-28">
@@ -243,6 +268,9 @@ export function StorylinePartsPage() {
                             <Rocket className="size-4 mr-1" /> Publish
                           </Button>
                         )}
+                        <Button variant="ghost" size="sm" onClick={() => handleRename(part)}>
+                          <Tag className="size-4 mr-1" /> Rename
+                        </Button>
                         <Button variant="ghost" size="sm" onClick={() => handleDuplicate(part)}>
                           <Copy className="size-4 mr-1" /> Duplicate
                         </Button>

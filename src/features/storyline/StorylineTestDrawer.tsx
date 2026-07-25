@@ -6,12 +6,27 @@ import { collection, addDoc, doc, getDoc, updateDoc, serverTimestamp } from 'fir
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
-import type { StorylineTemplate, StorylineTest } from '@/types'
+import type { StorylineTemplate, StorylineTest, StorylineTestType } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from '@/components/ui/sheet'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+
+export const TEST_TYPES: StorylineTestType[] = [
+  'Airline Pilot',
+  'Private Pilot',
+  'Ab-Initio Pilot',
+  'Rotary Wing Pilot',
+  'Aerodrome ATC',
+  'Approach ATC',
+  'Area ATC',
+  'Student ATC',
+  'ADP Driver',
+  'Airport Operations',
+  'FISO/AFISO',
+]
 
 const schema = z.object({
   name: z.string().min(1, 'Required'),
@@ -37,6 +52,7 @@ export function StorylineTestDrawer({ open, onClose, test }: Props) {
   const { user } = useAuth()
   const isEdit = !!test
   const [active, setActive] = useState(true)
+  const [testType, setTestType] = useState<StorylineTestType | undefined>()
   const [variables, setVariables] = useState<Record<string, string>>({})
 
   const { data: template } = useQuery({ queryKey: ['storyline_template'], queryFn: fetchTemplate })
@@ -52,6 +68,7 @@ export function StorylineTestDrawer({ open, onClose, test }: Props) {
     if (open) {
       reset(test ? { name: test.name, description: test.description ?? '' } : EMPTY)
       setActive(test?.active ?? true)
+      setTestType(test?.testType)
       setVariables(test?.variables ?? {})
     }
   }, [open, test, reset])
@@ -61,6 +78,7 @@ export function StorylineTestDrawer({ open, onClose, test }: Props) {
       name: data.name,
       description: data.description ?? '',
       active,
+      testType: testType ?? null,
       variables,
     }
     if (isEdit) {
@@ -80,7 +98,7 @@ export function StorylineTestDrawer({ open, onClose, test }: Props) {
     <Sheet open={open} onOpenChange={v => !v && onClose()}>
       <SheetContent className="w-full sm:max-w-md overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>{isEdit ? 'Edit test' : 'Add test'}</SheetTitle>
+          <SheetTitle>{isEdit ? 'Edit test type' : 'Add test type'}</SheetTitle>
         </SheetHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4 py-4">
@@ -88,6 +106,18 @@ export function StorylineTestDrawer({ open, onClose, test }: Props) {
             <Label>Name</Label>
             <Input {...register('name')} placeholder="e.g. Approach" />
             {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
+          </div>
+
+          <div className="space-y-1">
+            <Label>Type</Label>
+            <Select value={testType ?? ''} onValueChange={v => setTestType(v as StorylineTestType)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Choose a type…">{(v: string) => v || 'Choose a type…'}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {TEST_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-1">

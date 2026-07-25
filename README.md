@@ -214,8 +214,14 @@ nav (bottom of the sidebar, admin-only); folder/component names still say
 export — **not** the WordPress auth/redirect integration, which is a later
 phase.
 
-- **Data model**: a `storyline_tests` doc is a role type (e.g. "Approach");
-  each `storyline_versions` doc is one immutable-once-published assembly of
+- **Data model**: a `storyline_tests` doc is a role type (e.g. "Approach"),
+  branded "Test Type" in the nav/UI (`StorylineTestsPage`'s heading, "Add
+  test type" etc. — only the label changed, collection/component names
+  still say "test"); `testType` (a fixed `StorylineTestType` union — Airline
+  Pilot, Private Pilot, Ab-Initio Pilot, Rotary Wing Pilot, Aerodrome/
+  Approach/Area ATC, Student ATC, ADP Driver, Airport Operations, FISO/
+  AFISO) lets the list be sorted by licence/role category independent of
+  the free-text `name`; each `storyline_versions` doc is one immutable-once-published assembly of
   content for that test. The real test content is 4 **Parts**, each a
   globally-shared, pooled unit in its own `storyline_parts` collection (not
   scoped to any Test — matches real cross-role-type content sharing found in
@@ -246,9 +252,17 @@ phase.
   duplicate-as-new-draft/archive lifecycle, Part picker, Preview, Export) →
   `StorylineVersionEditorPage` (whole-test slot-filling + per-Part Select).
   `StorylinePartsPage` (Parts Library, filterable by Part number/status/
-  backup) → `StorylinePartEditorPage` (slot-filling for that Part's slides
-  only). A published Version or Part is read-only — edits require
-  "Duplicate" to spin up a new draft.
+  backup, archived hidden by default via a "Show archived" toggle since they
+  pile up and rarely matter day-to-day) → `StorylinePartEditorPage`
+  (slot-filling for that Part's slides only). A published Version or Part's
+  *content* is read-only — edits require "Duplicate" to spin up a new draft
+  — but a Part's `label` can be renamed regardless of status (it's
+  organizational metadata, not test content, so renaming doesn't touch the
+  immutability guarantee); mainly useful to clean up a Duplicate's default
+  "(copy)" name. Publish is blocked with a specific list of what's missing
+  if any of that Part's tagged slides are missing required content
+  (`partCompleteness.ts`'s `missingPartContent()`, checked against the
+  template's slotSpec for topic/questions/images/audio/volumeCheck).
 - **Access**: `storyline_tests`/`storyline_versions`/`storyline_parts`/
   `storyline_template`/`storylines/` Storage are admin-only for read *and*
   write (unlike `test_bank`'s `isSignedIn()`-read — test content should stay
