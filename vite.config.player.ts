@@ -8,9 +8,16 @@ import path from 'path'
 // its output goes straight into public/player-shell, which the main build
 // picks up as ordinary static assets (fetched/opened by JS, never routed to).
 //
-// Filenames are fixed and unhashed (not content-hashed) so exportStoryline.ts
-// can hardcode the file list when assembling a zip, instead of parsing a
-// build manifest. Trade-off: no cache-busting on this rarely-changing shell.
+// Content-hashed filenames (examiner.html/candidate.html themselves stay
+// stable — Vite doesn't hash HTML entry output — only their JS/CSS/asset
+// references do). This used to be unhashed on the theory that
+// exportStoryline.ts would need to hardcode filenames, but it's actually
+// always discovered them dynamically via the manifest below, so hashing
+// costs nothing there — and fixes a real problem: this shell now changes
+// constantly during active development, and a fixed filename with no
+// explicit cache-control header meant a browser could silently keep
+// serving a stale cached copy indefinitely after a deploy, with a normal
+// refresh not being enough to notice.
 export default defineConfig({
   root: path.resolve(__dirname, 'player-src'),
   base: './',
@@ -27,15 +34,9 @@ export default defineConfig({
         candidate: path.resolve(__dirname, 'player-src/candidate.html'),
       },
       output: {
-        entryFileNames: 'assets/[name].js',
-        chunkFileNames: 'assets/[name]-chunk.js',
-        // player.css is <link>-referenced from both HTML entries (not
-        // imported from JS), so Rollup has no single natural entry name to
-        // derive an asset filename from — pin it explicitly rather than
-        // relying on [name], which produced a nondeterministic name tied to
-        // an unrelated shared JS chunk.
-        assetFileNames: assetInfo =>
-          assetInfo.names?.some(n => n.endsWith('.css')) ? 'assets/player.css' : 'assets/[name][extname]',
+        entryFileNames: 'assets/[name]-[hash].js',
+        chunkFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash][extname]',
       },
     },
   },
