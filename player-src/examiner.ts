@@ -2,6 +2,7 @@ import type { StorylineItem, ChecklistItem } from './shared/types'
 import { getParams, channelName } from './shared/session'
 import { loadItems } from './shared/dataSource'
 import { initOnlineStatusDot } from './shared/onlineStatus'
+import { renderInlineMarkup } from './shared/markup'
 import teacLogo from './assets/teac-logo.png'
 
 // The first few slides (accept/reject, test data, room-setup checklist) get
@@ -336,7 +337,7 @@ function renderPreviewContent(card: HTMLElement, entries: NonNullable<StorylineI
     if (entry.topic) {
       const p = document.createElement('p')
       p.className = 'preview-highlight'
-      p.textContent = `Topic: ${entry.topic}`
+      p.innerHTML = `Topic: ${renderInlineMarkup(entry.topic)}`
       block.appendChild(p)
     }
     if (entry.questions?.length) {
@@ -345,7 +346,7 @@ function renderPreviewContent(card: HTMLElement, entries: NonNullable<StorylineI
       entry.questions.forEach(q => {
         const li = document.createElement('li')
         li.className = 'preview-highlight'
-        li.textContent = q
+        li.innerHTML = renderInlineMarkup(q)
         ul.appendChild(li)
       })
       block.appendChild(ul)
@@ -637,7 +638,7 @@ function renderCurrentSlide() {
   if (item.examinerText) {
     const text = document.createElement('div')
     text.className = 'slide-text'
-    text.textContent = applyLiveFieldSubstitutions(item.examinerText)
+    text.innerHTML = renderInlineMarkup(applyLiveFieldSubstitutions(item.examinerText))
     content.appendChild(text)
   }
 
@@ -695,7 +696,7 @@ function renderCurrentSlide() {
     nextBtn.classList.toggle('next-btn-prominent', !!item.nextButtonLabel)
   }
 
-  if (notesContent) notesContent.textContent = item.notes || 'No notes for this slide.'
+  if (notesContent) notesContent.innerHTML = renderInlineMarkup(item.notes || 'No notes for this slide.')
 
   if (item.startsTestTimer) startGlobalTimer()
   startSlideTimer(item)

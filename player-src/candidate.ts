@@ -2,6 +2,7 @@ import type { StorylineItem, CandidateInstructionLine } from './shared/types'
 import { getParams, channelName } from './shared/session'
 import { loadItems } from './shared/dataSource'
 import { initOnlineStatusDot } from './shared/onlineStatus'
+import { renderInlineMarkup } from './shared/markup'
 import teacLogo from './assets/teac-logo.png'
 
 const { sessionId } = getParams()
@@ -12,22 +13,6 @@ if (statusDot) initOnlineStatusDot(statusDot)
 
 function panelId(candidateState: string): string {
   return `panel-${candidateState.replace(/[^a-zA-Z0-9_-]/g, '_')}`
-}
-
-function escapeHtml(s: string): string {
-  const div = document.createElement('div')
-  div.textContent = s
-  return div.innerHTML
-}
-
-// Lightweight inline markup for candidate-instruction lines — `**bold**`
-// and `__underline__`, which can combine — not full HTML, so authoring
-// stays plain-text-safe. See CandidateInstructionLine.
-function renderInlineMarkup(text: string): string {
-  let html = escapeHtml(text)
-  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-  html = html.replace(/__(.+?)__/g, '<u>$1</u>')
-  return html
 }
 
 function buildInstructions(lines: CandidateInstructionLine[]): HTMLElement {
