@@ -111,6 +111,7 @@ export function StorylineTemplateEditorPage() {
           <TemplateSlideRow
             key={slide.id}
             slide={slide}
+            index={index}
             canMoveUp={index > 0}
             canMoveDown={index < slides.length - 1}
             onChange={updated => updateSlide(index, updated)}

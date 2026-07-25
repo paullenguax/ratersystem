@@ -19,8 +19,20 @@ export const SLIDE_KINDS: { value: TemplateSlideKind; label: string }[] = [
   { value: 'closing', label: 'Closing' },
 ]
 
+// Slide rows all look identical otherwise (same white card, same border) —
+// a per-Part accent gives the eye something to group by while scanning a
+// long template, distinct from the "whole-test" (not pooled) slides.
+const PART_ACCENT: Record<string, string> = {
+  none: 'border-l-slate-300 bg-slate-50/60',
+  '1': 'border-l-sky-400 bg-sky-50/50',
+  '2': 'border-l-emerald-400 bg-emerald-50/50',
+  '3': 'border-l-amber-400 bg-amber-50/50',
+  '4': 'border-l-fuchsia-400 bg-fuchsia-50/50',
+}
+
 interface Props {
   slide: TemplateSlide
+  index: number
   disabled?: boolean
   canMoveUp: boolean
   canMoveDown: boolean
@@ -30,7 +42,7 @@ interface Props {
   onMoveDown: () => void
 }
 
-export function TemplateSlideRow({ slide, disabled, canMoveUp, canMoveDown, onChange, onRemove, onMoveUp, onMoveDown }: Props) {
+export function TemplateSlideRow({ slide, index, disabled, canMoveUp, canMoveDown, onChange, onRemove, onMoveUp, onMoveDown }: Props) {
   function set<K extends keyof TemplateSlide>(key: K, value: TemplateSlide[K]) {
     onChange({ ...slide, [key]: value })
   }
@@ -51,18 +63,23 @@ export function TemplateSlideRow({ slide, disabled, canMoveUp, canMoveDown, onCh
     set('previewParts', next.length > 0 ? (next.sort() as TemplateSlide['previewParts']) : undefined)
   }
 
+  const accent = PART_ACCENT[slide.partNumber ? String(slide.partNumber) : 'none']
+
   return (
-    <div className="rounded-md border p-4 space-y-3">
+    <div className={`rounded-md border border-l-4 p-4 space-y-3 ${accent}`}>
       <div className="flex items-center justify-between gap-2">
-        <div className="w-64">
-          <Select value={slide.kind} onValueChange={v => set('kind', v as TemplateSlideKind)} disabled={disabled}>
-            <SelectTrigger>
-              <SelectValue>{(v: TemplateSlideKind) => SLIDE_KINDS.find(k => k.value === v)?.label ?? v}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {SLIDE_KINDS.map(k => <SelectItem key={k.value} value={k.value}>{k.label}</SelectItem>)}
-            </SelectContent>
-          </Select>
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-mono text-muted-foreground w-6 text-right shrink-0">{index + 1}</span>
+          <div className="w-64">
+            <Select value={slide.kind} onValueChange={v => set('kind', v as TemplateSlideKind)} disabled={disabled}>
+              <SelectTrigger>
+                <SelectValue>{(v: TemplateSlideKind) => SLIDE_KINDS.find(k => k.value === v)?.label ?? v}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {SLIDE_KINDS.map(k => <SelectItem key={k.value} value={k.value}>{k.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
         <div className="flex gap-1">
           <Button type="button" variant="ghost" size="icon" onClick={onMoveUp} disabled={disabled || !canMoveUp}>
