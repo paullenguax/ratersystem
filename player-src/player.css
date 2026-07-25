@@ -61,6 +61,22 @@ div.polaroid img {
   justify-content: center;
 }
 
+/* Below this width, side-by-side A/B pictures get too small to read
+   comfortably — stack them instead, each at full (wider) card width. */
+@media (max-width: 700px) {
+  div.polaroid {
+    width: 92%;
+  }
+
+  .image-row {
+    flex-direction: column;
+  }
+
+  .image-cell {
+    flex: none;
+  }
+}
+
 .candidate-logo {
   width: auto !important;
   max-width: 420px;
