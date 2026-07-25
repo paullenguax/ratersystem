@@ -1,5 +1,12 @@
-import type { TemplateSlide, StorylineSlotContent, StorylineItem, StorylinePart, StorylinePartNumber } from '@/types'
+import type { TemplateSlide, StorylineSlotContent, StorylineItem, StorylinePart, StorylinePartNumber, ChecklistItem } from '@/types'
 import { deriveComboImages, type ComboImageResult } from './deriveComboImages'
+
+// checklistItems used to be string[] before per-item icons existed —
+// templates saved before that change still have plain strings in Firestore.
+// Normalize defensively rather than assuming every document was migrated.
+function normalizeChecklistItems(items: (string | ChecklistItem)[] | undefined): ChecklistItem[] | undefined {
+  return items?.map(item => (typeof item === 'string' ? { text: item } : item))
+}
 
 function substituteVariables(text: string, variables?: Record<string, string>): string {
   if (!variables) return text
@@ -23,7 +30,11 @@ function resolveScriptText(slide: TemplateSlide, testVariables: Record<string, s
   if (slide.slotSpec.questions) {
     const questionsBlock = formatQuestions(slot?.questions)
     text = text.includes('{questions}')
-      ? text.replace('{questions}', questionsBlock)
+      // Wrapped in blank lines so the imported question list reads as its
+      // own paragraph rather than running straight into the surrounding
+      // scripted wording — matches the spacing questions already get on
+      // the compiled Part-preview slide.
+      ? text.replace('{questions}', questionsBlock ? `\n${questionsBlock}\n` : '')
       : [text, questionsBlock].filter(Boolean).join('\n')
   }
   return text
@@ -133,7 +144,7 @@ export function resolveItems(
       examinerText: resolveScriptText(slide, testVariables, slot),
       notes: slide.notes ? substituteVariables(slide.notes, testVariables) : undefined,
       candidateInstructions: slide.candidateInstructions?.map(line => ({ ...line, text: substituteVariables(line.text, testVariables) })),
-      checklistItems: slide.checklistItems,
+      checklistItems: normalizeChecklistItems(slide.checklistItems),
       testDisplayName: slide.kind === 'accept_reject_test' ? testDisplayName : undefined,
       startsTestTimer: slide.startsTestTimer,
       nextButtonLabel: slide.nextButtonLabel,

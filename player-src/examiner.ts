@@ -436,7 +436,13 @@ function findVolumeCheckUrl(): string | undefined {
   return undefined
 }
 
-function renderChecklist(container: HTMLElement, checklistItems: ChecklistItem[]) {
+// checklistItems used to be string[] before per-item icons existed — an
+// already-published Version or exported zip built before that change still
+// has plain strings baked into its snapshot, even though resolveItems.ts
+// now normalizes fresh data. Defend here too rather than assume every
+// StorylineItem the player ever loads went through today's resolveItems.ts.
+function renderChecklist(container: HTMLElement, rawItems: (string | ChecklistItem)[]) {
+  const checklistItems = rawItems.map(item => (typeof item === 'string' ? { text: item } : item))
   const wrap = document.createElement('div')
   wrap.className = 'checklist'
   checklistItems.forEach((item, i) => {

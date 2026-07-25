@@ -5,7 +5,7 @@ import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
 import { ArrowLeft, Plus, Save, Sparkles } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
-import type { TemplateSlide, TemplateSlideKind, StorylineTemplate } from '@/types'
+import type { TemplateSlide, TemplateSlideKind, StorylineTemplate, ChecklistItem } from '@/types'
 import { TemplateSlideRow, SLIDE_KINDS } from './TemplateSlideRow'
 import { buildSeedTemplateSlides } from './templateSeed'
 import { Button } from '@/components/ui/button'
@@ -13,9 +13,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 const TEMPLATE_DOC_ID = 'current'
 
+// checklistItems used to be string[] before per-item icons existed — a
+// template saved before that change still has plain strings in Firestore.
+// Normalize on load so the editor displays/edits it correctly regardless;
+// saving afterwards migrates it to the new shape automatically.
+function normalizeSlide(slide: TemplateSlide): TemplateSlide {
+  if (!slide.checklistItems) return slide
+  const items = slide.checklistItems as unknown as (string | ChecklistItem)[]
+  return { ...slide, checklistItems: items.map(item => (typeof item === 'string' ? { text: item } : item)) }
+}
+
 async function fetchTemplate(): Promise<StorylineTemplate | null> {
   const snap = await getDoc(doc(db, 'storyline_template', TEMPLATE_DOC_ID))
-  return snap.exists() ? ({ id: snap.id, ...snap.data() } as StorylineTemplate) : null
+  if (!snap.exists()) return null
+  const data = snap.data() as StorylineTemplate
+  return { ...data, id: snap.id, slides: data.slides.map(normalizeSlide) }
 }
 
 function newSlide(kind: TemplateSlideKind, order: number): TemplateSlide {
