@@ -405,10 +405,24 @@ function renderCurrentSlide() {
     card.appendChild(thumbRow)
   }
 
-  item.media?.audioClips?.forEach(clip => {
+  // The volume check (if any) is meant to happen before the scored
+  // recording, so it's shown above the slide's other clip(s) regardless of
+  // the order resolveItems.ts produced them in.
+  const orderedClips = [...(item.media?.audioClips ?? [])].sort((a, b) => {
+    const aFirst = a.label === 'Volume check' ? 0 : 1
+    const bFirst = b.label === 'Volume check' ? 0 : 1
+    return aFirst - bFirst
+  })
+  orderedClips.forEach(clip => {
     card.appendChild(createAudioControls(clip, () => { updateNavState() }))
   })
   refreshClipButtons()
+
+  const nextBtn = document.getElementById('next-btn') as HTMLButtonElement | null
+  if (nextBtn) {
+    nextBtn.textContent = item.nextButtonLabel || 'Next ▶'
+    nextBtn.classList.toggle('next-btn-prominent', !!item.nextButtonLabel)
+  }
 
   if (notesContent) notesContent.textContent = item.notes || 'No notes for this slide.'
 

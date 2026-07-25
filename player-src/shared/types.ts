@@ -20,6 +20,7 @@ export interface StorylineItem {
   notes?: string
   candidateInstructions?: CandidateInstructionLine[]
   startsTestTimer?: boolean
+  nextButtonLabel?: string
   previewContent?: { label: string; topic?: string; questions?: string[] }[]
   media?: {
     images?: string[]

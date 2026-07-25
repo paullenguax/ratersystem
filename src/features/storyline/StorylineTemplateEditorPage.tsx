@@ -60,7 +60,15 @@ export function StorylineTemplateEditorPage() {
 
   function loadExampleScript() {
     if (slides.length > 0 && !window.confirm('This replaces the current unsaved slide list with the example script. Continue?')) return
-    setSlides(buildSeedTemplateSlides())
+    // Every StorylinePart/StorylineVersion's slot content is keyed by slide
+    // id, not label — reusing the existing id for any seed slide whose
+    // label already exists keeps that content linked. Without this, "Load
+    // example script" would silently orphan every Part/Version's already-
+    // authored questions/media (they'd still be saved, just unreachable,
+    // since nothing would reference their now-stale slide ids anymore).
+    const existingIdByLabel = new Map(slides.map(s => [s.label, s.id]))
+    const seeded = buildSeedTemplateSlides().map(s => ({ ...s, id: existingIdByLabel.get(s.label) ?? s.id }))
+    setSlides(seeded)
   }
 
   async function handleSave() {

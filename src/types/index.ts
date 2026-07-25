@@ -192,6 +192,10 @@ export interface TemplateSlide {
   // runs for the rest of the test. Exactly one slide (typically the
   // "invite candidate into the room" slide) should set this.
   startsTestTimer?: boolean
+  // Overrides the Next button's label/prominence on this slide only (e.g.
+  // "START TEST" on the last pre-test slide) — reverts to the default
+  // "Next ▶" on the following slide.
+  nextButtonLabel?: string
   // This slide compiles a read-only preview of the actual topic/question
   // content already authored for the listed Parts (e.g. "review Part 1 and
   // Part 4 before starting") — resolved from those Parts' own slot content,
@@ -264,6 +268,7 @@ export interface StorylineItem {
   notes?: string
   candidateInstructions?: CandidateInstructionLine[]
   startsTestTimer?: boolean
+  nextButtonLabel?: string
   // Compiled from other slides' actual topic/question content when this
   // slide declares previewParts (e.g. an "examiner preview" slide shown
   // before the test starts) — rendered distinctly from examinerText so the

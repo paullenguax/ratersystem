@@ -309,19 +309,36 @@ phase.
   slide (bold+italic, extra paragraph spacing — `StorylineItem.previewContent`,
   kept structured rather than flattened into `examinerText` specifically so
   the player can style it) — e.g. an "examiner preview" slide shown before
-  the test starts. Pulled from `resolveItems.ts`'s pre-pass over the other
-  Parts' slot content, not authored directly on that slide.
-  **Gotcha**: `notes`, `startsTestTimer`, `previewParts`, and `volumeCheck`
-  are all fields on `TemplateSlide`, authored per-slide in the Script
-  Template editor (`/test-versions/template`) — not in `templateSeed.ts`
-  (that file only seeds the *first* "Load example script" click; it never
-  updates a template already saved to Firestore). A template saved before
-  one of these fields existed simply won't have it set on any slide — the
-  timer won't start, previews won't compile, etc. — until an admin opens the
-  affected slide(s) in the Template editor, sets the new checkbox/field, and
-  saves. "Load example script" resets to the current seed wholesale (with a
-  confirm prompt) but wipes any customization already made to scriptText/
-  notes/etc., so prefer editing the specific slide(s) by hand instead.
+  the test starts, with `previewExclude` letting individual Part-tagged
+  slides opt out of appearing in any such compilation (e.g. Part 4's
+  picture-interview slides are excluded — those questions depend on seeing
+  the images live, so only the closing discussion questions are worth
+  previewing in advance). `nextButtonLabel` overrides the Next button's
+  text/prominence for one slide only (e.g. "START TEST" on the last
+  pre-test slide, styled bigger via `.next-btn-prominent`), reverting to
+  the default "Next ▶" on the following slide.
+  **Gotcha — editing the template is safe, *reloading* the seed is not**:
+  `notes`, `startsTestTimer`, `previewParts`, `previewExclude`,
+  `nextButtonLabel`, and `volumeCheck` are all fields on `TemplateSlide`,
+  authored per-slide in the Script Template editor (`/test-versions/
+  template`) — not in `templateSeed.ts` (that file only seeds the *first*
+  "Load example script" click; it never updates a template already saved to
+  Firestore). A template saved before one of these fields existed simply
+  won't have it set on any slide until an admin opens the affected slide(s)
+  and sets it. "Load example script" (`loadExampleScript()` in
+  `StorylineTemplateEditorPage.tsx`) now preserves each slide's existing
+  `id` when its `label` matches an existing slide, specifically so
+  `StorylinePart`/`StorylineVersion` slot content — which is keyed by slide
+  id, not label — doesn't get silently orphaned by a reload. Before this
+  fix, reloading the seed to pick up new fields assigned every slide a
+  fresh random id, breaking every Part/Version's already-authored questions
+  and media (nothing was deleted, but `slotFor()` in `resolveItems.ts`
+  could no longer find it — a real incident, repaired via a one-off script
+  matching old keys to new ids by content shape/filename). If this ever
+  recurs (e.g. a slide's `label` was also renamed in the same reload, so
+  the matching can't find it), the fix is the same: match each Part's
+  `slotContent` keys to the new template's slide ids by shape (which slide
+  has images vs questions vs which audio filenames) and rewrite the keys.
 - **Build**: a *separate* `vite.config.player.ts` (multi-page, fixed asset
   names via a manifest, `outDir` pointed straight at `public/player-shell`)
   builds this shell. Wired as an npm `prebuild` script, so `public/player-

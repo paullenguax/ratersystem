@@ -78,6 +78,7 @@ export function buildSeedTemplateSlides(): TemplateSlide[] {
       kind: 'instruction',
       label: 'Introduction',
       candidateState: 'Logo',
+      nextButtonLabel: 'START TEST',
       notes:
         'Every part of the introduction must be clearly recorded. If the candidate is not speaking clearly or ' +
         'loudly enough, ask them to do so. You might need to reposition the voice recorder.\n\n' +

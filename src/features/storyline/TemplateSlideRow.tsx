@@ -165,6 +165,17 @@ export function TemplateSlideRow({ slide, disabled, canMoveUp, canMoveDown, onCh
       </label>
 
       <div className="space-y-1">
+        <Label>Next button label override (blank = default "Next ▶")</Label>
+        <Input
+          value={slide.nextButtonLabel ?? ''}
+          onChange={e => set('nextButtonLabel', e.target.value || undefined)}
+          placeholder="e.g. START TEST"
+          disabled={disabled}
+          className="max-w-xs"
+        />
+      </div>
+
+      <div className="space-y-1">
         <Label>Compile these Parts&apos; questions into this slide (examiner preview only)</Label>
         <div className="flex gap-4">
           {([1, 2, 3, 4] as const).map(n => (
