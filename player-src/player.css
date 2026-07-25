@@ -55,9 +55,31 @@ div.polaroid img {
 
 .candidate-logo {
   width: auto !important;
-  max-width: 220px;
+  max-width: 420px;
   display: block;
   margin: 48px auto;
+}
+
+.candidate-instructions {
+  padding: 40px 48px;
+  font-size: 1.6rem;
+  font-style: italic;
+  line-height: 1.5;
+  color: #222;
+  text-align: left;
+}
+
+.candidate-instructions p {
+  margin: 0 0 20px;
+}
+
+.candidate-instructions ul {
+  margin: 0 0 20px;
+  padding-left: 1.3em;
+}
+
+.candidate-instructions li {
+  margin-bottom: 8px;
 }
 
 #internet-status {
@@ -84,6 +106,12 @@ div.polaroid img {
   align-items: center;
   gap: 16px;
   margin-bottom: 16px;
+}
+
+.exam-logo {
+  height: 32px;
+  width: auto;
+  flex-shrink: 0;
 }
 
 .exam-progress {

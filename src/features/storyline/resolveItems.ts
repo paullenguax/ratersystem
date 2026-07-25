@@ -125,6 +125,7 @@ export function resolveItems(
       candidateState: slide.candidateState ?? '',
       examinerText: resolveScriptText(slide, testVariables, slot),
       notes: slide.notes ? substituteVariables(slide.notes, testVariables) : undefined,
+      candidateInstructions: slide.candidateInstructions?.map(line => ({ ...line, text: substituteVariables(line.text, testVariables) })),
       startsTestTimer: slide.startsTestTimer,
       previewContent: slide.previewParts?.length ? slide.previewParts.flatMap(n => previewByPart[n] ?? []) : undefined,
       timing: slide.timing,

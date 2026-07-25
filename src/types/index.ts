@@ -143,6 +143,18 @@ export type TemplateSlideKind =
 // only supplies the per-test slot content declared by slotSpec.
 export type StorylinePartNumber = 1 | 2 | 3 | 4
 
+// One line of fixed on-screen instructional text shown to the candidate
+// (e.g. Part 2/3's "after every recording, report the message" prompts,
+// transcribed from the old system's candidate-screen slides). `text`
+// supports lightweight inline markup: `**bold**` and `__underline__`
+// (they can combine, e.g. `**__both__**`), rendered by the player — not
+// full HTML, to keep authoring safe and simple.
+export interface CandidateInstructionLine {
+  text: string
+  bullet?: boolean
+  color?: string
+}
+
 export interface TemplateSlide {
   id: string
   order: number
@@ -169,6 +181,13 @@ export interface TemplateSlide {
   // candidate). [placeholder] tokens named in slotSpec.variables are filled
   // the same way as in scriptText.
   notes?: string
+  // Fixed on-screen instructions shown to the candidate for the whole
+  // duration of this candidateState (e.g. Part 2/3's "report the message"
+  // prompts) — distinct from scriptText (read aloud by the examiner) and
+  // from media.images (photos, not text). When several slides share one
+  // candidateState (e.g. Part 3's four sub-slides), only the first one
+  // that sets this is used — see player-src/candidate.ts's panel dedup.
+  candidateInstructions?: CandidateInstructionLine[]
   // Arriving at this slide starts the continuous session timer, which then
   // runs for the rest of the test. Exactly one slide (typically the
   // "invite candidate into the room" slide) should set this.
@@ -238,6 +257,7 @@ export interface StorylineItem {
   examinerText?: string
   candidateState: string
   notes?: string
+  candidateInstructions?: CandidateInstructionLine[]
   startsTestTimer?: boolean
   // Compiled from other slides' actual topic/question content when this
   // slide declares previewParts (e.g. an "examiner preview" slide shown

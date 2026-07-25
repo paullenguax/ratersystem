@@ -1,8 +1,8 @@
-import type { StorylineItem } from './shared/types'
+import type { StorylineItem, CandidateInstructionLine } from './shared/types'
 import { getParams, channelName } from './shared/session'
 import { loadItems } from './shared/dataSource'
 import { initOnlineStatusDot } from './shared/onlineStatus'
-import lenguaxLogo from './assets/lenguax-logo.png'
+import teacLogo from './assets/teac-logo.png'
 
 const { sessionId } = getParams()
 const channel = new BroadcastChannel(channelName(sessionId))
@@ -14,19 +14,73 @@ function panelId(candidateState: string): string {
   return `panel-${candidateState.replace(/[^a-zA-Z0-9_-]/g, '_')}`
 }
 
+function escapeHtml(s: string): string {
+  const div = document.createElement('div')
+  div.textContent = s
+  return div.innerHTML
+}
+
+// Lightweight inline markup for candidate-instruction lines — `**bold**`
+// and `__underline__`, which can combine — not full HTML, so authoring
+// stays plain-text-safe. See CandidateInstructionLine.
+function renderInlineMarkup(text: string): string {
+  let html = escapeHtml(text)
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+  html = html.replace(/__(.+?)__/g, '<u>$1</u>')
+  return html
+}
+
+function buildInstructions(lines: CandidateInstructionLine[]): HTMLElement {
+  const wrap = document.createElement('div')
+  wrap.className = 'candidate-instructions'
+  let list: HTMLUListElement | null = null
+  for (const line of lines) {
+    if (line.bullet) {
+      if (!list) {
+        list = document.createElement('ul')
+        wrap.appendChild(list)
+      }
+      const li = document.createElement('li')
+      li.innerHTML = renderInlineMarkup(line.text)
+      if (line.color) li.style.color = line.color
+      list.appendChild(li)
+    } else {
+      list = null
+      const p = document.createElement('p')
+      p.innerHTML = renderInlineMarkup(line.text)
+      if (line.color) p.style.color = line.color
+      wrap.appendChild(p)
+    }
+  }
+  return wrap
+}
+
 function renderPanels(items: StorylineItem[]) {
   const container = document.getElementById('panels')
   if (!container) return
   container.innerHTML = ''
 
+  // Several slides can share one candidateState (e.g. Part 3's four
+  // sub-slides all stay on "Task3") — group them so exactly one panel per
+  // state is created, picking whichever item in the group actually has
+  // content to show, rather than stacking duplicate panels at the same
+  // fixed position.
+  const groups = new Map<string, StorylineItem[]>()
   for (const item of items) {
     if (!item.candidateState) continue
+    const group = groups.get(item.candidateState) ?? []
+    group.push(item)
+    groups.set(item.candidateState, group)
+  }
+
+  for (const [state, group] of groups) {
+    const representative = group.find(i => i.media?.images?.length || i.candidateInstructions?.length) ?? group[0]
 
     const panel = document.createElement('div')
     panel.className = 'polaroid'
-    panel.id = panelId(item.candidateState)
+    panel.id = panelId(state)
 
-    const images = item.media?.images
+    const images = representative.media?.images
     if (images && images.length > 0) {
       const imageRow = document.createElement('div')
       imageRow.className = 'image-row'
@@ -35,7 +89,7 @@ function renderPanels(items: StorylineItem[]) {
         cell.className = 'image-cell'
         const img = document.createElement('img')
         img.src = url
-        img.alt = item.candidateState
+        img.alt = state
         cell.appendChild(img)
         // A, B, C… labels so everyone can unambiguously refer to "picture A"
         // vs "picture B" once more than one image is shown at once.
@@ -48,20 +102,24 @@ function renderPanels(items: StorylineItem[]) {
         imageRow.appendChild(cell)
       })
       panel.appendChild(imageRow)
-    } else {
-      // No image content for this state (instructions, preamble, audio-only
-      // tasks, closing) — show the brand logo rather than the internal
-      // candidateState key, which candidates were never meant to see.
+    }
+
+    if (representative.candidateInstructions?.length) {
+      panel.appendChild(buildInstructions(representative.candidateInstructions))
+    } else if (!images || images.length === 0) {
+      // Nothing to show for this state (instructions, preamble, closing) —
+      // show the brand logo rather than the internal candidateState key,
+      // which candidates were never meant to see.
       const logo = document.createElement('img')
-      logo.src = lenguaxLogo
-      logo.alt = 'Lenguax'
+      logo.src = teacLogo
+      logo.alt = 'Test of English for Aeronautical Communication'
       logo.className = 'candidate-logo'
       panel.appendChild(logo)
     }
 
     // Audio plays from the examiner's own console (same room, one set of
     // speakers) — see examiner.ts. The candidate screen only ever shows
-    // images.
+    // images/text.
 
     container.appendChild(panel)
   }

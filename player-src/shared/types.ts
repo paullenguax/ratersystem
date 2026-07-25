@@ -5,6 +5,12 @@
 // already merged) — see src/features/storyline/resolveItems.ts.
 // Keep in sync with src/types/index.ts.
 
+export interface CandidateInstructionLine {
+  text: string
+  bullet?: boolean
+  color?: string
+}
+
 export interface StorylineItem {
   id: string
   order: number
@@ -12,6 +18,7 @@ export interface StorylineItem {
   examinerText?: string
   candidateState: string
   notes?: string
+  candidateInstructions?: CandidateInstructionLine[]
   startsTestTimer?: boolean
   previewContent?: { label: string; topic?: string; questions?: string[] }[]
   media?: {

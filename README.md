@@ -227,9 +227,13 @@ phase.
   as an ordered list of `TemplateSlide`s — `{questions}`/`{topic}` are
   content slots filled per-Version/Part, `[placeholder]` tokens are filled
   once per Test (`StorylineTest.variables`), `notes` is examiner-only
-  guidance shown in the player's notes drawer, and `startsTestTimer` marks
-  the one slide (normally "invite candidate into the room") that starts the
-  session timer. `resolveItems.ts` is the single function that merges
+  guidance shown in the player's notes drawer, `candidateInstructions` is
+  fixed on-screen text/bullets shown to the candidate for the whole
+  duration of that slide's `candidateState` (e.g. Part 2/3's "report the
+  message" prompts — supports lightweight `**bold**`/`__underline__`
+  markup, no full HTML), and `startsTestTimer` marks the one slide
+  (normally "invite candidate into the room") that starts the session
+  timer. `resolveItems.ts` is the single function that merges
   template + Test variables + a Version's whole-test content + its 4 Parts'
   content into the final flat `StorylineItem[]` — used identically by
   Preview, Publish (snapshots the result into `version.items`), and Export.
@@ -251,12 +255,19 @@ phase.
   minimal `tsconfig.json` — deliberately outside the main `tsc -b` graph):
   `examiner.html`/`examiner.ts` is a single-slide-at-a-time navigator (one
   large fixed-size card headed by the slide's authored `label`, a segmented
-  progress bar, Back/Next) and `candidate.html`/`candidate.ts` builds one
-  hidden panel per item — an image row if the slide has images, otherwise
-  the Lenguax logo (`player-src/assets/lenguax-logo.png`, a local copy so
-  the exported zip stays self-contained) rather than the raw internal
-  `candidateState` key, which was never meant to be candidate-facing — and
-  toggles visibility on incoming messages. When a slide shows more than one
+  progress bar, a small Lenguax brand mark in the header, Back/Next) and
+  `candidate.html`/`candidate.ts` builds one panel **per distinct
+  `candidateState`** (not per item — several slides can share one state,
+  e.g. Part 3's four sub-slides all stay on "Task3", so items are grouped
+  and whichever one in the group actually has images/`candidateInstructions`
+  is used, rather than stacking duplicate panels on top of each other at the
+  same fixed position) — an image row if the slide has images, the slide's
+  `candidateInstructions` (bullets/bold/underline, transcribed from the old
+  system's actual candidate-screen slides) if it has those, or the TEAC logo
+  (`player-src/assets/teac-logo.png`, a local copy so the exported zip stays
+  self-contained) as a fallback rather than the raw internal `candidateState`
+  key, which was never meant to be candidate-facing — and toggles visibility
+  on incoming messages. When a slide shows more than one
   image at once (e.g. Part 4's "both pictures"), each one is tagged A, B, …
   on both the examiner and candidate screens so everyone can unambiguously
   refer to "picture A" vs "picture B"; on the examiner screen a thumbnail

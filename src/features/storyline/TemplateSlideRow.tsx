@@ -1,5 +1,6 @@
 import { ArrowUp, ArrowDown, Trash2 } from 'lucide-react'
 import type { TemplateSlide, TemplateSlideKind } from '@/types'
+import { CandidateInstructionsField } from './CandidateInstructionsField'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -132,6 +133,12 @@ export function TemplateSlideRow({ slide, disabled, canMoveUp, canMoveDown, onCh
           disabled={disabled}
         />
       </div>
+
+      <CandidateInstructionsField
+        lines={slide.candidateInstructions ?? []}
+        onChange={lines => set('candidateInstructions', lines.length > 0 ? lines : undefined)}
+        disabled={disabled}
+      />
 
       <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
         <input
