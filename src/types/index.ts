@@ -157,6 +157,11 @@ export interface CandidateInstructionLine {
   color?: string
 }
 
+export interface ChecklistItem {
+  text: string
+  icon?: 'screen' | 'speaker'
+}
+
 export interface TemplateSlide {
   id: string
   order: number
@@ -193,7 +198,12 @@ export interface TemplateSlide {
   // For `admin_checklist`-kind slides: one checkbox per item, rendered in
   // the player instead of a plain bullet list. Next is disabled until every
   // item is ticked (see player-src/examiner.ts) — bypassed in Preview mode.
-  checklistItems?: string[]
+  // `icon` optionally adds a small clickable action next to that item —
+  // 'screen' opens/focuses the candidate window, 'speaker' plays whichever
+  // clip elsewhere in the resolved version is labeled "Volume check" (see
+  // slotSpec.volumeCheck) — so the examiner can verify sound during setup
+  // using the exact same clip Part 2 uses later, not a separate upload.
+  checklistItems?: ChecklistItem[]
   // Arriving at this slide starts the continuous session timer, which then
   // runs for the rest of the test. Exactly one slide (typically the
   // "invite candidate into the room" slide) should set this.
@@ -278,7 +288,7 @@ export interface StorylineItem {
   candidateState: string
   notes?: string
   candidateInstructions?: CandidateInstructionLine[]
-  checklistItems?: string[]
+  checklistItems?: ChecklistItem[]
   // Only set on the accept_reject_test item — "{test.name} — {version.
   // versionLabel}", computed by the caller and threaded through
   // resolveItems() since it isn't authored on any TemplateSlide.

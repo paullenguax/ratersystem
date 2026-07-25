@@ -11,6 +11,11 @@ export interface CandidateInstructionLine {
   color?: string
 }
 
+export interface ChecklistItem {
+  text: string
+  icon?: 'screen' | 'speaker'
+}
+
 export type TemplateSlideKind =
   | 'accept_reject_test'
   | 'test_data_confirm'
@@ -33,7 +38,7 @@ export interface StorylineItem {
   candidateState: string
   notes?: string
   candidateInstructions?: CandidateInstructionLine[]
-  checklistItems?: string[]
+  checklistItems?: ChecklistItem[]
   testDisplayName?: string
   startsTestTimer?: boolean
   nextButtonLabel?: string

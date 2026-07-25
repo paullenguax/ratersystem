@@ -1,7 +1,7 @@
 import { ArrowUp, ArrowDown, Trash2 } from 'lucide-react'
 import type { TemplateSlide, TemplateSlideKind } from '@/types'
 import { CandidateInstructionsField } from './CandidateInstructionsField'
-import { QuestionListField } from './QuestionListField'
+import { ChecklistItemsField } from './ChecklistItemsField'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -168,9 +168,8 @@ export function TemplateSlideRow({ slide, index, disabled, canMoveUp, canMoveDow
       </div>
 
       {slide.kind === 'admin_checklist' && (
-        <QuestionListField
-          label="Checklist items (examiner must tick every one to advance)"
-          questions={slide.checklistItems ?? []}
+        <ChecklistItemsField
+          items={slide.checklistItems ?? []}
           onChange={items => set('checklistItems', items.length > 0 ? items : undefined)}
           disabled={disabled}
         />

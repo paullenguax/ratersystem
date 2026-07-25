@@ -1,4 +1,4 @@
-import type { StorylineItem } from './shared/types'
+import type { StorylineItem, ChecklistItem } from './shared/types'
 import { getParams, channelName } from './shared/session'
 import { loadItems } from './shared/dataSource'
 import { initOnlineStatusDot } from './shared/onlineStatus'
@@ -44,10 +44,12 @@ function updateCandidateStatus() {
   btn.title = open ? 'Candidate window open' : 'Candidate window closed — click to open'
 }
 
-document.getElementById('candidate-status')?.addEventListener('click', () => {
+function openOrFocusCandidateWindow() {
   if (candidateWindow && !candidateWindow.closed) candidateWindow.focus()
   else openCandidateWindow()
-})
+}
+
+document.getElementById('candidate-status')?.addEventListener('click', openOrFocusCandidateWindow)
 
 window.setInterval(updateCandidateStatus, 1000)
 updateCandidateStatus()
@@ -378,12 +380,26 @@ function applyLiveFieldSubstitutions(text: string): string {
 
 let checkedItems = new Set<number>()
 
-function renderChecklist(card: HTMLElement, checklistItems: string[]) {
+// The checklist's speaker button plays whichever clip is labeled "Volume
+// check" anywhere in the resolved version (see slotSpec.volumeCheck) — the
+// same clip Part 2 uses later, not a separate upload for the checklist.
+function findVolumeCheckUrl(): string | undefined {
+  for (const it of items) {
+    const clip = it.media?.audioClips?.find(c => c.label === 'Volume check')
+    if (clip) return clip.url
+  }
+  return undefined
+}
+
+function renderChecklist(container: HTMLElement, checklistItems: ChecklistItem[]) {
   const wrap = document.createElement('div')
   wrap.className = 'checklist'
-  checklistItems.forEach((text, i) => {
-    const row = document.createElement('label')
+  checklistItems.forEach((item, i) => {
+    const row = document.createElement('div')
     row.className = 'checklist-item'
+
+    const label = document.createElement('label')
+    label.className = 'checklist-item-label'
     const box = document.createElement('input')
     box.type = 'checkbox'
     box.addEventListener('change', () => {
@@ -392,11 +408,41 @@ function renderChecklist(card: HTMLElement, checklistItems: string[]) {
       updateNavState()
     })
     const span = document.createElement('span')
-    span.textContent = text
-    row.append(box, span)
+    span.textContent = item.text
+    label.append(box, span)
+    row.appendChild(label)
+
+    if (item.icon === 'screen') {
+      const btn = document.createElement('button')
+      btn.type = 'button'
+      btn.className = 'checklist-action'
+      btn.textContent = '🖥'
+      btn.title = 'Open/focus the candidate window'
+      btn.addEventListener('click', openOrFocusCandidateWindow)
+      row.appendChild(btn)
+    } else if (item.icon === 'speaker') {
+      const url = findVolumeCheckUrl()
+      const btn = document.createElement('button')
+      btn.type = 'button'
+      btn.className = 'checklist-action'
+      btn.textContent = '🔊'
+      if (url) {
+        btn.title = 'Play the volume check clip'
+        btn.addEventListener('click', () => {
+          const audio = new Audio(url)
+          audio.volume = masterVolume
+          audio.play()
+        })
+      } else {
+        btn.disabled = true
+        btn.title = 'No volume check clip uploaded yet (set one on Part 2’s "Section 1 recording" slide)'
+      }
+      row.appendChild(btn)
+    }
+
     wrap.appendChild(row)
   })
-  card.appendChild(wrap)
+  container.appendChild(wrap)
 }
 
 // --- Test Data confirm ---------------------------------------------------
