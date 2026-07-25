@@ -186,6 +186,33 @@ div.polaroid img {
   width: 90px;
 }
 
+.candidate-status {
+  position: relative;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 1.4rem;
+  line-height: 1;
+  padding: 4px;
+  border-radius: 6px;
+}
+
+.candidate-status::after {
+  content: '';
+  position: absolute;
+  bottom: 1px;
+  right: 1px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #b00020;
+  border: 2px solid white;
+}
+
+.candidate-status.open::after {
+  background: #2e7d32;
+}
+
 .slide-card {
   min-height: 560px;
   border: 1px solid #ddd;

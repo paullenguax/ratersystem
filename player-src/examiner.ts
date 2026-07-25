@@ -20,9 +20,30 @@ function candidateUrl(): string {
 function openCandidateWindow() {
   candidateWindow = window.open(candidateUrl(), `candidateWindow_${sessionId}`, 'width=1024,height=768')
   candidateWindow?.focus()
+  updateCandidateStatus()
 }
 
 document.getElementById('open-candidate')?.addEventListener('click', openCandidateWindow)
+
+// The candidate window can be closed by the examiner at any time (or
+// crash/lose focus) with no reliable "closed" event to listen for across
+// browsers, so this is polled rather than event-driven — matches the old
+// system's "wait for the indicator to turn green" checklist instruction.
+function updateCandidateStatus() {
+  const btn = document.getElementById('candidate-status')
+  if (!btn) return
+  const open = !!candidateWindow && !candidateWindow.closed
+  btn.classList.toggle('open', open)
+  btn.title = open ? 'Candidate window open' : 'Candidate window closed — click to open'
+}
+
+document.getElementById('candidate-status')?.addEventListener('click', () => {
+  if (candidateWindow && !candidateWindow.closed) candidateWindow.focus()
+  else openCandidateWindow()
+})
+
+window.setInterval(updateCandidateStatus, 1000)
+updateCandidateStatus()
 
 // Timestamped event log, visible in the examiner window — mirrors the old
 // system's footer log. No backend write: there's no real test-run/booking
