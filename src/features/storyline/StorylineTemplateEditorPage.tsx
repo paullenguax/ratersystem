@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
-import { Plus, Save, Sparkles } from 'lucide-react'
+import { ArrowLeft, Plus, Save, Sparkles } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
 import type { TemplateSlide, TemplateSlideKind, StorylineTemplate } from '@/types'
@@ -81,11 +82,16 @@ export function StorylineTemplateEditorPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Script Template</h1>
-          <p className="text-sm text-muted-foreground">
-            The shared examiner script, edited once here. Test versions only fill in the questions/media each slide needs.
-          </p>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" nativeButton={false} render={<Link to="/test-versions" />}>
+            <ArrowLeft className="size-4" />
+          </Button>
+          <div>
+            <h1 className="text-2xl font-semibold">Script Template</h1>
+            <p className="text-sm text-muted-foreground">
+              The shared examiner script, edited once here. Test versions only fill in the questions/media each slide needs.
+            </p>
+          </div>
         </div>
         <Button variant="outline" onClick={loadExampleScript}>
           <Sparkles className="size-4 mr-2" /> Load example script
