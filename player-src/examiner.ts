@@ -322,6 +322,50 @@ function imageLabel(index: number): string {
   return String.fromCharCode(65 + index)
 }
 
+// Renders a slide's script text and its audio clip(s) together. By default
+// (no markers) it's the old behavior — one text block, then every clip
+// after it (volume check first). But an author can place literal `{audio}`/
+// `{volumeCheck}` tokens in scriptText to interleave a clip's controls at
+// an exact point (e.g. "We will first check the volume:\n{volumeCheck}\n\n
+// How is the volume?" before the scored recording) — these tokens are
+// never touched by resolveItems.ts, so they arrive here as plain text.
+function renderTextAndAudio(content: HTMLElement, item: StorylineItem, onComplete: () => void) {
+  const text = applyLiveFieldSubstitutions(item.examinerText ?? '')
+  const clips = item.media?.audioClips ?? []
+  const volumeClip = clips.find(c => c.label === 'Volume check')
+  const mainClips = clips.filter(c => c.label !== 'Volume check')
+
+  function appendText(segment: string) {
+    if (!segment.trim()) return
+    const div = document.createElement('div')
+    div.className = 'slide-text'
+    div.innerHTML = renderInlineMarkup(segment)
+    content.appendChild(div)
+  }
+
+  if (!text.includes('{audio}') && !text.includes('{volumeCheck}')) {
+    appendText(text)
+    const ordered = volumeClip ? [volumeClip, ...mainClips] : mainClips
+    ordered.forEach(clip => content.appendChild(createAudioControls(clip, onComplete)))
+    return
+  }
+
+  const mainQueue = [...mainClips]
+  for (const seg of text.split(/(\{audio\}|\{volumeCheck\})/g)) {
+    if (seg === '{volumeCheck}') {
+      if (volumeClip) content.appendChild(createAudioControls(volumeClip, onComplete))
+    } else if (seg === '{audio}') {
+      const clip = mainQueue.shift()
+      if (clip) content.appendChild(createAudioControls(clip, onComplete))
+    } else {
+      appendText(seg)
+    }
+  }
+  // Any main clip not placed by a marker (e.g. more recordings than
+  // {audio} tokens used) still needs to appear, rather than being dropped.
+  mainQueue.forEach(clip => content.appendChild(createAudioControls(clip, onComplete)))
+}
+
 function renderPreviewContent(card: HTMLElement, entries: NonNullable<StorylineItem['previewContent']>) {
   let lastPartNumber: number | undefined
   for (const entry of entries) {
@@ -635,12 +679,7 @@ function renderCurrentSlide() {
   heading.textContent = item.label
   content.appendChild(heading)
 
-  if (item.examinerText) {
-    const text = document.createElement('div')
-    text.className = 'slide-text'
-    text.innerHTML = renderInlineMarkup(applyLiveFieldSubstitutions(item.examinerText))
-    content.appendChild(text)
-  }
+  renderTextAndAudio(content, item, () => { updateNavState() })
 
   if (item.previewContent?.length) renderPreviewContent(content, item.previewContent)
   if (item.checklistItems?.length) renderChecklist(content, item.checklistItems)
@@ -670,17 +709,6 @@ function renderCurrentSlide() {
     content.appendChild(thumbRow)
   }
 
-  // The volume check (if any) is meant to happen before the scored
-  // recording, so it's shown above the slide's other clip(s) regardless of
-  // the order resolveItems.ts produced them in.
-  const orderedClips = [...(item.media?.audioClips ?? [])].sort((a, b) => {
-    const aFirst = a.label === 'Volume check' ? 0 : 1
-    const bFirst = b.label === 'Volume check' ? 0 : 1
-    return aFirst - bFirst
-  })
-  orderedClips.forEach(clip => {
-    content.appendChild(createAudioControls(clip, () => { updateNavState() }))
-  })
   refreshClipButtons()
 
   if (item.kind === 'accept_reject_test') {

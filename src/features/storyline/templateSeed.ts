@@ -180,9 +180,11 @@ export function buildSeedTemplateSlides(): TemplateSlide[] {
       scriptText:
         'Here is some paper and a pen. As you listen, take notes to explain the communications fully.\n' +
         'Do you have any questions?\n' +
-        'We will first check the volume.\n' +
-        'How is the volume?\n' +
-        'OK, I will now play the first section of the communication.',
+        'We will first check the volume:\n' +
+        '{volumeCheck}\n\n' +
+        'How is the volume?\n\n' +
+        'OK, I will now play the first section of the communication.\n' +
+        '{audio}',
       slotSpec: { audio: 'single', maxPlays: 1, volumeCheck: true },
     },
     {
@@ -205,13 +207,14 @@ export function buildSeedTemplateSlides(): TemplateSlide[] {
         'How might the controller support him, and what questions might the controller ask?\n' +
         "OK, thank you. So, let's listen to the last section of the communication. As you listen, make notes " +
         'to help you explain the exchanges to me in as much detail as possible.\n' +
+        '{audio}\n\n' +
         'OK, please now explain those communications in as much detail as you can.\n' +
         'OK thank you. That completes Part 2, we will now move on to Part 3.',
       slotSpec: { audio: 'single', maxPlays: 1 },
     },
     {
       kind: 'audio_response',
-      label: 'Part 3 — Instructions and example',
+      label: 'Part 3 — Example',
       candidateState: 'Task3',
       partNumber: 3,
       notes: 'Respond to any queries the candidate has about the task.',
