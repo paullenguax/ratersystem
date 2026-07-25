@@ -316,6 +316,164 @@ function renderPreviewContent(card: HTMLElement, entries: NonNullable<StorylineI
   }
 }
 
+// --- Live field substitution (Test Data confirm) ------------------------
+// The Test Data confirm slide is filled in by the examiner live, during the
+// session — a manual stand-in for what a real booking system will supply
+// later (Phase 2). Unlike everything else, this can't be resolved ahead of
+// time in resolveItems.ts, so it's a small bit of genuinely new runtime
+// state, applied to examinerText at render time only (never mutates item).
+
+let liveFields: { centreName?: string; testNumber?: string; examinerName?: string; candidateName?: string } = {}
+
+function applyLiveFieldSubstitutions(text: string): string {
+  const subs: Record<string, string> = {
+    '{Centre Name}': liveFields.centreName ?? '{Centre Name}',
+    '{Test Number}': liveFields.testNumber ?? '{Test Number}',
+    '{Examiner Name}': liveFields.examinerName ?? '{Examiner Name}',
+    '{Candidate Name}': liveFields.candidateName ?? '{Candidate Name}',
+    '{Date}': new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
+  }
+  let result = text
+  for (const [token, value] of Object.entries(subs)) result = result.split(token).join(value)
+  return result
+}
+
+// --- Checklist gating (admin_checklist slides with checklistItems) ------
+
+let checkedItems = new Set<number>()
+
+function renderChecklist(card: HTMLElement, checklistItems: string[]) {
+  const wrap = document.createElement('div')
+  wrap.className = 'checklist'
+  checklistItems.forEach((text, i) => {
+    const row = document.createElement('label')
+    row.className = 'checklist-item'
+    const box = document.createElement('input')
+    box.type = 'checkbox'
+    box.addEventListener('change', () => {
+      if (box.checked) checkedItems.add(i)
+      else checkedItems.delete(i)
+      updateNavState()
+    })
+    const span = document.createElement('span')
+    span.textContent = text
+    row.append(box, span)
+    wrap.appendChild(row)
+  })
+  card.appendChild(wrap)
+}
+
+// --- Test Data confirm ---------------------------------------------------
+
+const TEST_DATA_FIELDS = [
+  { id: 'td-centre', label: 'Centre Name' },
+  { id: 'td-testnum', label: 'Test Number' },
+  { id: 'td-examiner', label: 'Examiner Name' },
+  { id: 'td-candidate', label: 'Candidate Name' },
+]
+
+function renderTestDataConfirm(card: HTMLElement) {
+  const wrap = document.createElement('div')
+  wrap.className = 'test-data-fields'
+  for (const f of TEST_DATA_FIELDS) {
+    const row = document.createElement('label')
+    row.className = 'test-data-field'
+    const span = document.createElement('span')
+    span.textContent = f.label
+    const input = document.createElement('input')
+    input.type = 'text'
+    input.id = f.id
+    input.addEventListener('input', () => updateNavState())
+    row.append(span, input)
+    wrap.appendChild(row)
+  }
+  const agreeRow = document.createElement('label')
+  agreeRow.className = 'test-data-agree'
+  const agreeBox = document.createElement('input')
+  agreeBox.type = 'checkbox'
+  agreeBox.id = 'td-agree'
+  agreeBox.addEventListener('change', () => updateNavState())
+  const agreeSpan = document.createElement('span')
+  agreeSpan.textContent = 'I agree to abide by Lenguax terms.'
+  agreeRow.append(agreeBox, agreeSpan)
+  wrap.appendChild(agreeRow)
+  card.appendChild(wrap)
+}
+
+function testDataValues() {
+  const get = (id: string) => (document.getElementById(id) as HTMLInputElement | null)?.value.trim() ?? ''
+  const agree = (document.getElementById('td-agree') as HTMLInputElement | null)?.checked ?? false
+  return { centreName: get('td-centre'), testNumber: get('td-testnum'), examinerName: get('td-examiner'), candidateName: get('td-candidate'), agree }
+}
+
+function testDataComplete(): boolean {
+  const v = testDataValues()
+  return !!(v.centreName && v.testNumber && v.examinerName && v.candidateName && v.agree)
+}
+
+// --- Accept/Reject test ---------------------------------------------------
+
+let sessionEnded = false
+
+function setNavVisible(visible: boolean) {
+  const nav = document.querySelector('.slide-nav') as HTMLElement | null
+  if (nav) nav.style.display = visible ? '' : 'none'
+}
+
+function endSession(message: string) {
+  sessionEnded = true
+  if (activeAudio) { activeAudio.pause(); activeAudio = null }
+  closeZoom()
+  const card = document.getElementById('slide-card')
+  if (card) {
+    card.innerHTML = ''
+    card.classList.add('session-ended')
+    const msg = document.createElement('div')
+    msg.className = 'session-ended-message'
+    msg.textContent = message
+    card.appendChild(msg)
+  }
+  setNavVisible(false)
+  logEvent(message)
+}
+
+function renderAcceptReject(card: HTMLElement, item: StorylineItem) {
+  if (item.testDisplayName) {
+    const name = document.createElement('div')
+    name.className = 'test-display-name'
+    name.textContent = item.testDisplayName
+    card.appendChild(name)
+  }
+  const row = document.createElement('div')
+  row.className = 'accept-reject-buttons'
+
+  const acceptBtn = document.createElement('button')
+  acceptBtn.type = 'button'
+  acceptBtn.className = 'accept-btn'
+  acceptBtn.textContent = '✓ Accept this Test'
+  acceptBtn.addEventListener('click', () => {
+    if (currentIndex >= items.length - 1) return
+    currentIndex++
+    renderCurrentSlide()
+  })
+
+  const rejectBtn = document.createElement('button')
+  rejectBtn.type = 'button'
+  rejectBtn.className = 'reject-btn'
+  rejectBtn.textContent = '✕ Reject this Test'
+  rejectBtn.addEventListener('click', () => {
+    if (!window.confirm('Reject this test? This will end the session.')) return
+    if (isPreview) {
+      logEvent('Test rejected (Preview mode — session not locked).')
+      return
+    }
+    endSession('Test rejected — session ended.')
+  })
+
+  row.append(acceptBtn, rejectBtn)
+  card.appendChild(row)
+}
+
 // --- Slide navigator --------------------------------------------------
 
 let items: StorylineItem[] = []
@@ -339,12 +497,15 @@ function updateNavState() {
   const item = items[currentIndex]
   const clips = item?.media?.audioClips ?? []
   const allPlayed = clips.every(c => (playCounts.get(c.url) ?? 0) > 0)
+  const checklistDone = !item?.checklistItems?.length || item.checklistItems.every((_, i) => checkedItems.has(i))
+  const testDataDone = item?.kind !== 'test_data_confirm' || testDataComplete()
   const isLast = currentIndex >= items.length - 1
-  // Preview mode lets an admin click through freely regardless of audio gating.
-  nextBtn.disabled = isLast || (!isPreview && !allPlayed)
+  // Preview mode lets an admin click through freely regardless of gating.
+  nextBtn.disabled = isLast || (!isPreview && (!allPlayed || !checklistDone || !testDataDone))
 }
 
 function renderCurrentSlide() {
+  if (sessionEnded) return
   const card = document.getElementById('slide-card')
   const progressLabel = document.getElementById('progress-label')
   const progressFill = document.getElementById('progress-fill') as HTMLElement | null
@@ -360,6 +521,7 @@ function renderCurrentSlide() {
   if (activeAudio) { activeAudio.pause(); activeAudio = null }
   clipRegistry = []
   closeZoom()
+  checkedItems = new Set()
 
   const item = items[currentIndex]
 
@@ -375,11 +537,13 @@ function renderCurrentSlide() {
   if (item.examinerText) {
     const text = document.createElement('div')
     text.className = 'slide-text'
-    text.textContent = item.examinerText
+    text.textContent = applyLiveFieldSubstitutions(item.examinerText)
     card.appendChild(text)
   }
 
   if (item.previewContent?.length) renderPreviewContent(card, item.previewContent)
+  if (item.checklistItems?.length) renderChecklist(card, item.checklistItems)
+  if (item.kind === 'test_data_confirm') renderTestDataConfirm(card)
 
   const images = item.media?.images
   if (images?.length) {
@@ -418,6 +582,13 @@ function renderCurrentSlide() {
   })
   refreshClipButtons()
 
+  if (item.kind === 'accept_reject_test') {
+    setNavVisible(false)
+    renderAcceptReject(card, item)
+  } else {
+    setNavVisible(true)
+  }
+
   const nextBtn = document.getElementById('next-btn') as HTMLButtonElement | null
   if (nextBtn) {
     nextBtn.textContent = item.nextButtonLabel || 'Next ▶'
@@ -433,14 +604,20 @@ function renderCurrentSlide() {
 }
 
 document.getElementById('prev-btn')?.addEventListener('click', () => {
-  if (currentIndex === 0) return
+  if (sessionEnded || currentIndex === 0) return
   currentIndex--
   renderCurrentSlide()
 })
 
 document.getElementById('next-btn')?.addEventListener('click', () => {
+  if (sessionEnded) return
   const nextBtn = document.getElementById('next-btn') as HTMLButtonElement | null
   if (nextBtn?.disabled || currentIndex >= items.length - 1) return
+  const item = items[currentIndex]
+  if (item.kind === 'test_data_confirm') {
+    const v = testDataValues()
+    liveFields = { centreName: v.centreName, testNumber: v.testNumber, examinerName: v.examinerName, candidateName: v.candidateName }
+  }
   currentIndex++
   renderCurrentSlide()
 })

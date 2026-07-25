@@ -25,18 +25,39 @@ import type { TemplateSlide } from '@/types'
 export function buildSeedTemplateSlides(): TemplateSlide[] {
   const rows: Omit<TemplateSlide, 'id' | 'order'>[] = [
     {
+      kind: 'accept_reject_test',
+      label: 'Accept or reject this test',
+      notes: 'If this is not the right version, reject it and ask the Administrator to change the version in Test Diary.',
+      scriptText:
+        'Please check the information carefully to ensure you are delivering the most appropriate version to ' +
+        'the correct candidate.\nIf this is not the right version, reject it and ask the Administrator to ' +
+        'change the version in Test Diary.',
+      slotSpec: {},
+    },
+    {
+      kind: 'test_data_confirm',
+      label: 'Confirm test data',
+      notes:
+        'In real use these fields will be filled in from the booking system automatically — for now, enter ' +
+        'them by hand as a final "is this the right candidate/test" check before continuing. They also fill ' +
+        'in the {Centre Name}/{Test Number}/{Examiner Name}/{Candidate Name} tokens in the Preamble below.',
+      scriptText: 'Confirm the test details below before continuing.',
+      slotSpec: {},
+    },
+    {
       kind: 'admin_checklist',
       label: 'Test room setup',
       notes:
         'Complete the Checklist, ticking each item to confirm everything is ready before continuing.\n' +
         'If the Candidate Screen does not open immediately, click the Screen icon above and wait for the ' +
         'indicator to turn green before continuing as this means that all the test content has been loaded successfully.',
-      scriptText:
-        'Technical Check\n' +
-        '- Candidate Screen working and visible to the candidate\n' +
-        '- Sound audible and volume sufficient\n' +
-        '- Voice recorder ready with sufficient power\n' +
-        '- Computer plugged in to guarantee power for complete test',
+      scriptText: "Don't forget to check...",
+      checklistItems: [
+        'Candidate screen working and visible to the candidate',
+        'Sound is working and volume is sufficient',
+        'Voice recorder is available and has sufficient battery power',
+        'Computer is plugged in or sufficiently charged for the test',
+      ],
       slotSpec: {},
     },
     {

@@ -1,6 +1,7 @@
 import { ArrowUp, ArrowDown, Trash2 } from 'lucide-react'
 import type { TemplateSlide, TemplateSlideKind } from '@/types'
 import { CandidateInstructionsField } from './CandidateInstructionsField'
+import { QuestionListField } from './QuestionListField'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -8,6 +9,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 export const SLIDE_KINDS: { value: TemplateSlideKind; label: string }[] = [
+  { value: 'accept_reject_test', label: 'Accept/reject test (examiner-only)' },
+  { value: 'test_data_confirm', label: 'Test data confirm (examiner-only)' },
   { value: 'admin_checklist', label: 'Admin checklist (examiner-only)' },
   { value: 'examiner_preview', label: 'Examiner preview (examiner-only)' },
   { value: 'instruction', label: 'Instruction' },
@@ -163,6 +166,15 @@ export function TemplateSlideRow({ slide, index, disabled, canMoveUp, canMoveDow
           disabled={disabled}
         />
       </div>
+
+      {slide.kind === 'admin_checklist' && (
+        <QuestionListField
+          label="Checklist items (examiner must tick every one to advance)"
+          questions={slide.checklistItems ?? []}
+          onChange={items => set('checklistItems', items.length > 0 ? items : undefined)}
+          disabled={disabled}
+        />
+      )}
 
       <CandidateInstructionsField
         lines={slide.candidateInstructions ?? []}

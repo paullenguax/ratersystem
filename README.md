@@ -231,12 +231,17 @@ phase.
   fixed on-screen text/bullets shown to the candidate for the whole
   duration of that slide's `candidateState` (e.g. Part 2/3's "report the
   message" prompts — supports lightweight `**bold**`/`__underline__`
-  markup, no full HTML), and `startsTestTimer` marks the one slide
-  (normally "invite candidate into the room") that starts the session
-  timer. `resolveItems.ts` is the single function that merges
-  template + Test variables + a Version's whole-test content + its 4 Parts'
-  content into the final flat `StorylineItem[]` — used identically by
-  Preview, Publish (snapshots the result into `version.items`), and Export.
+  markup, no full HTML), `checklistItems` turns an `admin_checklist` slide
+  into one checkbox per item (Next disabled until all are ticked), and
+  `startsTestTimer` marks the one slide (normally "invite candidate into
+  the room") that starts the session timer. `resolveItems.ts` is the single
+  function that merges template + Test variables + a Version's whole-test
+  content + its 4 Parts' content into the final flat `StorylineItem[]` —
+  used identically by Preview, Publish (snapshots the result into
+  `version.items`), and Export. It also takes a `testDisplayName` param
+  (`"{test.name} — {version.versionLabel}"`, computed by the caller — the
+  only field on `StorylineItem` not derived from `TemplateSlide`/slot
+  content) for the `accept_reject_test` slide to display.
 - **Pages**: `StorylineTestsPage` → `StorylineVersionsPage` (draft/publish/
   duplicate-as-new-draft/archive lifecycle, Part picker, Preview, Export) →
   `StorylineVersionEditorPage` (whole-test slot-filling + per-Part Select).
@@ -339,6 +344,26 @@ phase.
   the matching can't find it), the fix is the same: match each Part's
   `slotContent` keys to the new template's slide ids by shape (which slide
   has images vs questions vs which audio filenames) and rewrite the keys.
+- **Pre-test gated screens** (3 seed slides, transcribed from the old
+  system's real start-of-test screens): `accept_reject_test` shows
+  `item.testDisplayName` with Accept/Reject buttons in place of the normal
+  nav bar — Accept advances, Reject confirms then calls `endSession()`
+  (clears the slide card, hides the nav bar, and makes every button
+  handler a no-op for the rest of the session — recoverable only by
+  re-launching Preview/export); in Preview mode Reject just logs instead,
+  since preview is for free exploration. `test_data_confirm` renders 4
+  plain text inputs (Centre Name/Test Number/Examiner Name/Candidate
+  Name) + an agree-to-terms checkbox — a manual stand-in for what a real
+  booking system will supply once Phase 2 exists — gated the same way as
+  audio (Next disabled until complete, bypassed in Preview). The values
+  typed there are the one piece of genuinely new *runtime* state in the
+  player (`liveFields` in `examiner.ts`, populated when Next is clicked on
+  that slide): `applyLiveFieldSubstitutions()` fills the same
+  `{Centre Name}`/`{Test Number}`/`{Examiner Name}`/`{Candidate Name}`/
+  `{Date}` tokens into `examinerText` at render time for every slide after
+  it (e.g. the Preamble) — everything else in this app resolves once at
+  authoring time, this is the one thing that has to happen live, since the
+  data doesn't exist until the examiner types it in mid-session.
 - **Build**: a *separate* `vite.config.player.ts` (multi-page, fixed asset
   names via a manifest, `outDir` pointed straight at `public/player-shell`)
   builds this shell. Wired as an npm `prebuild` script, so `public/player-

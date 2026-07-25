@@ -82,6 +82,10 @@ export function resolveItems(
   testVariables: Record<string, string> | undefined,
   versionSlotContent: Record<string, StorylineSlotContent>,
   parts: Partial<Record<StorylinePartNumber, StorylinePart>>,
+  // "{test.name} — {version.versionLabel}" — not authored on any
+  // TemplateSlide, so the caller (which already has both loaded) computes
+  // it; only ever read from the accept_reject_test item.
+  testDisplayName?: string,
 ): StorylineItem[] {
   const sorted = [...slides].sort((a, b) => a.order - b.order)
 
@@ -121,11 +125,14 @@ export function resolveItems(
     const item: StorylineItem = {
       id: slide.id,
       order: slide.order,
+      kind: slide.kind,
       label: slide.label,
       candidateState: slide.candidateState ?? '',
       examinerText: resolveScriptText(slide, testVariables, slot),
       notes: slide.notes ? substituteVariables(slide.notes, testVariables) : undefined,
       candidateInstructions: slide.candidateInstructions?.map(line => ({ ...line, text: substituteVariables(line.text, testVariables) })),
+      checklistItems: slide.checklistItems,
+      testDisplayName: slide.kind === 'accept_reject_test' ? testDisplayName : undefined,
       startsTestTimer: slide.startsTestTimer,
       nextButtonLabel: slide.nextButtonLabel,
       previewContent: slide.previewParts?.length ? slide.previewParts.flatMap(n => previewByPart[n] ?? []) : undefined,

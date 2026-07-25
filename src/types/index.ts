@@ -127,6 +127,8 @@ export interface PracticeScore {
 }
 
 export type TemplateSlideKind =
+  | 'accept_reject_test'
+  | 'test_data_confirm'
   | 'admin_checklist'
   | 'examiner_preview'
   | 'instruction'
@@ -188,6 +190,10 @@ export interface TemplateSlide {
   // candidateState (e.g. Part 3's four sub-slides), only the first one
   // that sets this is used — see player-src/candidate.ts's panel dedup.
   candidateInstructions?: CandidateInstructionLine[]
+  // For `admin_checklist`-kind slides: one checkbox per item, rendered in
+  // the player instead of a plain bullet list. Next is disabled until every
+  // item is ticked (see player-src/examiner.ts) — bypassed in Preview mode.
+  checklistItems?: string[]
   // Arriving at this slide starts the continuous session timer, which then
   // runs for the rest of the test. Exactly one slide (typically the
   // "invite candidate into the room" slide) should set this.
@@ -258,6 +264,11 @@ export interface StorylineSlotContent {
 export interface StorylineItem {
   id: string
   order: number
+  // Carried through so the player can branch on it — most kinds render
+  // generically (whatever fields are present), but accept_reject_test and
+  // test_data_confirm need bespoke UI, and admin_checklist needs to know to
+  // render checklistItems as checkboxes.
+  kind: TemplateSlideKind
   // The template slide's authored label (e.g. "Part 1 — Experience
   // questions") — shown as the examiner's slide heading. Distinct from
   // candidateState, which is an internal state key for the candidate
@@ -267,6 +278,11 @@ export interface StorylineItem {
   candidateState: string
   notes?: string
   candidateInstructions?: CandidateInstructionLine[]
+  checklistItems?: string[]
+  // Only set on the accept_reject_test item — "{test.name} — {version.
+  // versionLabel}", computed by the caller and threaded through
+  // resolveItems() since it isn't authored on any TemplateSlide.
+  testDisplayName?: string
   startsTestTimer?: boolean
   nextButtonLabel?: string
   // Compiled from other slides' actual topic/question content when this

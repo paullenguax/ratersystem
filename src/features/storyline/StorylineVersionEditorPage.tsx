@@ -92,7 +92,7 @@ export function StorylineVersionEditorPage() {
       const p = parts.find(part => part.id === partRefs[n])
       if (p) selectedParts[n] = p
     }
-    previewStorylineVersion(resolveItems(template.slides, test?.variables, slotContent, selectedParts))
+    previewStorylineVersion(resolveItems(template.slides, test?.variables, slotContent, selectedParts, `${test?.name} — ${versionLabel}`))
   }
 
   if (versionLoading || templateLoading) return <p className="text-sm text-muted-foreground">Loading…</p>

@@ -11,14 +11,30 @@ export interface CandidateInstructionLine {
   color?: string
 }
 
+export type TemplateSlideKind =
+  | 'accept_reject_test'
+  | 'test_data_confirm'
+  | 'admin_checklist'
+  | 'examiner_preview'
+  | 'instruction'
+  | 'question_set'
+  | 'image_question_set'
+  | 'timed_picture_description'
+  | 'audio_response'
+  | 'audio_set'
+  | 'closing'
+
 export interface StorylineItem {
   id: string
   order: number
+  kind: TemplateSlideKind
   label: string
   examinerText?: string
   candidateState: string
   notes?: string
   candidateInstructions?: CandidateInstructionLine[]
+  checklistItems?: string[]
+  testDisplayName?: string
   startsTestTimer?: boolean
   nextButtonLabel?: string
   previewContent?: { label: string; topic?: string; questions?: string[] }[]

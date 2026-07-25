@@ -224,6 +224,114 @@ div.polaroid img {
   padding-left: 1.2em;
 }
 
+.checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.checklist-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.checklist-item input {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.test-data-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 420px;
+}
+
+.test-data-field {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.test-data-field span {
+  width: 140px;
+  flex-shrink: 0;
+  font-weight: 600;
+  color: #444;
+}
+
+.test-data-field input {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font: inherit;
+}
+
+.test-data-agree {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  margin-top: 4px;
+}
+
+.test-data-agree input {
+  width: 18px;
+  height: 18px;
+}
+
+.test-display-name {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #00528c;
+  text-align: center;
+  margin: 8px 0;
+}
+
+.accept-reject-buttons {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  margin-top: 16px;
+}
+
+.accept-reject-buttons button {
+  padding: 14px 24px;
+  border-radius: 6px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+}
+
+.accept-btn {
+  background: #2e7d32;
+  color: white;
+}
+
+.reject-btn {
+  background: #b00020;
+  color: white;
+}
+
+.session-ended {
+  align-items: center;
+  justify-content: center;
+}
+
+.session-ended-message {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #b00020;
+  text-align: center;
+}
+
 .exam-thumbs {
   display: flex;
   gap: 16px;
