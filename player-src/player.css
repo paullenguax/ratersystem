@@ -291,6 +291,7 @@ div.polaroid img {
 .preview-highlight {
   font-weight: 700;
   font-style: italic;
+  white-space: pre-wrap;
 }
 
 .preview-questions {

@@ -198,7 +198,7 @@ export function StorylineVersionEditorPage() {
                 <span className="font-medium">{slide.label}</span>
                 <Badge variant="outline">{slide.kind.replace(/_/g, ' ')}</Badge>
               </div>
-              <p className="text-sm text-muted-foreground whitespace-pre-line italic">{slide.scriptText}</p>
+              <p className="text-sm text-muted-foreground whitespace-pre-wrap italic">{slide.scriptText}</p>
 
               {slide.slotSpec.topic && (
                 <div className="space-y-1">

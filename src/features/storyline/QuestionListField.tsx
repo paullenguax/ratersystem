@@ -1,6 +1,6 @@
 import { Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 
 interface Props {
@@ -29,7 +29,7 @@ export function QuestionListField({ label, questions, onChange, disabled }: Prop
       <div className="space-y-2">
         {questions.map((q, index) => (
           <div key={index} className="flex gap-2">
-            <Input value={q} onChange={e => setQuestion(index, e.target.value)} disabled={disabled} />
+            <Textarea value={q} onChange={e => setQuestion(index, e.target.value)} disabled={disabled} rows={1} className="min-h-9 resize-y" />
             <Button type="button" variant="ghost" size="icon" onClick={() => removeQuestion(index)} disabled={disabled}>
               <Trash2 className="size-4" />
             </Button>
