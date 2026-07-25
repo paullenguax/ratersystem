@@ -43,21 +43,42 @@ export function StorylineTemplateEditorPage() {
   const [slides, setSlides] = useState<TemplateSlide[]>([])
   const [addKind, setAddKind] = useState<TemplateSlideKind>('instruction')
   const [saving, setSaving] = useState(false)
+  // "Load example script" (and every other edit here) only changes this
+  // component's state — nothing reaches Firestore until Save is clicked.
+  // A refresh before that discards it silently, which reads exactly like
+  // "loading it again did nothing." Track it explicitly so that's obvious.
+  const [dirty, setDirty] = useState(false)
 
   useEffect(() => {
-    if (template) setSlides(template.slides)
+    if (template) {
+      setSlides(template.slides)
+      setDirty(false)
+    }
   }, [template])
+
+  useEffect(() => {
+    if (!dirty) return
+    function handler(e: BeforeUnloadEvent) {
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [dirty])
 
   function addSlide() {
     setSlides(prev => [...prev, newSlide(addKind, prev.length)])
+    setDirty(true)
   }
 
   function updateSlide(index: number, updated: TemplateSlide) {
     setSlides(prev => prev.map((s, i) => (i === index ? updated : s)))
+    setDirty(true)
   }
 
   function removeSlide(index: number) {
     setSlides(prev => prev.filter((_, i) => i !== index).map((s, i) => ({ ...s, order: i })))
+    setDirty(true)
   }
 
   function moveSlide(index: number, direction: -1 | 1) {
@@ -68,6 +89,7 @@ export function StorylineTemplateEditorPage() {
       ;[next[index], next[target]] = [next[target], next[index]]
       return next.map((s, i) => ({ ...s, order: i }))
     })
+    setDirty(true)
   }
 
   function loadExampleScript() {
@@ -81,6 +103,7 @@ export function StorylineTemplateEditorPage() {
     const existingIdByLabel = new Map(slides.map(s => [s.label, s.id]))
     const seeded = buildSeedTemplateSlides().map(s => ({ ...s, id: existingIdByLabel.get(s.label) ?? s.id }))
     setSlides(seeded)
+    setDirty(true)
   }
 
   async function handleSave() {
@@ -92,6 +115,7 @@ export function StorylineTemplateEditorPage() {
         updatedAt: serverTimestamp(),
       })
       queryClient.invalidateQueries({ queryKey: ['storyline_template'] })
+      setDirty(false)
     } finally {
       setSaving(false)
     }
@@ -117,6 +141,12 @@ export function StorylineTemplateEditorPage() {
           <Sparkles className="size-4 mr-2" /> Load example script
         </Button>
       </div>
+
+      {dirty && (
+        <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+          Unsaved changes — click <strong>Save template</strong> below before leaving this page, or they'll be lost. Refreshing now will discard them.
+        </div>
+      )}
 
       <div className="space-y-3">
         {slides.map((slide, index) => (
