@@ -268,7 +268,7 @@ export function StorylineVersionEditorPage() {
                   value={slot.audio?.recordings?.[0]}
                   storagePathPrefix={storagePathPrefix}
                   disabled={disabled}
-                  onChange={url => updateSlot(slide.id, { ...slot, audio: { recordings: [url] } })}
+                  onChange={url => updateSlot(slide.id, { ...slot, audio: { ...slot.audio, recordings: [url] } })}
                 />
               )}
 
@@ -300,6 +300,17 @@ export function StorylineVersionEditorPage() {
                     ))}
                   </div>
                 </div>
+              )}
+
+              {slide.slotSpec.volumeCheck && (
+                <MediaUploadField
+                  label="Volume check clip"
+                  accept="audio/*"
+                  value={slot.audio?.volumeCheck}
+                  storagePathPrefix={storagePathPrefix}
+                  disabled={disabled}
+                  onChange={url => updateSlot(slide.id, { ...slot, audio: { ...slot.audio, volumeCheck: url } })}
+                />
               )}
             </div>
           )

@@ -14,6 +14,7 @@ import type { StorylineTest, StorylineVersion } from '@/types'
 interface ManifestChunk {
   file: string
   css?: string[]
+  assets?: string[]
   imports?: string[]
 }
 type Manifest = Record<string, ManifestChunk>
@@ -36,6 +37,7 @@ function collectAssetFiles(manifest: Manifest, entryKeys: string[]): Set<string>
     if (!chunk || files.has(chunk.file)) return
     files.add(chunk.file)
     chunk.css?.forEach(f => files.add(f))
+    chunk.assets?.forEach(f => files.add(f))
     chunk.imports?.forEach(visit)
   }
   entryKeys.forEach(visit)

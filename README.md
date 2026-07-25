@@ -250,27 +250,67 @@ phase.
 - **Player shell** (`player-src/` at the repo root, sibling to `src/`, its own
   minimal `tsconfig.json` — deliberately outside the main `tsc -b` graph):
   `examiner.html`/`examiner.ts` is a single-slide-at-a-time navigator (one
-  fixed-size card, a segmented progress bar, Back/Next) and `candidate.html`/
-  `candidate.ts` builds one hidden image-only panel per item and toggles
-  visibility on incoming messages — no React or Firebase dependency, so an
-  exported test runs standalone. Sync is via `BroadcastChannel` (replacing
-  the old system's fragile direct cross-window JS reference); both windows
-  independently load the same item list at startup (no ready/handshake
-  race), and the channel carries only the runtime "advance to state X"
-  signal, sent automatically on every Next/Back — there's no separate "Show"
-  action. Audio plays from the **examiner's own console** (everyone in the
-  room hears it via one set of speakers, matching the real in-person,
-  single-room setup) with a soft play-count limit (warns and logs past
-  `maxPlays`, never blocks) and a visible in-session Event Log; Next is
-  disabled until every audio clip on the current slide has been played at
-  least once, except in Preview mode, which bypasses this so an admin can
-  click through freely while the candidate window still tracks the current
-  slide. A collapsible notes drawer (collapsed by default) shows each
+  large fixed-size card headed by the slide's authored `label`, a segmented
+  progress bar, Back/Next) and `candidate.html`/`candidate.ts` builds one
+  hidden panel per item — an image row if the slide has images, otherwise
+  the Lenguax logo (`player-src/assets/lenguax-logo.png`, a local copy so
+  the exported zip stays self-contained) rather than the raw internal
+  `candidateState` key, which was never meant to be candidate-facing — and
+  toggles visibility on incoming messages. When a slide shows more than one
+  image at once (e.g. Part 4's "both pictures"), each one is tagged A, B, …
+  on both the examiner and candidate screens so everyone can unambiguously
+  refer to "picture A" vs "picture B"; on the examiner screen a thumbnail
+  can also be clicked to pop out to near-full-viewport size (a `position:
+  fixed` clone animated from/to the thumbnail's own on-screen rect — a FLIP-
+  style animation, not a generic centered lightbox) and clicked again (or
+  the backdrop) to collapse back to exactly where it was. No React or
+  Firebase dependency, so an exported test runs standalone. Sync is via
+  `BroadcastChannel` (replacing the old system's fragile direct cross-window
+  JS reference); both windows independently load the same item list at
+  startup (no ready/handshake race), and the channel carries only the
+  runtime "advance to state X" signal, sent automatically on every
+  Next/Back — there's no separate "Show" action.
+  Audio plays from the **examiner's own console** (everyone in the room
+  hears it via one set of speakers, matching the real in-person, single-room
+  setup). Only one clip may be active at a time across the whole console —
+  starting one disables every other clip's Play button until it's
+  explicitly Stopped or finishes on its own (pausing does not free the
+  slot up; Pause toggles pause/resume in place on the active clip, with a
+  pulsing indicator dot while playing). Each clip has a soft play-count
+  limit (warns and logs past `maxPlays`, never blocks) tracked on actual
+  completion (the `ended` event, not the click) — shown as green ✓ ticks,
+  turning into a red ❗ past two completions — plus a visible in-session
+  Event Log. A slide can also declare `slotSpec.volumeCheck` for a separate,
+  unlimited-replay clip (e.g. Part 2's pre-recording volume check),
+  rendered as an ordinary extra clip alongside the slide's main audio. Next
+  is disabled until every audio clip on the current slide has actually
+  completed at least once, except in Preview mode, which bypasses this so
+  an admin can click through freely while the candidate window still tracks
+  the current slide. A header volume slider scales every clip's playback
+  volume live. A collapsible notes drawer (collapsed by default) shows each
   slide's `notes`. A continuous timer starts the moment the slide tagged
   `startsTestTimer` is reached and runs for the rest of the session; a
   slide's own `timing.prepSeconds`/`responseSeconds` (if set) auto-starts a
   second countdown the moment that slide becomes current — purely
-  informational, it never gates navigation.
+  informational, it never gates navigation. A slide can also declare
+  `previewParts: [1, 4]` etc. to compile the actual topic/question content
+  already authored for those Parts into a visually distinct block on its own
+  slide (bold+italic, extra paragraph spacing — `StorylineItem.previewContent`,
+  kept structured rather than flattened into `examinerText` specifically so
+  the player can style it) — e.g. an "examiner preview" slide shown before
+  the test starts. Pulled from `resolveItems.ts`'s pre-pass over the other
+  Parts' slot content, not authored directly on that slide.
+  **Gotcha**: `notes`, `startsTestTimer`, `previewParts`, and `volumeCheck`
+  are all fields on `TemplateSlide`, authored per-slide in the Script
+  Template editor (`/test-versions/template`) — not in `templateSeed.ts`
+  (that file only seeds the *first* "Load example script" click; it never
+  updates a template already saved to Firestore). A template saved before
+  one of these fields existed simply won't have it set on any slide — the
+  timer won't start, previews won't compile, etc. — until an admin opens the
+  affected slide(s) in the Template editor, sets the new checkbox/field, and
+  saves. "Load example script" resets to the current seed wholesale (with a
+  confirm prompt) but wipes any customization already made to scriptText/
+  notes/etc., so prefer editing the specific slide(s) by hand instead.
 - **Build**: a *separate* `vite.config.player.ts` (multi-page, fixed asset
   names via a manifest, `outDir` pointed straight at `public/player-shell`)
   builds this shell. Wired as an npm `prebuild` script, so `public/player-
@@ -284,12 +324,16 @@ phase.
   shipped.
 - **Export**: `exportStoryline.ts` reads `public/player-shell/.vite/
   manifest.json` (emitted by the player build) to discover every built file
-  without hardcoding filenames, zips them with `jszip` alongside a generated
-  `version.json` (the published version's `items`, referencing live Firebase
-  Storage download-URLs — no media re-hosting, matching the already-decided
-  no-offline-first posture), and downloads it. v1 publish is manual: an admin
-  uploads this zip to the WordPress tests folder and pastes the URL into the
-  existing TEAC-Plugin admin, same as the current Storyline workflow.
+  without hardcoding filenames — walking each chunk's `imports`, `css`, *and*
+  `assets` (the last covers static files like the candidate logo that a
+  chunk references but doesn't import as a module; easy to forget since only
+  `imports`/`css` mattered before player-src had any static assets) — zips
+  them with `jszip` alongside a generated `version.json` (the published
+  version's `items`, referencing live Firebase Storage download-URLs — no
+  media re-hosting, matching the already-decided no-offline-first posture),
+  and downloads it. v1 publish is manual: an admin uploads this zip to the
+  WordPress tests folder and pastes the URL into the existing TEAC-Plugin
+  admin, same as the current Storyline workflow.
 - **Not built yet**: the real WordPress portal integration (Phase 2), actual
   pooling/random-selection logic for picking an unseen Part per candidate,
   and historical exposure backfill from old version-code naming conventions.

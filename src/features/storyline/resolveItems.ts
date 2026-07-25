@@ -29,6 +29,18 @@ function resolveScriptText(slide: TemplateSlide, testVariables: Record<string, s
   return text
 }
 
+// A compact "what's actually in this slide" summary — topic/questions only,
+// not the fixed scripted wording — used to compile a Part's content into an
+// examiner-preview slide elsewhere in the template (see previewParts below).
+// Kept structured (not pre-formatted text) so the player can style it
+// distinctly from ordinary script text.
+function slidePreviewEntry(slide: TemplateSlide, slot?: StorylineSlotContent): { label: string; topic?: string; questions?: string[] } | undefined {
+  const topic = slide.slotSpec.topic ? slot?.topic : undefined
+  const questions = slide.slotSpec.questions ? slot?.questions?.filter(Boolean) : undefined
+  if (!topic && !questions?.length) return undefined
+  return { label: slide.label, topic, questions }
+}
+
 function resolveMedia(slide: TemplateSlide, slot?: StorylineSlotContent): StorylineItem['media'] {
   const images = slot?.images?.filter(Boolean)
   const audioClips: { label: string; url: string; maxPlays?: number }[] = []
@@ -42,6 +54,10 @@ function resolveMedia(slide: TemplateSlide, slot?: StorylineSlotContent): Storyl
     slot?.audio?.recordings?.forEach((url, i) => {
       if (url) audioClips.push({ label: `Recording ${i + 1}`, url, maxPlays })
     })
+  }
+  // Unlimited-replay by design — a level check, not scored content.
+  if (slide.slotSpec.volumeCheck && slot?.audio?.volumeCheck) {
+    audioClips.push({ label: 'Volume check', url: slot.audio.volumeCheck })
   }
 
   const media: NonNullable<StorylineItem['media']> = {}
@@ -69,6 +85,10 @@ export function resolveItems(
 ): StorylineItem[] {
   const sorted = [...slides].sort((a, b) => a.order - b.order)
 
+  function slotFor(slide: TemplateSlide): StorylineSlotContent | undefined {
+    return slide.partNumber ? parts[slide.partNumber]?.slotContent[slide.id] : versionSlotContent[slide.id]
+  }
+
   // A multi-image slide (e.g. "show both pictures together") always reuses
   // the images from the single-image slides before it in the same scope —
   // computed once here, per scope, rather than trusting each slide's own
@@ -86,17 +106,27 @@ export function resolveItems(
     )
   }
 
+  // Pre-pass: compile each Part's actual topic/question content, keyed by
+  // Part number, so an "examiner preview" slide elsewhere (previewParts) can
+  // pull in real content regardless of where in the slide order it sits.
+  const previewByPart: Partial<Record<StorylinePartNumber, { label: string; topic?: string; questions?: string[] }[]>> = {}
+  for (const slide of sorted) {
+    if (!slide.partNumber) continue
+    const entry = slidePreviewEntry(slide, slotFor(slide))
+    if (entry) (previewByPart[slide.partNumber] ??= []).push(entry)
+  }
+
   return sorted.map(slide => {
-    const slot = slide.partNumber
-      ? parts[slide.partNumber]?.slotContent[slide.id]
-      : versionSlotContent[slide.id]
+    const slot = slotFor(slide)
     const item: StorylineItem = {
       id: slide.id,
       order: slide.order,
+      label: slide.label,
       candidateState: slide.candidateState ?? '',
       examinerText: resolveScriptText(slide, testVariables, slot),
       notes: slide.notes ? substituteVariables(slide.notes, testVariables) : undefined,
       startsTestTimer: slide.startsTestTimer,
+      previewContent: slide.previewParts?.length ? slide.previewParts.flatMap(n => previewByPart[n] ?? []) : undefined,
       timing: slide.timing,
     }
     let media = resolveMedia(slide, slot)

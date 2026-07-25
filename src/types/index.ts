@@ -173,6 +173,11 @@ export interface TemplateSlide {
   // runs for the rest of the test. Exactly one slide (typically the
   // "invite candidate into the room" slide) should set this.
   startsTestTimer?: boolean
+  // This slide compiles a read-only preview of the actual topic/question
+  // content already authored for the listed Parts (e.g. "review Part 1 and
+  // Part 4 before starting") — resolved from those Parts' own slot content,
+  // not authored directly on this slide.
+  previewParts?: StorylinePartNumber[]
   timing?: {
     prepSeconds?: number
     responseSeconds?: number
@@ -183,6 +188,10 @@ export interface TemplateSlide {
     images?: number
     audio?: 'none' | 'single' | 'set'
     audioSetSize?: number
+    // A separate, unlimited-replay audio clip for checking playback volume
+    // with the candidate before the scored recording — independent of the
+    // slide's main clip(s) above.
+    volumeCheck?: boolean
     // Soft play-count limit for this slide's audio clip(s) — same ceiling
     // applies to every clip the slide produces (the intro + all numbered
     // recordings for a 'set'). The player warns past this count but never
@@ -211,6 +220,7 @@ export interface StorylineSlotContent {
   audio?: {
     intro?: string
     recordings?: string[]
+    volumeCheck?: string
   }
 }
 
@@ -220,10 +230,20 @@ export interface StorylineSlotContent {
 export interface StorylineItem {
   id: string
   order: number
+  // The template slide's authored label (e.g. "Part 1 — Experience
+  // questions") — shown as the examiner's slide heading. Distinct from
+  // candidateState, which is an internal state key for the candidate
+  // screen, not human-facing text.
+  label: string
   examinerText?: string
   candidateState: string
   notes?: string
   startsTestTimer?: boolean
+  // Compiled from other slides' actual topic/question content when this
+  // slide declares previewParts (e.g. an "examiner preview" slide shown
+  // before the test starts) — rendered distinctly from examinerText so the
+  // player can visually set it apart (bold/italic, extra spacing).
+  previewContent?: { label: string; topic?: string; questions?: string[] }[]
   media?: {
     images?: string[]
     // maxPlays carries over from the slide's slotSpec — the exported item

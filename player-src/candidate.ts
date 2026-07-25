@@ -2,6 +2,7 @@ import type { StorylineItem } from './shared/types'
 import { getParams, channelName } from './shared/session'
 import { loadItems } from './shared/dataSource'
 import { initOnlineStatusDot } from './shared/onlineStatus'
+import lenguaxLogo from './assets/lenguax-logo.png'
 
 const { sessionId } = getParams()
 const channel = new BroadcastChannel(channelName(sessionId))
@@ -25,26 +26,42 @@ function renderPanels(items: StorylineItem[]) {
     panel.className = 'polaroid'
     panel.id = panelId(item.candidateState)
 
-    if (item.media?.images && item.media.images.length > 0) {
+    const images = item.media?.images
+    if (images && images.length > 0) {
       const imageRow = document.createElement('div')
       imageRow.className = 'image-row'
-      item.media.images.forEach(url => {
+      images.forEach((url, i) => {
+        const cell = document.createElement('div')
+        cell.className = 'image-cell'
         const img = document.createElement('img')
         img.src = url
         img.alt = item.candidateState
-        imageRow.appendChild(img)
+        cell.appendChild(img)
+        // A, B, C… labels so everyone can unambiguously refer to "picture A"
+        // vs "picture B" once more than one image is shown at once.
+        if (images.length > 1) {
+          const tag = document.createElement('span')
+          tag.className = 'image-cell-label'
+          tag.textContent = String.fromCharCode(65 + i)
+          cell.appendChild(tag)
+        }
+        imageRow.appendChild(cell)
       })
       panel.appendChild(imageRow)
+    } else {
+      // No image content for this state (instructions, preamble, audio-only
+      // tasks, closing) — show the brand logo rather than the internal
+      // candidateState key, which candidates were never meant to see.
+      const logo = document.createElement('img')
+      logo.src = lenguaxLogo
+      logo.alt = 'Lenguax'
+      logo.className = 'candidate-logo'
+      panel.appendChild(logo)
     }
 
     // Audio plays from the examiner's own console (same room, one set of
     // speakers) — see examiner.ts. The candidate screen only ever shows
     // images.
-
-    const caption = document.createElement('div')
-    caption.className = 'container'
-    caption.innerHTML = `<p>${item.candidateState}</p>`
-    panel.appendChild(caption)
 
     container.appendChild(panel)
   }

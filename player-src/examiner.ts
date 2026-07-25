@@ -119,19 +119,53 @@ function startSlideTimer(item: StorylineItem) {
 
 // --- Audio playback (from the examiner's own console — everyone in the ---
 // room hears it via the examiner's speakers, matching the in-person,
-// single-room setup). Soft lock: past maxPlays it still plays, just warns
-// and logs it — never blocks. `onPlay` lets the caller re-check whether
-// Next should now be enabled (every clip needs >=1 play).
+// single-room setup). Only one clip may be active at a time across the
+// whole console: starting one disables every other Play button until it's
+// explicitly Stopped (or finishes on its own) — pausing does not free the
+// slot. Soft lock: past maxPlays it still plays, just warns and logs it —
+// never blocks. `onComplete` fires once a clip finishes (not on click) so
+// the caller can re-check whether Next should now be enabled.
 const playCounts = new Map<string, number>()
+let masterVolume = 1
+const allAudios: HTMLAudioElement[] = []
+let activeAudio: HTMLAudioElement | null = null
+let clipRegistry: { audio: HTMLAudioElement; playBtn: HTMLButtonElement; pauseBtn: HTMLButtonElement; stopBtn: HTMLButtonElement; indicator: HTMLElement }[] = []
 
-function createAudioControls(clip: { label: string; url: string; maxPlays?: number }, onPlay: () => void): HTMLElement {
+function refreshClipButtons() {
+  for (const c of clipRegistry) {
+    const isActive = c.audio === activeAudio
+    c.playBtn.disabled = activeAudio !== null
+    c.pauseBtn.disabled = !isActive
+    c.stopBtn.disabled = !isActive
+    c.pauseBtn.textContent = isActive && c.audio.paused ? 'Resume' : 'Pause'
+    c.indicator.classList.toggle('playing', isActive && !c.audio.paused)
+    c.indicator.classList.toggle('paused', isActive && c.audio.paused)
+  }
+}
+
+const volumeSlider = document.getElementById('volume-slider') as HTMLInputElement | null
+volumeSlider?.addEventListener('input', () => {
+  masterVolume = Number(volumeSlider.value) / 100
+  allAudios.forEach(a => { a.volume = masterVolume })
+})
+
+function createAudioControls(clip: { label: string; url: string; maxPlays?: number }, onComplete: () => void): HTMLElement {
   const audio = new Audio(clip.url)
+  audio.volume = masterVolume
+  allAudios.push(audio)
+
   const wrap = document.createElement('div')
   wrap.className = 'audio-controls'
+
+  const indicator = document.createElement('span')
+  indicator.className = 'audio-indicator'
 
   const label = document.createElement('span')
   label.className = 'audio-label'
   label.textContent = clip.label
+
+  const ticksLabel = document.createElement('span')
+  ticksLabel.className = 'audio-ticks'
 
   const countLabel = document.createElement('span')
   countLabel.className = 'audio-count'
@@ -139,14 +173,42 @@ function createAudioControls(clip: { label: string; url: string; maxPlays?: numb
   function updateCount() {
     const count = playCounts.get(clip.url) ?? 0
     countLabel.textContent = clip.maxPlays ? `${count}/${clip.maxPlays} plays` : `${count} plays`
-    countLabel.classList.toggle('audio-count-over', !!clip.maxPlays && count > clip.maxPlays)
+    const ticks = '✓'.repeat(Math.min(count, 2))
+    ticksLabel.textContent = count > 2 ? `${ticks} ❗` : ticks
+    ticksLabel.classList.toggle('audio-exclaim', count > 2)
   }
 
   const playBtn = document.createElement('button')
   playBtn.textContent = '▶ Play'
   playBtn.addEventListener('click', () => {
+    if (activeAudio !== null) return
     audio.currentTime = 0
     audio.play()
+    activeAudio = audio
+    logEvent(`Started "${clip.label}".`)
+    refreshClipButtons()
+  })
+
+  const pauseBtn = document.createElement('button')
+  pauseBtn.textContent = 'Pause'
+  pauseBtn.addEventListener('click', () => {
+    if (activeAudio !== audio) return
+    if (audio.paused) audio.play()
+    else audio.pause()
+    refreshClipButtons()
+  })
+
+  const stopBtn = document.createElement('button')
+  stopBtn.textContent = 'Stop'
+  stopBtn.addEventListener('click', () => {
+    if (activeAudio !== audio) return
+    audio.pause()
+    audio.currentTime = 0
+    activeAudio = null
+    refreshClipButtons()
+  })
+
+  audio.addEventListener('ended', () => {
     const count = (playCounts.get(clip.url) ?? 0) + 1
     playCounts.set(clip.url, count)
     updateCount()
@@ -154,22 +216,104 @@ function createAudioControls(clip: { label: string; url: string; maxPlays?: numb
       window.alert(`"${clip.label}" has now been played ${count} times (limit: ${clip.maxPlays}). This has been logged.`)
       logEvent(`Played "${clip.label}" beyond its limit (${count}/${clip.maxPlays}).`)
     } else {
-      logEvent(`Played "${clip.label}" (${count}${clip.maxPlays ? '/' + clip.maxPlays : ''}).`)
+      logEvent(`Played "${clip.label}" to completion (${count}${clip.maxPlays ? '/' + clip.maxPlays : ''}).`)
     }
-    onPlay()
+    if (activeAudio === audio) activeAudio = null
+    refreshClipButtons()
+    onComplete()
   })
 
-  const pauseBtn = document.createElement('button')
-  pauseBtn.textContent = 'Pause'
-  pauseBtn.addEventListener('click', () => audio.pause())
-
-  const stopBtn = document.createElement('button')
-  stopBtn.textContent = 'Stop'
-  stopBtn.addEventListener('click', () => { audio.pause(); audio.currentTime = 0 })
-
   updateCount()
-  wrap.append(label, playBtn, pauseBtn, stopBtn, countLabel)
+  clipRegistry.push({ audio, playBtn, pauseBtn, stopBtn, indicator })
+  wrap.append(indicator, label, playBtn, pauseBtn, stopBtn, ticksLabel, countLabel)
   return wrap
+}
+
+// --- Image zoom (click a thumbnail to pop it out to full size, click ------
+// again — or the backdrop — to collapse it back to where it was). Animates
+// a fixed-position clone from the thumbnail's own on-screen rect out to a
+// centered, near-full-viewport size, and reverses the same rect on close,
+// so it visibly "returns" to its origin rather than just disappearing.
+let zoomEl: HTMLElement | null = null
+
+function closeZoom() {
+  if (!zoomEl) return
+  const el = zoomEl
+  el.style.top = `${el.dataset.originTop}px`
+  el.style.left = `${el.dataset.originLeft}px`
+  el.style.width = `${el.dataset.originWidth}px`
+  el.style.height = `${el.dataset.originHeight}px`
+  document.getElementById('zoom-backdrop')?.remove()
+  zoomEl = null
+  window.setTimeout(() => el.remove(), 250)
+}
+
+function openZoom(source: HTMLImageElement) {
+  if (zoomEl) return
+  const rect = source.getBoundingClientRect()
+  const clone = source.cloneNode(true) as HTMLImageElement
+  clone.className = 'exam-zoom-clone'
+  clone.style.top = `${rect.top}px`
+  clone.style.left = `${rect.left}px`
+  clone.style.width = `${rect.width}px`
+  clone.style.height = `${rect.height}px`
+  clone.dataset.originTop = String(rect.top)
+  clone.dataset.originLeft = String(rect.left)
+  clone.dataset.originWidth = String(rect.width)
+  clone.dataset.originHeight = String(rect.height)
+  clone.addEventListener('click', closeZoom)
+
+  const backdrop = document.createElement('div')
+  backdrop.className = 'exam-zoom-backdrop'
+  backdrop.id = 'zoom-backdrop'
+  backdrop.addEventListener('click', closeZoom)
+
+  document.body.appendChild(backdrop)
+  document.body.appendChild(clone)
+  zoomEl = clone
+
+  requestAnimationFrame(() => {
+    const maxW = window.innerWidth * 0.85
+    const maxH = window.innerHeight * 0.85
+    const scale = Math.min(maxW / rect.width, maxH / rect.height, 4)
+    const targetW = rect.width * scale
+    const targetH = rect.height * scale
+    clone.style.top = `${(window.innerHeight - targetH) / 2}px`
+    clone.style.left = `${(window.innerWidth - targetW) / 2}px`
+    clone.style.width = `${targetW}px`
+    clone.style.height = `${targetH}px`
+  })
+}
+
+// A, B, C… labels for multi-image slides (e.g. Part 4's two pictures) so
+// everyone can unambiguously refer to "picture A" vs "picture B".
+function imageLabel(index: number): string {
+  return String.fromCharCode(65 + index)
+}
+
+function renderPreviewContent(card: HTMLElement, entries: NonNullable<StorylineItem['previewContent']>) {
+  for (const entry of entries) {
+    const block = document.createElement('div')
+    block.className = 'preview-entry'
+    if (entry.topic) {
+      const p = document.createElement('p')
+      p.className = 'preview-highlight'
+      p.textContent = `Topic: ${entry.topic}`
+      block.appendChild(p)
+    }
+    if (entry.questions?.length) {
+      const ul = document.createElement('ul')
+      ul.className = 'preview-questions'
+      entry.questions.forEach(q => {
+        const li = document.createElement('li')
+        li.className = 'preview-highlight'
+        li.textContent = q
+        ul.appendChild(li)
+      })
+      block.appendChild(ul)
+    }
+    card.appendChild(block)
+  }
 }
 
 // --- Slide navigator --------------------------------------------------
@@ -212,6 +356,11 @@ function renderCurrentSlide() {
     return
   }
 
+  // Never let audio bleed across a slide transition.
+  if (activeAudio) { activeAudio.pause(); activeAudio = null }
+  clipRegistry = []
+  closeZoom()
+
   const item = items[currentIndex]
 
   if (progressLabel) progressLabel.textContent = `Slide ${currentIndex + 1}/${items.length}`
@@ -220,7 +369,7 @@ function renderCurrentSlide() {
   card.innerHTML = ''
   const heading = document.createElement('div')
   heading.className = 'slide-heading'
-  heading.textContent = item.candidateState || '(examiner-only)'
+  heading.textContent = item.label
   card.appendChild(heading)
 
   if (item.examinerText) {
@@ -230,9 +379,36 @@ function renderCurrentSlide() {
     card.appendChild(text)
   }
 
+  if (item.previewContent?.length) renderPreviewContent(card, item.previewContent)
+
+  const images = item.media?.images
+  if (images?.length) {
+    const thumbRow = document.createElement('div')
+    thumbRow.className = 'exam-thumbs'
+    images.forEach((url, i) => {
+      const thumb = document.createElement('div')
+      thumb.className = 'exam-thumb-wrap'
+      const img = document.createElement('img')
+      img.src = url
+      img.alt = ''
+      img.className = 'exam-thumb'
+      img.addEventListener('click', () => openZoom(img))
+      thumb.appendChild(img)
+      if (images.length > 1) {
+        const tag = document.createElement('span')
+        tag.className = 'exam-thumb-label'
+        tag.textContent = imageLabel(i)
+        thumb.appendChild(tag)
+      }
+      thumbRow.appendChild(thumb)
+    })
+    card.appendChild(thumbRow)
+  }
+
   item.media?.audioClips?.forEach(clip => {
-    card.appendChild(createAudioControls(clip, updateNavState))
+    card.appendChild(createAudioControls(clip, () => { updateNavState() }))
   })
+  refreshClipButtons()
 
   if (notesContent) notesContent.textContent = item.notes || 'No notes for this slide.'
 

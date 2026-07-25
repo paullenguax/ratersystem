@@ -44,6 +44,12 @@ export function TemplateSlideRow({ slide, disabled, canMoveUp, canMoveDown, onCh
 
   const isAudioSet = slide.slotSpec.audio === 'set'
 
+  function togglePreviewPart(n: 1 | 2 | 3 | 4, checked: boolean) {
+    const current = slide.previewParts ?? []
+    const next = checked ? [...current, n] : current.filter(p => p !== n)
+    set('previewParts', next.length > 0 ? (next.sort() as TemplateSlide['previewParts']) : undefined)
+  }
+
   return (
     <div className="rounded-md border p-4 space-y-3">
       <div className="flex items-center justify-between gap-2">
@@ -137,6 +143,24 @@ export function TemplateSlideRow({ slide, disabled, canMoveUp, canMoveDown, onCh
         />
         <span>Starts the continuous test timer when reached</span>
       </label>
+
+      <div className="space-y-1">
+        <Label>Compile these Parts&apos; questions into this slide (examiner preview only)</Label>
+        <div className="flex gap-4">
+          {([1, 2, 3, 4] as const).map(n => (
+            <label key={n} className="flex items-center gap-2 text-sm cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={!!slide.previewParts?.includes(n)}
+                onChange={e => togglePreviewPart(n, e.target.checked)}
+                className="rounded"
+                disabled={disabled}
+              />
+              <span>Part {n}</span>
+            </label>
+          ))}
+        </div>
+      </div>
 
       <div className="grid grid-cols-4 gap-3 items-end">
         <div className="space-y-1">
@@ -239,6 +263,18 @@ export function TemplateSlideRow({ slide, disabled, canMoveUp, canMoveDown, onCh
             disabled={disabled}
           />
         </div>
+        {slide.slotSpec.audio && slide.slotSpec.audio !== 'none' && (
+          <label className="flex items-center gap-2 text-sm cursor-pointer select-none pb-2">
+            <input
+              type="checkbox"
+              checked={!!slide.slotSpec.volumeCheck}
+              onChange={e => setSlotSpec('volumeCheck', e.target.checked || undefined)}
+              className="rounded"
+              disabled={disabled}
+            />
+            <span>Needs a volume-check clip</span>
+          </label>
+        )}
       </div>
     </div>
   )

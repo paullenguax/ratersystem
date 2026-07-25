@@ -8,10 +8,12 @@
 export interface StorylineItem {
   id: string
   order: number
+  label: string
   examinerText?: string
   candidateState: string
   notes?: string
   startsTestTimer?: boolean
+  previewContent?: { label: string; topic?: string; questions?: string[] }[]
   media?: {
     images?: string[]
     // maxPlays: soft play-count ceiling — examiner.ts warns past it but

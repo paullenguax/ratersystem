@@ -31,6 +31,7 @@ export function buildSeedTemplateSlides(): TemplateSlide[] {
     {
       kind: 'examiner_preview',
       label: 'Preview Part 1 & 4 questions',
+      previewParts: [1, 4],
       scriptText: 'Review the Part 1 and Part 4 questions for this version before starting the test.',
       slotSpec: {},
     },
@@ -115,10 +116,9 @@ export function buildSeedTemplateSlides(): TemplateSlide[] {
         'Here is some paper and a pen. As you listen, take notes to explain the communications fully.\n' +
         'Do you have any questions?\n' +
         'We will first check the volume.\n' +
-        '[Play Volume check in Menu above]\n' +
         'How is the volume?\n' +
         'OK, I will now play the first section of the communication.',
-      slotSpec: { audio: 'single', maxPlays: 1 },
+      slotSpec: { audio: 'single', maxPlays: 1, volumeCheck: true },
     },
     {
       kind: 'audio_response',
