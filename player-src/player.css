@@ -8,6 +8,14 @@ body {
   background: #f5f5f5;
 }
 
+/* The candidate window is what's shown to the candidate on a second
+   monitor — kept pure white so the polaroid cards don't sit on a visibly
+   different-colored page behind them. The examiner console keeps the
+   light-gray page background (set above) that sets its white card apart. */
+body.candidate-view {
+  background: #fff;
+}
+
 div.polaroid {
   width: 70%;
   background-color: white;

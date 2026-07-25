@@ -112,6 +112,19 @@ export function TemplateSlideRow({ slide, disabled, canMoveUp, canMoveDown, onCh
         </div>
       </div>
 
+      {slide.partNumber && (
+        <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={!!slide.previewExclude}
+            onChange={e => set('previewExclude', e.target.checked || undefined)}
+            className="rounded"
+            disabled={disabled}
+          />
+          <span>Exclude this slide's questions from other slides&apos; compiled Part previews</span>
+        </label>
+      )}
+
       <div className="space-y-1">
         <Label>Script text</Label>
         <Textarea

@@ -197,6 +197,11 @@ export interface TemplateSlide {
   // Part 4 before starting") — resolved from those Parts' own slot content,
   // not authored directly on this slide.
   previewParts?: StorylinePartNumber[]
+  // Excludes THIS slide's own topic/questions from any other slide's
+  // previewParts compilation, even though its Part number is included
+  // (e.g. Part 4's picture-interview slides are usually skipped so the
+  // preview only shows the closing discussion questions).
+  previewExclude?: boolean
   timing?: {
     prepSeconds?: number
     responseSeconds?: number

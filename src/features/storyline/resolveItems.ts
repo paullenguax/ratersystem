@@ -111,7 +111,7 @@ export function resolveItems(
   // pull in real content regardless of where in the slide order it sits.
   const previewByPart: Partial<Record<StorylinePartNumber, { label: string; topic?: string; questions?: string[] }[]>> = {}
   for (const slide of sorted) {
-    if (!slide.partNumber) continue
+    if (!slide.partNumber || slide.previewExclude) continue
     const entry = slidePreviewEntry(slide, slotFor(slide))
     if (entry) (previewByPart[slide.partNumber] ??= []).push(entry)
   }

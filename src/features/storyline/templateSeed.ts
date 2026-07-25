@@ -269,6 +269,11 @@ export function buildSeedTemplateSlides(): TemplateSlide[] {
       label: 'Part 4 — Picture BRAVO',
       candidateState: 'PictureBravo',
       partNumber: 4,
+      // Kept out of the Part 4 examiner-preview slide — the picture
+      // questions depend on seeing the images live, so previewing them out
+      // of context beforehand isn't useful; only the closing discussion
+      // questions (Part 4 — Final questions) are worth reviewing in advance.
+      previewExclude: true,
       notes:
         "Probe references with extension questions where necessary. But bear in mind that the ALPHA+BRAVO task " +
         "shouldn't take more than 4 minutes.",
@@ -280,6 +285,7 @@ export function buildSeedTemplateSlides(): TemplateSlide[] {
       label: 'Part 4 — Both pictures',
       candidateState: 'PicturesAlphaAndBravo',
       partNumber: 4,
+      previewExclude: true,
       notes:
         "Probe references with extension questions where necessary. But bear in mind that the ALPHA+BRAVO task " +
         "shouldn't take more than 4 minutes.",
