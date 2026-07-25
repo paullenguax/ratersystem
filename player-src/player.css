@@ -225,6 +225,44 @@ div.polaroid img {
   overflow-y: auto;
 }
 
+/* The first few "getting set up" slides (accept/reject, test data,
+   checklist) get the old system's branded look — a white logo strip over
+   a blue content block — inside the same card shape as everything else. */
+.slide-card.branded {
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+
+.branded-logo-strip {
+  padding: 20px 36px;
+  border-bottom: 4px solid #dce6ee;
+  text-align: center;
+}
+
+.branded-logo-strip img {
+  height: 56px;
+}
+
+.branded-content {
+  background: #00528c;
+  color: white;
+  padding: 36px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.branded-content .slide-heading,
+.branded-content .test-display-name {
+  color: white;
+}
+
+.branded-content .test-data-field span {
+  color: #dce6ee;
+}
+
 .slide-heading {
   font-size: 1.3rem;
   font-weight: 600;

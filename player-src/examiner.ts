@@ -2,6 +2,13 @@ import type { StorylineItem } from './shared/types'
 import { getParams, channelName } from './shared/session'
 import { loadItems } from './shared/dataSource'
 import { initOnlineStatusDot } from './shared/onlineStatus'
+import teacLogo from './assets/teac-logo.png'
+
+// The first few slides (accept/reject, test data, room-setup checklist) get
+// the old system's branded look — a logo strip + a blue content block —
+// since they're a one-time "getting set up" sequence, not the repeated
+// per-Part flow the rest of the redesign deliberately kept plain/modern.
+const BRANDED_KINDS = new Set(['accept_reject_test', 'test_data_confirm', 'admin_checklist'])
 
 const { sessionId, isPreview } = getParams()
 const channel = new BroadcastChannel(channelName(sessionId))
@@ -558,21 +565,39 @@ function renderCurrentSlide() {
   if (progressFill) progressFill.style.width = `${((currentIndex + 1) / items.length) * 100}%`
 
   card.innerHTML = ''
+  const branded = BRANDED_KINDS.has(item.kind)
+  card.classList.toggle('branded', branded)
+
+  let content: HTMLElement = card
+  if (branded) {
+    const logoStrip = document.createElement('div')
+    logoStrip.className = 'branded-logo-strip'
+    const logoImg = document.createElement('img')
+    logoImg.src = teacLogo
+    logoImg.alt = 'Test of English for Aeronautical Communication'
+    logoStrip.appendChild(logoImg)
+    card.appendChild(logoStrip)
+
+    content = document.createElement('div')
+    content.className = 'branded-content'
+    card.appendChild(content)
+  }
+
   const heading = document.createElement('div')
   heading.className = 'slide-heading'
   heading.textContent = item.label
-  card.appendChild(heading)
+  content.appendChild(heading)
 
   if (item.examinerText) {
     const text = document.createElement('div')
     text.className = 'slide-text'
     text.textContent = applyLiveFieldSubstitutions(item.examinerText)
-    card.appendChild(text)
+    content.appendChild(text)
   }
 
-  if (item.previewContent?.length) renderPreviewContent(card, item.previewContent)
-  if (item.checklistItems?.length) renderChecklist(card, item.checklistItems)
-  if (item.kind === 'test_data_confirm') renderTestDataConfirm(card)
+  if (item.previewContent?.length) renderPreviewContent(content, item.previewContent)
+  if (item.checklistItems?.length) renderChecklist(content, item.checklistItems)
+  if (item.kind === 'test_data_confirm') renderTestDataConfirm(content)
 
   const images = item.media?.images
   if (images?.length) {
@@ -595,7 +620,7 @@ function renderCurrentSlide() {
       }
       thumbRow.appendChild(thumb)
     })
-    card.appendChild(thumbRow)
+    content.appendChild(thumbRow)
   }
 
   // The volume check (if any) is meant to happen before the scored
@@ -607,13 +632,13 @@ function renderCurrentSlide() {
     return aFirst - bFirst
   })
   orderedClips.forEach(clip => {
-    card.appendChild(createAudioControls(clip, () => { updateNavState() }))
+    content.appendChild(createAudioControls(clip, () => { updateNavState() }))
   })
   refreshClipButtons()
 
   if (item.kind === 'accept_reject_test') {
     setNavVisible(false)
-    renderAcceptReject(card, item)
+    renderAcceptReject(content, item)
   } else {
     setNavVisible(true)
   }
