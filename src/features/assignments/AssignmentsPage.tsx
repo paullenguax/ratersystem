@@ -229,8 +229,8 @@ export function AssignmentsPage() {
           <SelectTrigger className="w-40"><SelectValue placeholder="All types" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All types</SelectItem>
-            <SelectItem value="rater_course">Rater course</SelectItem>
-            <SelectItem value="standardization">Standardization</SelectItem>
+            <SelectItem value="rater_course">Certification</SelectItem>
+            <SelectItem value="standardization">In-session</SelectItem>
           </SelectContent>
         </Select>
         <span className="text-xs text-muted-foreground ml-auto">

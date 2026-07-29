@@ -197,11 +197,11 @@ export function AssignmentDrawer({ open, onClose, assignment }: Props) {
             <Controller name="category" control={control} render={({ field }) => (
               <Select value={field.value} onValueChange={handleCategoryChange} disabled={isEdit}>
                 <SelectTrigger>
-                  <SelectValue>{field.value === 'standardization' ? 'Standardization' : 'Rater course'}</SelectValue>
+                  <SelectValue>{field.value === 'standardization' ? 'In-session' : 'Certification'}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="rater_course">Rater course</SelectItem>
-                  <SelectItem value="standardization">Standardization</SelectItem>
+                  <SelectItem value="rater_course">Certification</SelectItem>
+                  <SelectItem value="standardization">In-session</SelectItem>
                 </SelectContent>
               </Select>
             )} />

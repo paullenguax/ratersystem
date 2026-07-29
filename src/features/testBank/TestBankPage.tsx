@@ -162,8 +162,8 @@ export function TestBankPage() {
       <div className="flex gap-1">
         {([
           ['all', 'Both'],
-          ['rater_course', 'Rater Course'],
-          ['standardization', 'Standardization'],
+          ['rater_course', 'Certification'],
+          ['standardization', 'In-session'],
         ] as const).map(([value, label]) => (
           <button
             key={value}

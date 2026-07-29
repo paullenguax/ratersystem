@@ -222,25 +222,16 @@ export function TestDrawer({ open, onClose, test }: Props) {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label>Test type</Label>
-              <Controller name="testType" control={control} render={({ field }) => (
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {TEST_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              )} />
-            </div>
-            <div className="space-y-1">
-              <Label>Duration (seconds)</Label>
-              <Input type="number" min={0} {...register('durationSeconds', {
-                setValueAs: v => (v === '' ? undefined : Number(v)),
-              })} />
-              {errors.durationSeconds && <p className="text-xs text-destructive">{errors.durationSeconds.message}</p>}
-            </div>
+          <div className="space-y-1">
+            <Label>Test type</Label>
+            <Controller name="testType" control={control} render={({ field }) => (
+              <Select value={field.value} onValueChange={field.onChange}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {TEST_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )} />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -262,8 +253,8 @@ export function TestDrawer({ open, onClose, test }: Props) {
                 <Select value={field.value} onValueChange={field.onChange}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="rater_course">Rater course</SelectItem>
-                    <SelectItem value="standardization">Standardization</SelectItem>
+                    <SelectItem value="rater_course">Certification</SelectItem>
+                    <SelectItem value="standardization">In-session</SelectItem>
                   </SelectContent>
                 </Select>
               )} />
