@@ -100,9 +100,12 @@ export function TestDrawer({ open, onClose, test }: Props) {
 
   useEffect(() => { setPreviewUrl(recordingUrlValue) }, [recordingUrlValue])
 
-  // Standardization tests are numbered in their own sequence (S1, S2…),
-  // separate from the legacy rater-course numbers — auto-assigned here since
-  // nothing else in the app assigns testId for a newly-created test.
+  // In-session tests are numbered in their own sequence (S1, S2…), separate
+  // from the legacy Certification numbers — auto-assigned here whenever the
+  // number is left blank, whether that's a brand-new test or an existing
+  // Certification test being switched into this category (which otherwise
+  // carries its old numeric id straight into the In-session namespace, where
+  // it usually collides with a number already in use there).
   async function nextStandardizationNumber(): Promise<number> {
     const snap = await getDocs(query(collection(db, 'test_bank'), where('category', '==', 'standardization')))
     const nums = snap.docs.map(d => (d.data().testId as number | undefined) ?? 0)
@@ -128,10 +131,12 @@ export function TestDrawer({ open, onClose, test }: Props) {
     // A manually typed number always wins (this is also how the 3
     // standardization tests created before auto-numbering existed get
     // backfilled — just edit each one and type S1/S2/S3's plain number in).
-    // Otherwise, a brand-new standardization test gets the next number
-    // automatically; everything else is left unnumbered, same as always.
+    // Otherwise, any test landing in the In-session category with a blank
+    // number gets the next one automatically — whether it's brand-new or an
+    // existing Certification test switched over; everything else (non-
+    // In-session, blank) is left unnumbered, same as always.
     let testId = data.testId
-    if (!isEdit && testId === undefined && data.category === 'standardization') {
+    if (testId === undefined && data.category === 'standardization') {
       testId = await nextStandardizationNumber()
     }
 
@@ -286,7 +291,7 @@ export function TestDrawer({ open, onClose, test }: Props) {
             <Label>Test number</Label>
             <Input type="number" min={1} {...register('testId', {
               setValueAs: v => (v === '' ? undefined : Number(v)),
-            })} placeholder="Auto-assigned for new standardization tests if left blank" />
+            })} placeholder="Auto-assigned for in-session tests if left blank" />
             {errors.testId && <p className="text-xs text-destructive">{errors.testId.message}</p>}
           </div>
 
