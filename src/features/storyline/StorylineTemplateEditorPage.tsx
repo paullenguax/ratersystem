@@ -5,11 +5,18 @@ import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
 import { ArrowLeft, Plus, Save, Sparkles } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
-import type { TemplateSlide, TemplateSlideKind, StorylineTemplate, ChecklistItem } from '@/types'
+import type { TemplateSlide, TemplateSlideKind, StorylineTemplate, StorylineTheme, ChecklistItem } from '@/types'
 import { TemplateSlideRow, SLIDE_KINDS } from './TemplateSlideRow'
 import { buildSeedTemplateSlides } from './templateSeed'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+
+// Mirrors player.css's own fallback defaults exactly — shown as greyed-out
+// placeholders so "leave it blank" visibly means "use the built-in look",
+// not "zero".
+const THEME_DEFAULTS = { logoHeight: 84, accentColor: '#00528c', slideMaxWidth: 1100, slideMinHeight: 640 }
 
 const TEMPLATE_DOC_ID = 'current'
 
@@ -41,6 +48,7 @@ export function StorylineTemplateEditorPage() {
   const { data: template, isLoading } = useQuery({ queryKey: ['storyline_template'], queryFn: fetchTemplate })
 
   const [slides, setSlides] = useState<TemplateSlide[]>([])
+  const [theme, setTheme] = useState<StorylineTheme>({})
   const [addKind, setAddKind] = useState<TemplateSlideKind>('instruction')
   const [saving, setSaving] = useState(false)
   // "Load example script" (and every other edit here) only changes this
@@ -52,9 +60,15 @@ export function StorylineTemplateEditorPage() {
   useEffect(() => {
     if (template) {
       setSlides(template.slides)
+      setTheme(template.theme ?? {})
       setDirty(false)
     }
   }, [template])
+
+  function updateTheme(patch: Partial<StorylineTheme>) {
+    setTheme(prev => ({ ...prev, ...patch }))
+    setDirty(true)
+  }
 
   useEffect(() => {
     if (!dirty) return
@@ -111,6 +125,7 @@ export function StorylineTemplateEditorPage() {
     try {
       await setDoc(doc(db, 'storyline_template', TEMPLATE_DOC_ID), {
         slides,
+        theme,
         updatedBy: user?.uid ?? null,
         updatedAt: serverTimestamp(),
       })
@@ -147,6 +162,63 @@ export function StorylineTemplateEditorPage() {
           Unsaved changes — click <strong>Save template</strong> below before leaving this page, or they'll be lost. Refreshing now will discard them.
         </div>
       )}
+
+      <div className="rounded-md border p-4 space-y-3">
+        <div>
+          <span className="font-medium">Look & feel</span>
+          <p className="text-sm text-muted-foreground">
+            Applies to every test version. Leave a field blank to use the player's built-in default.
+          </p>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="space-y-1">
+            <Label>Logo height (px)</Label>
+            <Input
+              type="number"
+              min={1}
+              placeholder={String(THEME_DEFAULTS.logoHeight)}
+              value={theme.logoHeight ?? ''}
+              onChange={e => updateTheme({ logoHeight: e.target.value ? Number(e.target.value) : undefined })}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label>Accent color</Label>
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                className="h-9 w-10 rounded border cursor-pointer"
+                value={theme.accentColor ?? THEME_DEFAULTS.accentColor}
+                onChange={e => updateTheme({ accentColor: e.target.value })}
+              />
+              <Input
+                placeholder={THEME_DEFAULTS.accentColor}
+                value={theme.accentColor ?? ''}
+                onChange={e => updateTheme({ accentColor: e.target.value || undefined })}
+              />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <Label>Slide max width (px)</Label>
+            <Input
+              type="number"
+              min={1}
+              placeholder={String(THEME_DEFAULTS.slideMaxWidth)}
+              value={theme.slideMaxWidth ?? ''}
+              onChange={e => updateTheme({ slideMaxWidth: e.target.value ? Number(e.target.value) : undefined })}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label>Slide min height (px)</Label>
+            <Input
+              type="number"
+              min={1}
+              placeholder={String(THEME_DEFAULTS.slideMinHeight)}
+              value={theme.slideMinHeight ?? ''}
+              onChange={e => updateTheme({ slideMinHeight: e.target.value ? Number(e.target.value) : undefined })}
+            />
+          </div>
+        </div>
+      </div>
 
       <div className="space-y-3">
         {slides.map((slide, index) => (

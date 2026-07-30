@@ -1,8 +1,12 @@
 import type { StorylineItem, ChecklistItem } from './shared/types'
 import { getParams, channelName } from './shared/session'
-import { loadItems } from './shared/dataSource'
+import { loadItems, loadTheme } from './shared/dataSource'
+import { applyTheme } from './shared/applyTheme'
 import { initOnlineStatusDot } from './shared/onlineStatus'
 import { renderInlineMarkup } from './shared/markup'
+import { preloadAllMedia } from './shared/preloadMedia'
+import { reportStorylineEvent, type StorylineEventContext } from './shared/reportEvent'
+import { callSendStats, callRejectTest } from './shared/wpCallback'
 import teacLogo from './assets/teac-logo.png'
 
 // The first few slides (accept/reject, test data, room-setup checklist) get
@@ -14,6 +18,10 @@ const BRANDED_KINDS = new Set(['accept_reject_test', 'test_data_confirm', 'admin
 const { sessionId, isPreview } = getParams()
 const channel = new BroadcastChannel(channelName(sessionId))
 let candidateWindow: Window | null = null
+// "{test.name} — {version.versionLabel}" — the one item.testDisplayName is
+// ever set on (the accept_reject_test slide) — captured once items load so
+// completion/violation reports can identify which test they're about.
+let testDisplayName: string | undefined
 
 const statusDot = document.getElementById('internet-status')
 if (statusDot) initOnlineStatusDot(statusDot)
@@ -37,10 +45,20 @@ document.getElementById('open-candidate')?.addEventListener('click', openCandida
 // crash/lose focus) with no reliable "closed" event to listen for across
 // browsers, so this is polled rather than event-driven — matches the old
 // system's "wait for the indicator to turn green" checklist instruction.
+let candidateWasOpen = false
+
 function updateCandidateStatus() {
+  const open = !!candidateWindow && !candidateWindow.closed
+  if (candidateWasOpen && !open && !isPreview) {
+    reportStorylineEvent('violation', eventContext(), {
+      subtype: 'candidate_window_closed',
+      details: 'The candidate window closed during the session.',
+    })
+    logEvent('Violation reported: candidate window closed during the session.')
+  }
+  candidateWasOpen = open
   const btn = document.getElementById('candidate-status')
   if (!btn) return
-  const open = !!candidateWindow && !candidateWindow.closed
   btn.classList.toggle('open', open)
   btn.title = open ? 'Candidate window open' : 'Candidate window closed — click to open'
 }
@@ -56,9 +74,9 @@ window.setInterval(updateCandidateStatus, 1000)
 updateCandidateStatus()
 
 // Timestamped event log, visible in the examiner window — mirrors the old
-// system's footer log. No backend write: there's no real test-run/booking
-// record to attach it to yet (that's Phase 2's WordPress integration), so
-// this stays a local, in-session record only.
+// system's footer log. Purely local/visual — reportStorylineEvent() below
+// is the actual backend write, for the specific subset of events worth a
+// violation/completion record; this log shows every event regardless.
 function logEvent(message: string) {
   const list = document.getElementById('event-log')
   if (!list) return
@@ -67,6 +85,45 @@ function logEvent(message: string) {
   li.textContent = `[${time}] ${message}`
   list.insertBefore(li, list.firstChild)
 }
+
+function eventContext(): StorylineEventContext {
+  return {
+    testDisplayName,
+    centreName: liveFields.centreName,
+    testNumber: liveFields.testNumber,
+    examinerName: liveFields.examinerName,
+    candidateName: liveFields.candidateName,
+  }
+}
+
+// The first ('offline') report almost certainly fails to reach our Cloud
+// Function — there's no connectivity to send it over, that's the whole
+// point — but it's fired anyway on the off chance of a flaky-not-fully-
+// down connection. The second ('online') report, once connectivity is
+// actually back, is far more likely to succeed and carries how long the
+// drop lasted, so at least one useful record usually gets through even
+// though the outage it describes is exactly what could stop it arriving.
+let offlineSince: number | null = null
+window.addEventListener('offline', () => {
+  offlineSince = Date.now()
+  if (isPreview) return
+  reportStorylineEvent('violation', eventContext(), {
+    subtype: 'connectivity_dropped',
+    details: 'Internet connectivity was lost during the session.',
+  })
+  logEvent('Violation reported: internet connectivity lost.')
+})
+window.addEventListener('online', () => {
+  if (offlineSince === null) return
+  const downForSeconds = Math.round((Date.now() - offlineSince) / 1000)
+  offlineSince = null
+  if (isPreview) return
+  reportStorylineEvent('violation', eventContext(), {
+    subtype: 'connectivity_dropped',
+    details: `Internet connectivity was restored after approximately ${downForSeconds}s offline.`,
+  })
+  logEvent(`Internet connectivity restored after ~${downForSeconds}s offline.`)
+})
 
 function formatTime(totalSeconds: number): string {
   const s = Math.max(0, Math.round(totalSeconds))
@@ -246,6 +303,12 @@ function createAudioControls(clip: { label: string; url: string; maxPlays?: numb
     if (clip.maxPlays && count > clip.maxPlays) {
       window.alert(`"${clip.label}" has now been played ${count} times (limit: ${clip.maxPlays}). This has been logged.`)
       logEvent(`Played "${clip.label}" beyond its limit (${count}/${clip.maxPlays}).`)
+      if (!isPreview) {
+        reportStorylineEvent('violation', eventContext(), {
+          subtype: 'audio_replay_limit',
+          details: `"${clip.label}" was played ${count} times (limit: ${clip.maxPlays}).`,
+        })
+      }
     } else {
       logEvent(`Played "${clip.label}" to completion (${count}${clip.maxPlays ? '/' + clip.maxPlays : ''}).`)
     }
@@ -600,6 +663,15 @@ function renderAcceptReject(card: HTMLElement, item: StorylineItem) {
       logEvent('Test rejected (Preview mode — session not locked).')
       return
     }
+    reportStorylineEvent('violation', eventContext(), {
+      subtype: 'test_rejected',
+      details: 'The examiner rejected this test before completion.',
+    })
+    callRejectTest({
+      tt: '', tv: testDisplayName ?? '',
+      ce: liveFields.centreName ?? '', tn: liveFields.testNumber ?? '', in: liveFields.examinerName ?? '',
+      rr: 'Rejected by examiner',
+    })
     endSession('Test rejected — session ended.')
   })
 
@@ -622,6 +694,24 @@ function sendAdvance(item: StorylineItem) {
   }
 }
 
+// The candidate page only ever gets shown a state when it's told to
+// `advance` — which examiner.ts only sends on slide transitions. Opening
+// (or reopening) the candidate window mid-slide previously left it blank
+// until the *next* Next/Prev click, since nothing re-sent the state of the
+// slide already on screen. Candidate.ts posts `ready` once its panels are
+// built (on first load and on every reopen) — reply with the current
+// slide's state directly over the channel rather than gating on the
+// examiner's own `candidateWindow` reference, which the message itself
+// already proves is live.
+channel.onmessage = event => {
+  const data = event.data as { type: string }
+  if (data?.type !== 'ready') return
+  const item = items[currentIndex]
+  if (!item?.candidateState) return
+  channel.postMessage({ type: 'advance', candidateState: item.candidateState })
+  logEvent(`Candidate window connected — resent "${item.candidateState}".`)
+}
+
 function updateNavState() {
   const prevBtn = document.getElementById('prev-btn') as HTMLButtonElement | null
   const nextBtn = document.getElementById('next-btn') as HTMLButtonElement | null
@@ -632,9 +722,12 @@ function updateNavState() {
   const allPlayed = clips.every(c => (playCounts.get(c.url) ?? 0) > 0)
   const checklistDone = !item?.checklistItems?.length || item.checklistItems.every((_, i) => checkedItems.has(i))
   const testDataDone = item?.kind !== 'test_data_confirm' || testDataComplete()
-  const isLast = currentIndex >= items.length - 1
   // Preview mode lets an admin click through freely regardless of gating.
-  nextBtn.disabled = isLast || (!isPreview && (!allPlayed || !checklistDone || !testDataDone))
+  // The last slide still respects gating (e.g. a closing slide's audio must
+  // finish playing) but is no longer unconditionally disabled — Next
+  // becomes "Finish test" there instead of stopping dead, see
+  // renderCurrentSlide()/finishTest().
+  nextBtn.disabled = !isPreview && (!allPlayed || !checklistDone || !testDataDone)
 }
 
 function renderCurrentSlide() {
@@ -724,10 +817,11 @@ function renderCurrentSlide() {
     setNavVisible(true)
   }
 
+  const isLast = currentIndex >= items.length - 1
   const nextBtn = document.getElementById('next-btn') as HTMLButtonElement | null
   if (nextBtn) {
-    nextBtn.textContent = item.nextButtonLabel || 'Next ▶'
-    nextBtn.classList.toggle('next-btn-prominent', !!item.nextButtonLabel)
+    nextBtn.textContent = isLast ? '✓ Finish test' : (item.nextButtonLabel || 'Next ▶')
+    nextBtn.classList.toggle('next-btn-prominent', isLast || !!item.nextButtonLabel)
   }
 
   if (notesContent) notesContent.innerHTML = renderInlineMarkup(item.notes || 'No notes for this slide.')
@@ -744,14 +838,36 @@ document.getElementById('prev-btn')?.addEventListener('click', () => {
   renderCurrentSlide()
 })
 
+// Reached only once the current slide is the last one — no more slides to
+// advance to. Preview keeps its "free exploration, nothing real fires"
+// posture (matching Reject's preview behavior): just logs, doesn't call
+// out to anything or lock the session, since there's no real candidate.
+function finishTest() {
+  if (isPreview) {
+    logEvent('Test finished (Preview mode — no report sent, session not locked).')
+    return
+  }
+  reportStorylineEvent('completed', eventContext())
+  callSendStats({
+    tt: '', tv: testDisplayName ?? '',
+    ce: liveFields.centreName ?? '', tn: liveFields.testNumber ?? '',
+    in: liveFields.examinerName ?? '', cn: liveFields.candidateName ?? '',
+  })
+  endSession('Test completed.')
+}
+
 document.getElementById('next-btn')?.addEventListener('click', () => {
   if (sessionEnded) return
   const nextBtn = document.getElementById('next-btn') as HTMLButtonElement | null
-  if (nextBtn?.disabled || currentIndex >= items.length - 1) return
+  if (nextBtn?.disabled) return
   const item = items[currentIndex]
   if (item.kind === 'test_data_confirm') {
     const v = testDataValues()
     liveFields = { centreName: v.centreName, testNumber: v.testNumber, examinerName: v.examinerName, candidateName: v.candidateName }
+  }
+  if (currentIndex >= items.length - 1) {
+    finishTest()
+    return
   }
   currentIndex++
   renderCurrentSlide()
@@ -764,8 +880,12 @@ document.getElementById('notes-close')?.addEventListener('click', () => {
   document.getElementById('notes-drawer')?.classList.remove('open')
 })
 
+loadTheme().then(applyTheme)
+
 loadItems().then(loaded => {
   items = loaded
+  testDisplayName = items.find(i => i.kind === 'accept_reject_test')?.testDisplayName
+  preloadAllMedia(items)
   renderCurrentSlide()
 }).catch(err => {
   const card = document.getElementById('slide-card')

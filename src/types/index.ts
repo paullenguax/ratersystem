@@ -245,9 +245,22 @@ export interface TemplateSlide {
   }
 }
 
+// Admin-configurable slide look & feel — a deliberately small, fixed set of
+// knobs (not arbitrary CSS) applied by the player as CSS custom properties,
+// each falling back to the player's own built-in default when unset. Global
+// like the rest of the template, not per-Test/Version — matches the old
+// system's single fixed branded look, just with a few adjustable dials.
+export interface StorylineTheme {
+  logoHeight?: number
+  accentColor?: string
+  slideMaxWidth?: number
+  slideMinHeight?: number
+}
+
 export interface StorylineTemplate {
   id: string
   slides: TemplateSlide[]
+  theme?: StorylineTheme
   updatedAt?: Timestamp
   updatedBy?: string
 }
@@ -372,6 +385,13 @@ export interface StorylinePart {
   // backup Part is still fully published and ready, just excluded from the
   // ordinary picker.
   isBackup?: boolean
+  // Which Test Types this Part is eligible for — not mutually exclusive
+  // (e.g. a Part 2 might serve both FISO/AFISO and ADP Driver), matching
+  // the real pooling shape noted above. Undefined/empty = eligible for
+  // every Test Type (backward-compatible default for every Part that
+  // existed before this field did — nobody had to go back and tag ~90
+  // Parts retroactively just to keep using them).
+  testTypes?: StorylineTestType[]
   // Keyed by TemplateSlide.id, only for slides whose partNumber matches.
   slotContent: Record<string, StorylineSlotContent>
   createdAt?: Timestamp

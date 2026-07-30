@@ -92,7 +92,7 @@ export function StorylineVersionEditorPage() {
       const p = parts.find(part => part.id === partRefs[n])
       if (p) selectedParts[n] = p
     }
-    previewStorylineVersion(resolveItems(template.slides, test?.variables, slotContent, selectedParts, `${test?.name} — ${versionLabel}`))
+    previewStorylineVersion(resolveItems(template.slides, test?.variables, slotContent, selectedParts, `${test?.name} — ${versionLabel}`), template.theme)
   }
 
   if (versionLoading || templateLoading) return <p className="text-sm text-muted-foreground">Loading…</p>
@@ -143,12 +143,18 @@ export function StorylineVersionEditorPage() {
         <div className="grid grid-cols-1 gap-3">
           {PART_NUMBERS.map(n => {
             // Only offer Parts that are actually ready for normal use — published,
-            // active, and not a reserve/backup — but keep an already-selected Part
-            // visible even if it's since been deactivated/archived/marked backup,
-            // so an existing draft doesn't silently lose its selection.
+            // active, not a reserve/backup, and eligible for this Test's type
+            // (untagged Parts are eligible for every type, see
+            // StorylinePart.testTypes) — but keep an already-selected Part
+            // visible even if it's since been deactivated/archived/marked backup/
+            // retagged out of eligibility, so an existing draft doesn't silently
+            // lose its selection.
             const options = parts.filter(p =>
               p.partNumber === n &&
-              (p.id === partRefs[n] || (p.status === 'published' && p.active !== false && !p.isBackup))
+              (p.id === partRefs[n] || (
+                p.status === 'published' && p.active !== false && !p.isBackup &&
+                (!p.testTypes?.length || !test?.testType || p.testTypes.includes(test.testType))
+              ))
             )
             const formatOption = (p: StorylinePart) =>
               `${p.label}` +

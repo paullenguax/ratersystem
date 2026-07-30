@@ -3,6 +3,7 @@ import { getParams, channelName } from './shared/session'
 import { loadItems } from './shared/dataSource'
 import { initOnlineStatusDot } from './shared/onlineStatus'
 import { renderInlineMarkup } from './shared/markup'
+import { preloadAllMedia } from './shared/preloadMedia'
 import teacLogo from './assets/teac-logo.png'
 
 const { sessionId } = getParams()
@@ -123,7 +124,15 @@ channel.onmessage = event => {
   if (data?.type === 'advance') showState(data.candidateState)
 }
 
-loadItems().then(renderPanels).catch(err => {
+loadItems().then(items => {
+  renderPanels(items)
+  preloadAllMedia(items)
+  // Announces readiness on first load and on every reopen (a fresh
+  // page load either way) — examiner.ts replies with whatever state the
+  // current slide should be showing, so a (re)opened window never sits
+  // blank waiting for the next slide transition to populate it.
+  channel.postMessage({ type: 'ready' })
+}).catch(err => {
   const container = document.getElementById('panels')
   if (container) container.textContent = `Failed to load items: ${String(err)}`
 })

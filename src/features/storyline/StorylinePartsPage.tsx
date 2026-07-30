@@ -1,12 +1,13 @@
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { collection, getDocs, getDoc, addDoc, doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'
 import { ArrowLeft, Plus, Pencil, Rocket, Copy, Archive as ArchiveIcon, Trash2, PauseCircle, PlayCircle, Shield, ShieldOff, Tag } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
-import type { StorylinePart, StorylinePartNumber, StorylineTemplate } from '@/types'
+import type { StorylinePart, StorylinePartNumber, StorylineTemplate, StorylineTestType } from '@/types'
 import { missingPartContent } from './partCompleteness'
+import { TEST_TYPES } from './StorylineTestDrawer'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -47,6 +48,8 @@ export function StorylinePartsPage() {
   const [showArchived, setShowArchived] = useState(false)
   const [search, setSearch] = useState('')
   const [newPartNumber, setNewPartNumber] = useState<StorylinePartNumber>(1)
+  const [testTypeFilter, setTestTypeFilter] = useState<'all' | StorylineTestType>('all')
+  const [editingTestTypesId, setEditingTestTypesId] = useState<string | null>(null)
 
   const { data: parts = [], isLoading } = useQuery({ queryKey: ['storyline_parts'], queryFn: fetchParts })
   const { data: template } = useQuery({ queryKey: ['storyline_template'], queryFn: fetchTemplate })
@@ -60,9 +63,12 @@ export function StorylinePartsPage() {
       // explicitly shown, or explicitly filtered to "Archived" above.
       .filter(p => showArchived || statusFilter === 'archived' || p.status !== 'archived')
       .filter(p => backupFilter === 'all' || (backupFilter === 'backup' ? !!p.isBackup : !p.isBackup))
+      // Untagged Parts (testTypes undefined/empty) are eligible for every
+      // Test Type — the backward-compatible default, see StorylinePart.testTypes.
+      .filter(p => testTypeFilter === 'all' || !p.testTypes?.length || p.testTypes.includes(testTypeFilter))
       .filter(p => s === '' || p.label.toLowerCase().includes(s))
       .sort((a, b) => a.partNumber - b.partNumber || a.label.localeCompare(b.label))
-  }, [parts, filter, statusFilter, backupFilter, showArchived, search])
+  }, [parts, filter, statusFilter, backupFilter, testTypeFilter, showArchived, search])
 
   async function handleNewPart() {
     await addDoc(collection(db, 'storyline_parts'), {
@@ -138,6 +144,15 @@ export function StorylinePartsPage() {
     queryClient.invalidateQueries({ queryKey: ['storyline_parts'] })
   }
 
+  // Eligibility tagging, not test content — safe to edit regardless of
+  // publish status, same reasoning as label rename above.
+  async function handleToggleTestType(part: StorylinePart, type: StorylineTestType) {
+    const current = part.testTypes ?? []
+    const next = current.includes(type) ? current.filter(t => t !== type) : [...current, type]
+    await updateDoc(doc(db, 'storyline_parts', part.id), { testTypes: next })
+    queryClient.invalidateQueries({ queryKey: ['storyline_parts'] })
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
@@ -188,6 +203,15 @@ export function StorylinePartsPage() {
               <SelectItem value="backup">Backups only</SelectItem>
             </SelectContent>
           </Select>
+          <Select value={testTypeFilter} onValueChange={v => setTestTypeFilter(v as typeof testTypeFilter)}>
+            <SelectTrigger className="w-44">
+              <SelectValue placeholder="All test types">{(v: string) => v === 'all' ? 'All test types' : v}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All test types</SelectItem>
+              {TEST_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+            </SelectContent>
+          </Select>
           <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
             <input
               type="checkbox"
@@ -228,79 +252,117 @@ export function StorylinePartsPage() {
                 <TableHead>Status</TableHead>
                 <TableHead>Active</TableHead>
                 <TableHead>Backup</TableHead>
+                <TableHead>Test types</TableHead>
                 <TableHead />
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                     {parts.length === 0 ? 'No Parts yet.' : 'No Parts match this filter.'}
                   </TableCell>
                 </TableRow>
               ) : (
                 filtered.map(part => (
-                  <TableRow key={part.id}>
-                    <TableCell>Part {part.partNumber}</TableCell>
-                    <TableCell>{part.label}</TableCell>
-                    <TableCell><Badge variant={statusVariant(part.status)}>{part.status}</Badge></TableCell>
-                    <TableCell>
-                      {part.status === 'published' ? (
-                        <Badge variant={part.active === false ? 'secondary' : 'default'}>
-                          {part.active === false ? 'inactive' : 'active'}
-                        </Badge>
-                      ) : (
-                        <span className="text-muted-foreground text-sm">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {part.isBackup ? <Badge variant="outline">backup</Badge> : <span className="text-muted-foreground text-sm">—</span>}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-1 justify-end">
-                        {part.status === 'draft' && (
-                          <Button variant="ghost" size="sm" nativeButton={false} render={<Link to={`/test-versions/parts/${part.id}/edit`} />}>
-                            <Pencil className="size-4 mr-1" /> Edit
-                          </Button>
+                  <Fragment key={part.id}>
+                    <TableRow>
+                      <TableCell>Part {part.partNumber}</TableCell>
+                      <TableCell>{part.label}</TableCell>
+                      <TableCell><Badge variant={statusVariant(part.status)}>{part.status}</Badge></TableCell>
+                      <TableCell>
+                        {part.status === 'published' ? (
+                          <Badge variant={part.active === false ? 'secondary' : 'default'}>
+                            {part.active === false ? 'inactive' : 'active'}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">—</span>
                         )}
-                        {part.status === 'draft' && (
-                          <Button variant="ghost" size="sm" onClick={() => handlePublish(part)}>
-                            <Rocket className="size-4 mr-1" /> Publish
+                      </TableCell>
+                      <TableCell>
+                        {part.isBackup ? <Badge variant="outline">backup</Badge> : <span className="text-muted-foreground text-sm">—</span>}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1 max-w-48">
+                          {part.testTypes?.length
+                            ? part.testTypes.map(t => <Badge key={t} variant="outline">{t}</Badge>)
+                            : <span className="text-muted-foreground text-sm">All</span>}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-1 justify-end">
+                          {part.status === 'draft' && (
+                            <Button variant="ghost" size="sm" nativeButton={false} render={<Link to={`/test-versions/parts/${part.id}/edit`} />}>
+                              <Pencil className="size-4 mr-1" /> Edit
+                            </Button>
+                          )}
+                          {part.status === 'draft' && (
+                            <Button variant="ghost" size="sm" onClick={() => handlePublish(part)}>
+                              <Rocket className="size-4 mr-1" /> Publish
+                            </Button>
+                          )}
+                          <Button variant="ghost" size="sm" onClick={() => handleRename(part)}>
+                            <Tag className="size-4 mr-1" /> Rename
                           </Button>
-                        )}
-                        <Button variant="ghost" size="sm" onClick={() => handleRename(part)}>
-                          <Tag className="size-4 mr-1" /> Rename
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => handleDuplicate(part)}>
-                          <Copy className="size-4 mr-1" /> Duplicate
-                        </Button>
-                        {part.status === 'published' && (
-                          <Button variant="ghost" size="sm" onClick={() => handleToggleActive(part)}>
-                            {part.active === false
-                              ? <><PlayCircle className="size-4 mr-1" /> Reactivate</>
-                              : <><PauseCircle className="size-4 mr-1" /> Deactivate</>}
+                          <Button variant="ghost" size="sm" onClick={() => setEditingTestTypesId(editingTestTypesId === part.id ? null : part.id)}>
+                            <Tag className="size-4 mr-1" /> Test types
                           </Button>
-                        )}
-                        {part.status !== 'archived' && (
-                          <Button variant="ghost" size="sm" onClick={() => handleToggleBackup(part)}>
-                            {part.isBackup
-                              ? <><ShieldOff className="size-4 mr-1" /> Unmark backup</>
-                              : <><Shield className="size-4 mr-1" /> Mark as backup</>}
+                          <Button variant="ghost" size="sm" onClick={() => handleDuplicate(part)}>
+                            <Copy className="size-4 mr-1" /> Duplicate
                           </Button>
-                        )}
-                        {part.status === 'published' && (
-                          <Button variant="ghost" size="sm" onClick={() => handleArchive(part)}>
-                            <ArchiveIcon className="size-4 mr-1" /> Archive
-                          </Button>
-                        )}
-                        {part.status === 'draft' && (
-                          <Button variant="ghost" size="sm" onClick={() => handleDelete(part)}>
-                            <Trash2 className="size-4 mr-1" /> Delete
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
+                          {part.status === 'published' && (
+                            <Button variant="ghost" size="sm" onClick={() => handleToggleActive(part)}>
+                              {part.active === false
+                                ? <><PlayCircle className="size-4 mr-1" /> Reactivate</>
+                                : <><PauseCircle className="size-4 mr-1" /> Deactivate</>}
+                            </Button>
+                          )}
+                          {part.status !== 'archived' && (
+                            <Button variant="ghost" size="sm" onClick={() => handleToggleBackup(part)}>
+                              {part.isBackup
+                                ? <><ShieldOff className="size-4 mr-1" /> Unmark backup</>
+                                : <><Shield className="size-4 mr-1" /> Mark as backup</>}
+                            </Button>
+                          )}
+                          {part.status === 'published' && (
+                            <Button variant="ghost" size="sm" onClick={() => handleArchive(part)}>
+                              <ArchiveIcon className="size-4 mr-1" /> Archive
+                            </Button>
+                          )}
+                          {part.status === 'draft' && (
+                            <Button variant="ghost" size="sm" onClick={() => handleDelete(part)}>
+                              <Trash2 className="size-4 mr-1" /> Delete
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                    {editingTestTypesId === part.id && (
+                      <TableRow>
+                        <TableCell colSpan={7} className="bg-muted/30">
+                          <div className="flex flex-wrap gap-2 py-1">
+                            {TEST_TYPES.map(t => {
+                              const selected = part.testTypes?.includes(t) ?? false
+                              return (
+                                <Button
+                                  key={t}
+                                  type="button"
+                                  size="sm"
+                                  variant={selected ? 'default' : 'outline'}
+                                  onClick={() => handleToggleTestType(part, t)}
+                                >
+                                  {t}
+                                </Button>
+                              )
+                            })}
+                          </div>
+                          <p className="text-xs text-muted-foreground pb-1">
+                            None selected = eligible for every test type.
+                          </p>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </Fragment>
                 ))
               )}
             </TableBody>

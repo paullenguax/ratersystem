@@ -16,6 +16,13 @@ export interface ChecklistItem {
   icon?: 'screen' | 'speaker'
 }
 
+export interface StorylineTheme {
+  logoHeight?: number
+  accentColor?: string
+  slideMaxWidth?: number
+  slideMinHeight?: number
+}
+
 export type TemplateSlideKind =
   | 'accept_reject_test'
   | 'test_data_confirm'

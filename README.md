@@ -64,7 +64,7 @@ Role is determined by the `people` Firestore collection — the doc ID **must** 
 | `config/canvas` | Canvas API token, Canvas Sync course list, `excludedCourseIds`, `notificationEmail` for self-serve alerts |
 | `canvasEnrollmentLog` | Unified log of Canvas enrollments from both WooCommerce (`CanvasCohortEnrollment` WP plugin) and the manual `/admin/canvas-enroll` wizard |
 | `practice_sessions` / `practice_scores` | Ad-hoc live-course practice player (`/practice`), joined via a 6-character code; login is now optional (Canvas SSO) — see "Practice Sessions" below |
-| `storyline_tests` / `storyline_versions` / `storyline_parts` / `storyline_template` | Test Versions (Storyline Replacement) authoring — see "Storyline Replacement" section below |
+| `storyline_tests` / `storyline_versions` / `storyline_parts` / `storyline_template` / `storyline_events` | Test Versions (Storyline Replacement) authoring + violation/completion reports — see "Storyline Replacement" section below |
 
 ## Local dev
 
@@ -150,6 +150,7 @@ Certificate validation is public at `/validate/:certNumber` (no auth required).
 | `mintBenchmarkAdminToken` | Bridges an admin's identity into the separate `lenguax-benchmark-32392` Firebase project. Checks `people/{uid}.role === 'admin'`, then mints a custom token with an `admin: true` claim via a second `admin.app()` credentialed with the `BENCHMARK_SERVICE_ACCOUNT_KEY` secret — that claim is what the benchmark project's Firestore rules use to distinguish an admin from a training centre's scoped login (see Benchmark Check's README) |
 | `createBenchmarkCentreAccount` / `deleteBenchmarkCentreAccount` | Backs the Benchmark page's Centres tab — creates/removes a centre's Firebase Auth user and matching `centre_accounts/{uid}` doc together in the benchmark project. Rejects a `centreId` already in use by a different account |
 | `invitePerson` | Backs the People page's "Invite" action — creates a Firebase Auth user + matching `people/{uid}` doc (any role) in one step, then emails a password-reset link via Resend (`RESEND_API_KEY`) so the person can set their own password. Rejects a duplicate email. Email-send failure is logged but non-fatal — the account/doc are already valid at that point |
+| `reportStorylineEvent` | HTTP endpoint, no auth (called directly by the exported Storyline player, which has no Firebase SDK/session at all — see Storyline Replacement section). Logs every call to `storyline_events`; `type: 'violation'` calls also email `config/storyline.notificationEmail` via Resend |
 
 See the full Canvas integration write-up (WP plugin ↔ Firebase ↔ RaterSystemNew) for the complete enrollment picture — ask Claude to regenerate it from `CanvasCohortEnrollment/canvas-cohort-enrollment.php` and this file if it's gone stale.
 
@@ -226,8 +227,22 @@ phase.
   globally-shared, pooled unit in its own `storyline_parts` collection (not
   scoped to any Test — matches real cross-role-type content sharing found in
   the TEAC tracking spreadsheet), with `draft`/`published`/`archived` status
-  plus `active`/`isBackup` flags. A Version just references one Part per
-  number (`partRefs`) and supplies its own whole-test slide content directly.
+  plus `active`/`isBackup` flags, plus an optional `testTypes:
+  StorylineTestType[]` — which Test Types a Part is eligible for, not
+  mutually exclusive (e.g. a Part 2 might serve both FISO/AFISO and ADP
+  Driver, matching the real "W pool spans 7 of 11 types" sharing already
+  noted on `StorylinePart`). Undefined/empty means eligible for every Test
+  Type — the backward-compatible default, so none of the ~90 Parts that
+  existed before this field did needed retroactive tagging. Edited inline
+  in `StorylinePartsPage` (a "Test types" action expands a row of toggle
+  chips, immediate-persist, no separate save step — same pattern as
+  Active/Backup toggles) and filterable there too. `StorylineVersionEditorPage`'s
+  Part picker filters its options by the current Test's `testType` against
+  each candidate Part's `testTypes` (untagged Parts stay eligible
+  everywhere) — an already-selected Part stays visible even if it's since
+  been retagged out of eligibility, so an existing draft doesn't silently
+  lose its selection. A Version just references one Part per number
+  (`partRefs`) and supplies its own whole-test slide content directly.
   A single shared `storyline_template/current` doc (`StorylineTemplate`,
   edited on `StorylineTemplateEditorPage`) holds the fixed examiner wording
   as an ordered list of `TemplateSlide`s — `{questions}`/`{topic}` are
@@ -297,9 +312,15 @@ phase.
   Firebase dependency, so an exported test runs standalone. Sync is via
   `BroadcastChannel` (replacing the old system's fragile direct cross-window
   JS reference); both windows independently load the same item list at
-  startup (no ready/handshake race), and the channel carries only the
-  runtime "advance to state X" signal, sent automatically on every
-  Next/Back — there's no separate "Show" action.
+  startup, and the channel carries the runtime "advance to state X" signal,
+  sent automatically on every Next/Back — there's no separate "Show"
+  action. `candidate.ts` also posts a `ready` message once its panels are
+  built (on first load *and* every reopen) — `examiner.ts` replies with the
+  current slide's state directly, so a (re)opened candidate window shows
+  the right panel immediately instead of sitting blank until the next
+  slide transition (a real bug: opening the candidate window mid-slide
+  previously showed nothing until the next Next/Back click, since nothing
+  had re-sent the already-current state to the newly-loaded page).
   Audio plays from the **examiner's own console** (everyone in the room
   hears it via one set of speakers, matching the real in-person, single-room
   setup). Only one clip may be active at a time across the whole console —
@@ -378,32 +399,134 @@ phase.
   it (e.g. the Preamble) — everything else in this app resolves once at
   authoring time, this is the one thing that has to happen live, since the
   data doesn't exist until the examiner types it in mid-session.
-- **Build**: a *separate* `vite.config.player.ts` (multi-page, fixed asset
-  names via a manifest, `outDir` pointed straight at `public/player-shell`)
-  builds this shell. Wired as an npm `prebuild` script, so `public/player-
-  shell/` can never drift from `player-src/` source — safe because it never
-  touches `dist/` beyond what the main build's static-asset copy already
-  does, and `.github/workflows/deploy.yml` only FTPs `dist/`.
+- **Build**: a *separate* `vite.config.player.ts` (multi-page, content-hashed
+  asset names via a manifest, `outDir` pointed straight at `public/player-
+  shell`) builds this shell. Wired as an npm `prebuild` script, so `public/
+  player-shell/` can never drift from `player-src/` source — safe because it
+  never touches `dist/` beyond what the main build's static-asset copy
+  already does, and `.github/workflows/deploy.yml` only FTPs `dist/`.
+  Content-hashed (not fixed) filenames specifically so a browser can't keep
+  serving a stale cached copy after a deploy — this shell changes
+  constantly during active development, and a fixed filename with no
+  explicit Cache-Control header on the production host caused a real,
+  multi-round debugging saga (a "fix isn't showing up" report that was
+  actually just a stale-cache issue, not a code bug — see
+  `vite.config.player.ts`'s comment for the full history).
+  Both examiner.ts and candidate.ts also call `preloadAllMedia()`
+  (`player-src/shared/preloadMedia.ts`) as soon as items load — a
+  fire-and-forget `fetch()` of every image/audio URL the version
+  references, warming the browser's HTTP cache ahead of when each slide is
+  actually reached, rather than only fetching lazily per-slide. Not a
+  guarantee of true offline playback (that would need a service worker
+  explicitly caching responses regardless of server headers — not built),
+  just meaningfully reduces the odds a brief connectivity hiccup mid-test
+  lands on a slide whose media hasn't loaded yet.
 - **Preview**: `useStorylinePreview.ts` writes the resolved items to
   `localStorage` under a random per-launch session ID and opens `player-
   shell/examiner.html?preview=1&session=…` — the *exact* same built artifact
   used for export, so there's no drift between what's tested and what's
   shipped.
+- **Look & feel** (`StorylineTheme` on `StorylineTemplate.theme`, built
+  2026-07-30): a deliberately small, fixed set of admin-configurable knobs
+  — logo height, accent color, slide max-width, slide min-height — not
+  arbitrary CSS, to keep every version looking coherent rather than risking
+  admins producing something broken/inconsistent. Edited in a "Look & feel"
+  panel on `StorylineTemplateEditorPage`, applied by the player as CSS
+  custom properties (`applyTheme()` in `player-src/shared/applyTheme.ts`,
+  called once on load) — `player.css`'s relevant rules read `var(--x,
+  <built-in-default>)`, so an unset field just falls back cleanly. Kept as
+  a *separate* file from the item data rather than a field on it — Preview
+  writes it to its own `localStorage` key (`themeStorageKey()`), Export
+  writes a sibling `theme.json` in the zip (not baked into `version.json`)
+  — so an export built before this feature (no `theme.json` at all) falls
+  back to every default exactly the same way an unset field does. Bumped
+  the built-in defaults themselves at the same time (logo 56→84px, slide
+  max-width 960→1100px, slide min-height 560→640px) as a "tidy up the first
+  few slides" pass.
 - **Export**: `exportStoryline.ts` reads `public/player-shell/.vite/
   manifest.json` (emitted by the player build) to discover every built file
   without hardcoding filenames — walking each chunk's `imports`, `css`, *and*
   `assets` (the last covers static files like the candidate logo that a
   chunk references but doesn't import as a module; easy to forget since only
   `imports`/`css` mattered before player-src had any static assets) — zips
-  them with `jszip` alongside a generated `version.json` (the published
-  version's `items`, referencing live Firebase Storage download-URLs — no
-  media re-hosting, matching the already-decided no-offline-first posture),
-  and downloads it. v1 publish is manual: an admin uploads this zip to the
-  WordPress tests folder and pastes the URL into the existing TEAC-Plugin
-  admin, same as the current Storyline workflow.
-- **Not built yet**: the real WordPress portal integration (Phase 2), actual
-  pooling/random-selection logic for picking an unseen Part per candidate,
-  and historical exposure backfill from old version-code naming conventions.
+  them with `jszip` alongside a generated `version.json`. `bundleMedia()`
+  downloads every image/audio URL referenced across the version's items
+  exactly once (deduped by URL — combo-image slides always reuse an
+  earlier slide's upload) and embeds them in the zip under `media/`,
+  rewriting `version.json` to reference those local relative paths instead
+  of the live Firebase Storage URLs — reverses the originally-decided
+  no-offline-first posture, since once uploaded next to `examiner.php`
+  every asset loads same-origin from the WP host itself rather than
+  depending on Firebase Storage staying reachable during a real sitting.
+  Dedup is keyed by the in-flight *promise*, not the resolved filename —
+  items are processed concurrently, so two slides sharing one URL could
+  otherwise both pass the "already downloading?" check before either
+  fetch resolves and embed the same file twice under different names.
+  `examiner.html` is wrapped into `examiner.php` with the exact PHP access
+  gate the old Storyline exports had prepended by hand (WP session +
+  booking `check` hash + `administer_tests` capability — see
+  `Storyline-Replacement/storyline-replacement-spec.md` §"Path A") baked in
+  automatically, so nobody has to remember to copy-paste it per export.
+  `candidate.html` is left unwrapped — it's only ever opened via
+  `window.open()` from inside the already-gated examiner session, never
+  navigated to directly, so it never needed its own gate either. A
+  generated `HOW-TO-ACTIVATE.txt` in the zip walks whoever uploads it
+  through the two remaining manual steps (upload the folder, add one
+  `wp_teac_test_versions` row) — deliberately the *only* things that stay
+  manual; WordPress's existing booking/random-assignment/exposure-tracking
+  logic needs zero changes, since it only ever sees "a Test_id has a
+  TestUrl," not which tool built the content behind it.
+- **Not built yet**: the real WordPress portal integration (Phase 2 "full
+  replacement" — single fixed player URL, signed short-lived tokens instead
+  of the current export's reused MD5 gate, Firestore-served content instead
+  of a baked-in `version.json`; deliberately shelved until there's an actual
+  decision to retire the WordPress-side portal, since the export-based path
+  above already meets the urgent need without it), actual pooling/random-
+  selection logic for picking an unseen Part per candidate (the current
+  system already does this at the whole-*Version* level — many hand-built
+  versions per test type, one randomly assigned per candidate with real
+  per-candidate exposure tracking; a newer not-yet-live rescoping to
+  per-*Part* tracking exists to allow Part-mixing without losing that
+  history — neither is built here yet), and historical exposure backfill
+  from old version-code naming conventions.
+- **Violation/completion reporting** (built 2026-07-25): the exported
+  player otherwise has zero backend connectivity at all (`dataSource.ts`
+  only ever fetches its own `version.json`) — `reportStorylineEvent()`
+  (`player-src/shared/reportEvent.ts`) is its one channel back, a plain
+  fetch (no Firebase SDK, no auth — the player runs in an examiner's
+  browser at a random test centre with no way to embed a real secret) to
+  a new unauthenticated HTTPS Cloud Function of the same name in
+  `functions/index.js`. Every call logs a `storyline_events` doc
+  regardless of type; only `type: 'violation'` also emails
+  `config/storyline.notificationEmail` (a dedicated field, deliberately
+  separate from `config/canvas.notificationEmail` used elsewhere — same
+  Resend pattern as `notifySelfServeSubmission`). Fire-and-forget
+  throughout — a failed report never blocks or alters the actual test.
+  Violation triggers wired up in `examiner.ts`: an audio clip played past
+  its `maxPlays` limit (already detected/logged locally, now also
+  reported), the candidate window closing during the session (tracked via
+  the existing `updateCandidateStatus()` poll, open→closed transition),
+  internet connectivity dropping (`window`'s `offline`/`online` events —
+  the drop itself almost certainly fails to send since there's no
+  connectivity to send it over, but the *recovery* report, once back
+  online, usually gets through and carries how long the drop lasted), and
+  the examiner rejecting the test. **A "Finish test" action was also
+  added** — Next becomes "✓ Finish test" on the last slide (previously
+  just permanently disabled once reached, with no completion concept at
+  all) rather than staying gated on `isLast`; still respects the usual
+  audio/checklist/test-data gating up to that point. Both the reject and
+  finish paths also call the *old* system's own, already-working
+  `assets/rejectTest.php`/`sendStats.php` (`player-src/shared/
+  wpCallback.ts`, best-effort, relative fetch, `!isPreview`-only) — so
+  existing WordPress-side completion/rejection emails keep firing
+  unchanged for versions built with this tool too, alongside (not instead
+  of) the new Firestore record. That field mapping is a known
+  approximation, not a confirmed exact match (only each PHP file's header
+  was reviewed, and there's no equivalent in this app's data model for the
+  old system's short test-type codes or a numeric centre code) — verify
+  against a real deployment before relying on it as more than a
+  best-effort duplicate of the old notification. None of this fires in
+  Preview mode.
 
 ## Notes
 
@@ -414,4 +537,4 @@ phase.
 
 ## Last updated
 
-2026-07-24
+2026-07-30

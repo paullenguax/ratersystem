@@ -16,6 +16,10 @@ export function previewStorageKey(sessionId: string) {
   return `storyline_preview_${sessionId}`
 }
 
+export function themeStorageKey(sessionId: string) {
+  return `storyline_theme_${sessionId}`
+}
+
 export function channelName(sessionId: string) {
   return `storyline-sync-${sessionId}`
 }

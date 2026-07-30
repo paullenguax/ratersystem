@@ -120,7 +120,7 @@ div.polaroid img {
 /* Examiner control view only */
 
 .examiner-shell {
-  max-width: 960px;
+  max-width: var(--slide-max-width, 1100px);
   margin: 0 auto;
   padding: 24px;
 }
@@ -157,7 +157,7 @@ div.polaroid img {
 
 .exam-progress-fill {
   height: 100%;
-  background: #00528c;
+  background: var(--accent-color, #00528c);
   transition: width 0.2s ease;
 }
 
@@ -172,7 +172,7 @@ div.polaroid img {
   padding: 4px 10px;
   border-radius: 999px;
   background: #eef3f7;
-  color: #00528c;
+  color: var(--accent-color, #00528c);
 }
 
 .exam-timer-slide {
@@ -230,7 +230,7 @@ div.polaroid img {
 }
 
 .slide-card {
-  min-height: 560px;
+  min-height: var(--slide-min-height, 640px);
   border: 1px solid #ddd;
   border-radius: 10px;
   background: white;
@@ -257,11 +257,11 @@ div.polaroid img {
 }
 
 .branded-logo-strip img {
-  height: 56px;
+  height: var(--logo-height, 84px);
 }
 
 .branded-content {
-  background: #00528c;
+  background: var(--accent-color, #00528c);
   color: white;
   padding: 36px;
   flex: 1;
@@ -282,7 +282,7 @@ div.polaroid img {
 .slide-heading {
   font-size: 1.3rem;
   font-weight: 600;
-  color: #00528c;
+  color: var(--accent-color, #00528c);
 }
 
 .slide-text {
@@ -294,10 +294,10 @@ div.polaroid img {
 .preview-part-heading {
   margin-top: 24px;
   padding-bottom: 4px;
-  border-bottom: 2px solid #00528c;
+  border-bottom: 2px solid var(--accent-color, #00528c);
   font-size: 1.1rem;
   font-weight: 700;
-  color: #00528c;
+  color: var(--accent-color, #00528c);
 }
 
 .preview-entry {
@@ -407,7 +407,7 @@ div.polaroid img {
 .test-display-name {
   font-size: 1.6rem;
   font-weight: 700;
-  color: #00528c;
+  color: var(--accent-color, #00528c);
   text-align: center;
   margin: 8px 0;
 }
@@ -524,9 +524,9 @@ div.polaroid img {
 }
 
 .slide-nav #next-btn {
-  background: #00528c;
+  background: var(--accent-color, #00528c);
   color: white;
-  border-color: #00528c;
+  border-color: var(--accent-color, #00528c);
 }
 
 .slide-nav #next-btn:disabled {

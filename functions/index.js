@@ -1079,3 +1079,78 @@ exports.enrollmentWebhook = onRequest(
     }
   }
 )
+
+// ── reportStorylineEvent ────────────────────────────────────────────────────
+// Called directly via plain fetch (no Firebase SDK, no auth) by the
+// exported Storyline player — player-src/ is a fully standalone bundle
+// with zero Firebase connectivity otherwise (see dataSource.ts, which only
+// ever fetches its own version.json), so this is its only way to report
+// anything back once uploaded to a WordPress test centre. No auth check:
+// this necessarily runs in an examiner's browser at a random test centre
+// with no way to embed a real secret, so it's shaped-input-only, matching
+// the already-public nature of the exported player itself. Every event is
+// logged to storyline_events regardless of type; only 'violation' events
+// also send an email (test completion isn't exceptional, so it's just a
+// record) to config/storyline.notificationEmail — a dedicated field, kept
+// separate from config/canvas.notificationEmail since these are a
+// different concern with a different intended recipient.
+exports.reportStorylineEvent = onRequest(
+  { secrets: [RESEND_API_KEY], cors: true },
+  async (req, res) => {
+    if (req.method !== 'POST') {
+      res.status(405).send('Method not allowed')
+      return
+    }
+
+    const { type, subtype, testDisplayName, centreName, testNumber, examinerName, candidateName, details } = req.body || {}
+    if (type !== 'violation' && type !== 'completed') {
+      res.status(400).send('Invalid type')
+      return
+    }
+
+    const db = admin.firestore()
+    try {
+      await db.collection('storyline_events').add({
+        type,
+        subtype: subtype || null,
+        testDisplayName: testDisplayName || null,
+        centreName: centreName || null,
+        testNumber: testNumber || null,
+        examinerName: examinerName || null,
+        candidateName: candidateName || null,
+        details: details || null,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      })
+    } catch (err) {
+      console.error('reportStorylineEvent: failed to log event', err)
+      res.status(500).send('Internal error')
+      return
+    }
+
+    if (type === 'violation') {
+      try {
+        const configSnap = await db.doc('config/storyline').get()
+        const notificationEmail = configSnap.data()?.notificationEmail
+        const apiKey = RESEND_API_KEY.value()
+        if (notificationEmail && apiKey) {
+          await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              from: 'RaterSystem <notifications@lenguax.com>',
+              to: notificationEmail,
+              subject: `Test violation — ${testDisplayName || 'Unknown test'} (${subtype || 'unspecified'})`,
+              text: `A test violation was reported.\n\nTest: ${testDisplayName || '—'}\nCentre: ${centreName || '—'}\nTest number: ${testNumber || '—'}\nExaminer: ${examinerName || '—'}\nCandidate: ${candidateName || '—'}\n\n${details || ''}`,
+            }),
+          })
+        }
+      } catch (err) {
+        // Don't fail the request over a failed email — the event is
+        // already logged in Firestore regardless.
+        console.error('reportStorylineEvent: failed to send email', err)
+      }
+    }
+
+    res.status(200).json({ ok: true })
+  }
+)

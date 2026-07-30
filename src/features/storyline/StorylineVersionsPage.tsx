@@ -129,16 +129,16 @@ export function StorylineVersionsPage() {
         window.alert('No Script Template found — set one up first.')
         return
       }
-      previewStorylineVersion(resolveItems(template.slides, test?.variables, version.slotContent ?? {}, selectedParts(version), `${test?.name} — ${version.versionLabel}`))
+      previewStorylineVersion(resolveItems(template.slides, test?.variables, version.slotContent ?? {}, selectedParts(version), `${test?.name} — ${version.versionLabel}`), template.theme)
     } else {
-      previewStorylineVersion(version.items)
+      previewStorylineVersion(version.items, template?.theme)
     }
   }
 
   async function handleExport(version: StorylineVersion) {
     if (!test) return
     try {
-      await exportStorylineVersion(test, version)
+      await exportStorylineVersion(test, version, template?.theme)
     } catch (err) {
       window.alert(`Export failed: ${String(err)}`)
     }
