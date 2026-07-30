@@ -84,9 +84,9 @@ export function TestDrawer({ open, onClose, test }: Props) {
         candidateName: test.candidateName,
         candidateNationality: test.candidateNationality,
         testType: test.testType,
-        durationSeconds: test.durationSeconds,
+        durationSeconds: test.durationSeconds ?? undefined,
         status: test.status,
-        testId: test.testId,
+        testId: test.testId ?? undefined,
         category: test.category ?? 'rater_course',
         courseTag: test.courseTag ?? 'unset',
         dayLabel: test.dayLabel ?? '',
@@ -256,7 +256,7 @@ export function TestDrawer({ open, onClose, test }: Props) {
               <Label>Category</Label>
               <Controller name="category" control={control} render={({ field }) => (
                 <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger><SelectValue>{field.value === 'standardization' ? 'In-session' : 'Certification'}</SelectValue></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="rater_course">Certification</SelectItem>
                     <SelectItem value="standardization">In-session</SelectItem>
