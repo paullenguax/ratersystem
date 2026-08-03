@@ -31,10 +31,11 @@ export const TEST_TYPES: StorylineTestType[] = [
 const schema = z.object({
   name: z.string().min(1, 'Required'),
   description: z.string().optional(),
+  wpTestId: z.string().optional(),
 })
 type FormData = z.infer<typeof schema>
 
-const EMPTY: FormData = { name: '', description: '' }
+const EMPTY: FormData = { name: '', description: '', wpTestId: '' }
 
 async function fetchTemplate(): Promise<StorylineTemplate | null> {
   const snap = await getDoc(doc(db, 'storyline_template', 'current'))
@@ -66,7 +67,7 @@ export function StorylineTestDrawer({ open, onClose, test }: Props) {
 
   useEffect(() => {
     if (open) {
-      reset(test ? { name: test.name, description: test.description ?? '' } : EMPTY)
+      reset(test ? { name: test.name, description: test.description ?? '', wpTestId: test.wpTestId != null ? String(test.wpTestId) : '' } : EMPTY)
       setActive(test?.active ?? true)
       setTestType(test?.testType)
       setVariables(test?.variables ?? {})
@@ -74,12 +75,14 @@ export function StorylineTestDrawer({ open, onClose, test }: Props) {
   }, [open, test, reset])
 
   async function onSubmit(data: FormData) {
+    const trimmedWpTestId = data.wpTestId?.trim()
     const payload = {
       name: data.name,
       description: data.description ?? '',
       active,
       testType: testType ?? null,
       variables,
+      wpTestId: trimmedWpTestId ? Number(trimmedWpTestId) : null,
     }
     if (isEdit) {
       await updateDoc(doc(db, 'storyline_tests', test.id), payload)
@@ -123,6 +126,12 @@ export function StorylineTestDrawer({ open, onClose, test }: Props) {
           <div className="space-y-1">
             <Label>Description</Label>
             <Textarea {...register('description')} rows={3} />
+          </div>
+
+          <div className="space-y-1">
+            <Label>WordPress Test ID</Label>
+            <Input {...register('wpTestId')} placeholder="e.g. 3 — wp_teac_tests.id / Test_id on the live site" inputMode="numeric" />
+            <p className="text-xs text-muted-foreground">Required before this test's Parts/rules can sync to WordPress for dynamic pooling.</p>
           </div>
 
           <label className="flex items-center gap-2 text-sm cursor-pointer select-none">

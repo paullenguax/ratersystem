@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { collection, getDocs } from 'firebase/firestore'
 import { useReactTable, getCoreRowModel, getSortedRowModel, flexRender, type ColumnDef, type SortingState } from '@tanstack/react-table'
-import { Plus, ListVideo, FileText, Blocks, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
+import { Plus, ListVideo, FileText, Blocks, Shuffle, FileEdit, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import type { StorylineTest } from '@/types'
 import { StorylineTestDrawer } from './StorylineTestDrawer'
@@ -55,6 +55,13 @@ export function StorylineTestsPage() {
           <Button
             variant="ghost"
             size="sm"
+            onClick={() => navigate(`/test-versions/${row.original.id}/content`)}
+          >
+            <FileEdit className="size-4 mr-1" /> Content
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => navigate(`/test-versions/${row.original.id}`)}
           >
             <ListVideo className="size-4 mr-1" /> Versions
@@ -90,6 +97,9 @@ export function StorylineTestsPage() {
           </Button>
           <Button variant="outline" nativeButton={false} render={<Link to="/test-versions/parts" />}>
             <Blocks className="size-4 mr-2" /> Parts Library
+          </Button>
+          <Button variant="outline" nativeButton={false} render={<Link to="/test-versions/themes" />}>
+            <Shuffle className="size-4 mr-2" /> Unmixable Themes
           </Button>
           <Button onClick={() => { setSelectedTest(undefined); setDrawerOpen(true) }}>
             <Plus className="size-4 mr-2" /> Add test type

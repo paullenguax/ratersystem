@@ -16,6 +16,8 @@ import { StorylineVersionEditorPage } from '@/features/storyline/StorylineVersio
 import { StorylineTemplateEditorPage } from '@/features/storyline/StorylineTemplateEditorPage'
 import { StorylinePartsPage } from '@/features/storyline/StorylinePartsPage'
 import { StorylinePartEditorPage } from '@/features/storyline/StorylinePartEditorPage'
+import { StorylineThemeRulesPage } from '@/features/storyline/StorylineThemeRulesPage'
+import { StorylineTestContentEditorPage } from '@/features/storyline/StorylineTestContentEditorPage'
 import { SessionsPage } from '@/features/sessions/SessionsPage'
 import { AssignmentsPage } from '@/features/assignments/AssignmentsPage'
 import { AssignmentReviewPage } from '@/features/assignments/AssignmentReviewPage'
@@ -74,6 +76,8 @@ export default function App() {
                 <Route path="test-versions/template" element={<ProtectedRoute allowedRoles={['admin']}><StorylineTemplateEditorPage /></ProtectedRoute>} />
                 <Route path="test-versions/parts" element={<ProtectedRoute allowedRoles={['admin']}><StorylinePartsPage /></ProtectedRoute>} />
                 <Route path="test-versions/parts/:partId/edit" element={<ProtectedRoute allowedRoles={['admin']}><StorylinePartEditorPage /></ProtectedRoute>} />
+                <Route path="test-versions/themes" element={<ProtectedRoute allowedRoles={['admin']}><StorylineThemeRulesPage /></ProtectedRoute>} />
+                <Route path="test-versions/:testId/content" element={<ProtectedRoute allowedRoles={['admin']}><StorylineTestContentEditorPage /></ProtectedRoute>} />
                 <Route path="test-versions/:testId" element={<ProtectedRoute allowedRoles={['admin']}><StorylineVersionsPage /></ProtectedRoute>} />
                 <Route path="test-versions/:testId/versions/:versionId/edit" element={<ProtectedRoute allowedRoles={['admin']}><StorylineVersionEditorPage /></ProtectedRoute>} />
                 <Route path="sessions"    element={<ProtectedRoute allowedRoles={['admin']}><SessionsPage /></ProtectedRoute>} />

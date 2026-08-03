@@ -8,6 +8,7 @@ admin.initializeApp()
 const CANVAS_CLIENT_SECRET = defineSecret('CANVAS_CLIENT_SECRET')
 const WEBHOOK_SECRET = defineSecret('ENROLLMENT_WEBHOOK_SECRET')
 const RESEND_API_KEY = defineSecret('RESEND_API_KEY')
+const STORYLINE_SYNC_SECRET = defineSecret('STORYLINE_SYNC_SECRET')
 const BENCHMARK_SERVICE_ACCOUNT_KEY = defineSecret('BENCHMARK_SERVICE_ACCOUNT_KEY')
 const CANVAS_URL = 'https://courses.lenguax.com'
 const CANVAS_CLIENT_ID = '10000000000002'
@@ -1152,5 +1153,93 @@ exports.reportStorylineEvent = onRequest(
     }
 
     res.status(200).json({ ok: true })
+  }
+)
+
+// ── getStorylineSyncData ─────────────────────────────────────────────────
+// Polled by a WordPress cron job (see TEAC-Plugin-master/includes/
+// class-teac-storyline-sync.php in the sibling Storyline-Replacement repo)
+// to sync Part/theme/rule *metadata* (never content) down into WP-adjacent
+// MySQL for dynamic Part-pooling selection — see /home/paul/.claude/plans/
+// encapsulated-drifting-corbato.md §4. WordPress polls rather than
+// Firestore pushing: no mysql driver or outbound-DB precedent exists in
+// this codebase, and the droplet is self-hosted (not a managed Cloud SQL
+// instance reachable via a proxy), so an outbound connection from here
+// would mean exposing MySQL's port or building a tunnel that doesn't exist
+// today, for no real gain over polling.
+//
+// Resolves each Part's `testTypes` (a list of TEAC role-type *labels*, e.g.
+// "Approach ATC") into concrete `wpTestId`s here, server-side, so
+// WordPress never needs to understand Firestore's testType-label matching
+// — it just gets a flat list of (part, wpTestId) pairs to upsert. A Part
+// with no testTypes (undefined/empty = eligible for every type, the
+// established convention — see StorylinePart.testTypes) is expanded
+// against every synced Test, not skipped. Only published Parts are
+// included (drafts/archived excluded) — themes/rules have no publish
+// lifecycle of their own, so all of them sync.
+exports.getStorylineSyncData = onRequest(
+  { secrets: [STORYLINE_SYNC_SECRET] },
+  async (req, res) => {
+    const secret = req.headers['x-sync-secret']
+    if (!secret || secret !== STORYLINE_SYNC_SECRET.value()) {
+      res.status(401).send('Unauthorized')
+      return
+    }
+
+    const db = admin.firestore()
+    try {
+      const [partsSnap, themesSnap, rulesSnap, testsSnap] = await Promise.all([
+        db.collection('storyline_parts').where('status', '==', 'published').get(),
+        db.collection('storyline_themes').get(),
+        db.collection('storyline_theme_rules').get(),
+        db.collection('storyline_tests').get(),
+      ])
+
+      const testsWithWpId = testsSnap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(t => t.wpTestId != null)
+
+      const parts = partsSnap.docs.map(d => {
+        const p = d.data()
+        return {
+          firestoreId: d.id,
+          partNumber: p.partNumber,
+          // Active for selection purposes: not explicitly deactivated and
+          // not a reserve/backup — matches the eligibility posture already
+          // used in StorylinePartsPage/StorylineVersionEditorPage.
+          active: p.active !== false && !p.isBackup,
+          themeFirestoreId: p.themeId ?? null,
+          // Only ever consumed by the one-off legacy exposure backfill
+          // (Phase D) — lets that script map an old content-pool code
+          // (parsed from a historical booking's TestVersion) to a specific
+          // synced wp_teac_storyline_parts row, without WordPress needing
+          // any Firestore access of its own.
+          legacyCode: p.legacyCode ?? null,
+        }
+      })
+
+      const partTestTypePairs = []
+      for (const d of partsSnap.docs) {
+        const p = d.data()
+        const eligibleTests = p.testTypes?.length
+          ? testsWithWpId.filter(t => p.testTypes.includes(t.testType))
+          : testsWithWpId
+        for (const t of eligibleTests) {
+          partTestTypePairs.push({ partFirestoreId: d.id, wpTestId: t.wpTestId })
+        }
+      }
+
+      const themes = themesSnap.docs.map(d => ({ firestoreId: d.id, label: d.data().label }))
+      const themeRules = rulesSnap.docs.map(d => ({
+        firestoreId: d.id,
+        part1ThemeFirestoreId: d.data().part1ThemeId,
+        part4ThemeFirestoreId: d.data().part4ThemeId,
+      }))
+
+      res.status(200).json({ parts, partTestTypePairs, themes, themeRules })
+    } catch (err) {
+      console.error('getStorylineSyncData error:', err)
+      res.status(500).send('Internal error')
+    }
   }
 )

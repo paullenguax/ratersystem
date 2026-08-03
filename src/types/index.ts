@@ -357,6 +357,36 @@ export interface StorylineTest {
   // references, so the same pooled Part resolves correctly for whichever
   // Test is using it.
   variables?: Record<string, string>
+  // Draft-editable raw fills for whole-test (partNumber-undefined) slides
+  // — preamble, accept/reject test name, test data confirm, checklist,
+  // closing. Successor to StorylineVersion.slotContent for this content:
+  // under dynamic Part pooling there's no more one hand-built Version per
+  // candidate to hold a per-candidate copy, so this is now the single
+  // canonical set shared by every dynamically-composed candidate instance
+  // of this Test. StorylineVersion keeps its own slotContent too, for the
+  // still-supported hand-built Practice/example-test path — a Version's
+  // own value there is an override, this is the shared default.
+  slotContent?: Record<string, StorylineSlotContent>
+  // draft -> published lifecycle for slotContent/items below, same
+  // posture as StorylinePart/StorylineVersion. A Test can be actively
+  // edited (name/testType/variables) without this being 'published' —
+  // it only gates whether slotContent has been resolved into items.
+  status?: 'draft' | 'published'
+  // Resolved snapshot of ONLY the whole-test slides (resolveItems() run
+  // the same way it already runs for a Part today, parts={}) — does NOT
+  // include previewParts-driven content, since which 4 Parts a candidate
+  // gets isn't known until WP assigns them at booking time. Those slides'
+  // previewContent comes back empty here by design; the exported player
+  // re-derives it client-side once it has the real 4 Parts (see
+  // player-src/shared/resolveItems.ts).
+  items?: StorylineItem[]
+  publishedAt?: Timestamp
+  // The corresponding wp_teac_tests.id / Test_id on the live WordPress
+  // side. Entered by hand once per Test — there's no reliable name-
+  // matching heuristic between the two systems (TestName strings on each
+  // side have drifted independently). Required before this Test can be
+  // included in the WP sync.
+  wpTestId?: number
   createdAt?: Timestamp
   createdBy?: string
 }
@@ -392,11 +422,49 @@ export interface StorylinePart {
   // existed before this field did — nobody had to go back and tag ~90
   // Parts retroactively just to keep using them).
   testTypes?: StorylineTestType[]
+  // Which topic this Part's content covers — only meaningful for
+  // partNumber 1 or 4 (Part 2/3 don't participate in the unmixable-pair
+  // rule below). Points at storyline_themes/{id}, not free text: pairing
+  // needs reliable equality, and a free label drifts/typos silently.
+  themeId?: string
+  // Historical content-pool code from TEAC_Test_Versions.xlsx (e.g.
+  // "001-A-1-001" for a Part 1, "W001" for a shared Part 2 pool) — set by
+  // hand for whichever of this Part's content was transcribed from a
+  // legacy Storyline version. Undefined for Parts authored fresh here
+  // with no legacy equivalent. Used only by the one-off WP exposure
+  // backfill, never read at export/selection time.
+  legacyCode?: string
   // Keyed by TemplateSlide.id, only for slides whose partNumber matches.
   slotContent: Record<string, StorylineSlotContent>
   createdAt?: Timestamp
   createdBy?: string
   publishedAt?: Timestamp
+}
+
+// A shared topic vocabulary for tagging Part 1 / Part 4 content (see
+// StorylinePart.themeId) — deliberately one flat list usable by either
+// part number rather than two parallel lists, since the same real-world
+// topic (e.g. "Weather") can plausibly show up in either. Distinct from
+// StorylineTheme above, which is unrelated look-and-feel config — the
+// name clash with that existing type is why this one is called
+// StorylinePartTheme, not StorylineTheme.
+export interface StorylinePartTheme {
+  id: string
+  label: string
+  createdAt?: Timestamp
+  createdBy?: string
+}
+
+// A forbidden Part-1-theme / Part-4-theme pairing — enforced by WP's
+// selection logic so one candidate's Part 1 and Part 4 never share a
+// topic. Admin-managed via StorylineThemeRulesPage.
+export interface StorylineThemeRule {
+  id: string
+  part1ThemeId: string
+  part4ThemeId: string
+  note?: string
+  createdAt?: Timestamp
+  createdBy?: string
 }
 
 export interface StorylineVersion {

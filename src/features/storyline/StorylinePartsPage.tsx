@@ -2,11 +2,12 @@ import { Fragment, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { collection, getDocs, getDoc, addDoc, doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'
-import { ArrowLeft, Plus, Pencil, Rocket, Copy, Archive as ArchiveIcon, Trash2, PauseCircle, PlayCircle, Shield, ShieldOff, Tag } from 'lucide-react'
+import { ArrowLeft, Plus, Pencil, Rocket, Copy, Archive as ArchiveIcon, Trash2, PauseCircle, PlayCircle, Shield, ShieldOff, Tag, Download } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
-import type { StorylinePart, StorylinePartNumber, StorylineTemplate, StorylineTestType } from '@/types'
+import type { StorylinePart, StorylinePartNumber, StorylinePartTheme, StorylineTemplate, StorylineTestType } from '@/types'
 import { missingPartContent } from './partCompleteness'
+import { exportStorylinePart } from './exportStoryline'
 import { TEST_TYPES } from './StorylineTestDrawer'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -22,6 +23,11 @@ async function fetchParts(): Promise<StorylinePart[]> {
 async function fetchTemplate(): Promise<StorylineTemplate | null> {
   const snap = await getDoc(doc(db, 'storyline_template', 'current'))
   return snap.exists() ? ({ id: snap.id, ...snap.data() } as StorylineTemplate) : null
+}
+
+async function fetchThemes(): Promise<StorylinePartTheme[]> {
+  const snap = await getDocs(collection(db, 'storyline_themes'))
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }) as StorylinePartTheme).sort((a, b) => a.label.localeCompare(b.label))
 }
 
 // Base UI's <Select.Value> displays the raw `value` unless given a render
@@ -53,6 +59,7 @@ export function StorylinePartsPage() {
 
   const { data: parts = [], isLoading } = useQuery({ queryKey: ['storyline_parts'], queryFn: fetchParts })
   const { data: template } = useQuery({ queryKey: ['storyline_template'], queryFn: fetchTemplate })
+  const { data: themes = [] } = useQuery({ queryKey: ['storyline_themes'], queryFn: fetchThemes })
 
   const filtered = useMemo(() => {
     const s = search.trim().toLowerCase()
@@ -109,6 +116,16 @@ export function StorylinePartsPage() {
     queryClient.invalidateQueries({ queryKey: ['storyline_parts'] })
   }
 
+  const [exportingId, setExportingId] = useState<string | null>(null)
+  async function handleExport(part: StorylinePart) {
+    setExportingId(part.id)
+    try {
+      await exportStorylinePart(part)
+    } finally {
+      setExportingId(null)
+    }
+  }
+
   async function handleArchive(part: StorylinePart) {
     if (!window.confirm(`Archive "${part.label}"?`)) return
     await updateDoc(doc(db, 'storyline_parts', part.id), { status: 'archived' })
@@ -144,12 +161,36 @@ export function StorylinePartsPage() {
     queryClient.invalidateQueries({ queryKey: ['storyline_parts'] })
   }
 
+  // Metadata for the one-off legacy exposure backfill (see /home/paul/
+  // .claude/plans/encapsulated-drifting-corbato.md §6) — never read at
+  // export/selection time, so safe to edit regardless of publish status,
+  // same reasoning as label rename above.
+  async function handleSetLegacyCode(part: StorylinePart) {
+    const next = window.prompt(
+      "Legacy content-pool code from TEAC_Test_Versions.xlsx (e.g. \"001-A-1-001\" for a Part 1, \"W001\" for a shared Part 2 pool). Leave blank if this Part has no legacy equivalent:",
+      part.legacyCode ?? '',
+    )
+    if (next === null) return
+    const trimmed = next.trim()
+    if (trimmed === (part.legacyCode ?? '')) return
+    await updateDoc(doc(db, 'storyline_parts', part.id), { legacyCode: trimmed || null })
+    queryClient.invalidateQueries({ queryKey: ['storyline_parts'] })
+  }
+
   // Eligibility tagging, not test content — safe to edit regardless of
   // publish status, same reasoning as label rename above.
   async function handleToggleTestType(part: StorylinePart, type: StorylineTestType) {
     const current = part.testTypes ?? []
     const next = current.includes(type) ? current.filter(t => t !== type) : [...current, type]
     await updateDoc(doc(db, 'storyline_parts', part.id), { testTypes: next })
+    queryClient.invalidateQueries({ queryKey: ['storyline_parts'] })
+  }
+
+  // Topic tagging, not test content — safe to edit regardless of publish
+  // status, same reasoning as label rename / test-type tagging above.
+  // Only meaningful for Part 1/4 (see StorylinePart.themeId).
+  async function handleSetTheme(part: StorylinePart, themeId: string | null) {
+    await updateDoc(doc(db, 'storyline_parts', part.id), { themeId: !themeId || themeId === 'none' ? null : themeId })
     queryClient.invalidateQueries({ queryKey: ['storyline_parts'] })
   }
 
@@ -253,13 +294,14 @@ export function StorylinePartsPage() {
                 <TableHead>Active</TableHead>
                 <TableHead>Backup</TableHead>
                 <TableHead>Test types</TableHead>
+                <TableHead>Theme</TableHead>
                 <TableHead />
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                     {parts.length === 0 ? 'No Parts yet.' : 'No Parts match this filter.'}
                   </TableCell>
                 </TableRow>
@@ -290,6 +332,23 @@ export function StorylinePartsPage() {
                         </div>
                       </TableCell>
                       <TableCell>
+                        {part.partNumber === 1 || part.partNumber === 4 ? (
+                          <Select value={part.themeId ?? 'none'} onValueChange={v => handleSetTheme(part, v)}>
+                            <SelectTrigger className="w-36">
+                              <SelectValue placeholder="No theme">
+                                {(v: string) => v === 'none' ? 'No theme' : (themes.find(t => t.id === v)?.label ?? v)}
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">No theme</SelectItem>
+                              {themes.map(t => <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
                         <div className="flex gap-1 justify-end">
                           {part.status === 'draft' && (
                             <Button variant="ghost" size="sm" nativeButton={false} render={<Link to={`/test-versions/parts/${part.id}/edit`} />}>
@@ -304,12 +363,20 @@ export function StorylinePartsPage() {
                           <Button variant="ghost" size="sm" onClick={() => handleRename(part)}>
                             <Tag className="size-4 mr-1" /> Rename
                           </Button>
+                          <Button variant="ghost" size="sm" onClick={() => handleSetLegacyCode(part)}>
+                            <Tag className="size-4 mr-1" /> {part.legacyCode ? `Legacy: ${part.legacyCode}` : 'Legacy code'}
+                          </Button>
                           <Button variant="ghost" size="sm" onClick={() => setEditingTestTypesId(editingTestTypesId === part.id ? null : part.id)}>
                             <Tag className="size-4 mr-1" /> Test types
                           </Button>
                           <Button variant="ghost" size="sm" onClick={() => handleDuplicate(part)}>
                             <Copy className="size-4 mr-1" /> Duplicate
                           </Button>
+                          {part.status === 'published' && (
+                            <Button variant="ghost" size="sm" onClick={() => handleExport(part)} disabled={exportingId === part.id}>
+                              <Download className="size-4 mr-1" /> {exportingId === part.id ? 'Exporting…' : 'Export'}
+                            </Button>
+                          )}
                           {part.status === 'published' && (
                             <Button variant="ghost" size="sm" onClick={() => handleToggleActive(part)}>
                               {part.active === false
@@ -339,7 +406,7 @@ export function StorylinePartsPage() {
                     </TableRow>
                     {editingTestTypesId === part.id && (
                       <TableRow>
-                        <TableCell colSpan={7} className="bg-muted/30">
+                        <TableCell colSpan={8} className="bg-muted/30">
                           <div className="flex flex-wrap gap-2 py-1">
                             {TEST_TYPES.map(t => {
                               const selected = part.testTypes?.includes(t) ?? false

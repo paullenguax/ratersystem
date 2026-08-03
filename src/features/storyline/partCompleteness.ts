@@ -1,14 +1,15 @@
 import type { TemplateSlide, StorylineSlotContent, StorylinePartNumber } from '@/types'
 
-// What's missing from a Part's authored content, checked against the
-// template slides tagged for its Part number — used to block Publish on an
-// incomplete Part (e.g. a slide needing a recording that was never
+// What's missing from a Part's (or, with partNumber undefined, a Test's
+// whole-test slides') authored content, checked against the template
+// slides tagged for that Part number — used to block Publish on
+// incomplete content (e.g. a slide needing a recording that was never
 // uploaded, discovered only once a real test tried to use it). Mirrors
 // resolveItems.ts's understanding of what each slotSpec needs, but checks
 // presence instead of producing resolved output.
 export function missingPartContent(
   slides: TemplateSlide[],
-  partNumber: StorylinePartNumber,
+  partNumber: StorylinePartNumber | undefined,
   slotContent: Record<string, StorylineSlotContent>,
 ): string[] {
   const missing: string[] = []

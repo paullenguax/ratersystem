@@ -1,5 +1,5 @@
 import JSZip from 'jszip'
-import type { StorylineItem, StorylineTest, StorylineTheme, StorylineVersion } from '@/types'
+import type { StorylineItem, StorylineTest, StorylineTheme, StorylineVersion, StorylinePart, StorylineTemplate, StorylineSlotContent } from '@/types'
 
 // Bundles the built player shell (public/player-shell/, from player-src/ via
 // `npm run build:player`) together with this version's item data into a
@@ -126,6 +126,27 @@ function sanitizeFilename(s: string): string {
   return s.trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '') || 'storyline'
 }
 
+// Fetches examiner.html (gated into examiner.php)/candidate.html and every
+// asset the manifest says they depend on, straight into `zip` at its root —
+// shared by exportStorylineVersion() (the legacy one-zip-per-Version path)
+// and exportPlayerShell() (the new dynamic-pooling path, where this is
+// uploaded once and reused by every candidate instead of once per Version).
+async function bundlePlayerShellFiles(zip: JSZip): Promise<void> {
+  const manifest = await fetchManifest()
+  const assetFiles = collectAssetFiles(manifest, ['examiner.html', 'candidate.html'])
+  const filesToFetch = ['examiner.html', 'candidate.html', ...assetFiles]
+
+  for (const name of filesToFetch) {
+    const res = await fetch(`${import.meta.env.BASE_URL}player-shell/${name}`)
+    if (!res.ok) throw new Error(`Failed to fetch player-shell asset: ${name}`)
+    if (name === 'examiner.html') {
+      zip.file('examiner.php', PHP_GATE_HEADER + (await res.text()) + PHP_GATE_FOOTER)
+    } else {
+      zip.file(name, await res.blob())
+    }
+  }
+}
+
 const EXTENSION_BY_CONTENT_TYPE: Record<string, string> = {
   'audio/mpeg': 'mp3',
   'audio/mp3': 'mp3',
@@ -140,25 +161,20 @@ const EXTENSION_BY_CONTENT_TYPE: Record<string, string> = {
   'image/webp': 'webp',
 }
 
-// Downloads every image/audio URL referenced across `items` exactly once
-// (multiple slides can reuse the same upload — combo-image slides always
-// do, see resolveItems.ts's deriveComboImages), adds each to `zip` under
-// media/, and returns a deep copy of `items` with every media URL rewritten
-// to that local relative path. Concurrency isn't capped — a version's
-// total media count is small (a handful of clips/images per Part), not
-// worth the complexity of a queue.
-async function bundleMedia(zip: JSZip, items: StorylineItem[]): Promise<StorylineItem[]> {
-  // Keyed by the in-flight *promise*, not the resolved filename — items
-  // are processed concurrently below, so two slides sharing one URL (combo-
-  // image slides always do) can both reach this before either fetch has
-  // resolved. Caching only the resolved value would let both pass the
-  // dedup check and download/embed the same file twice under different
-  // names; caching the promise itself means the second caller just awaits
-  // the first's in-flight fetch instead of starting its own.
+// Downloads a media URL into `zip` under media/ (deduped by in-flight
+// *promise*, not resolved filename — callers can run concurrently against
+// the same URL, e.g. a combo-image slide reusing an upload; caching only
+// the resolved value would let both pass the dedup check and download/embed
+// the same file twice under different names) and returns the local relative
+// path to use in its place. Shared by bundleMedia() (resolved StorylineItem
+// media, the legacy per-Version export) and bundleSlotContentMedia() (raw
+// StorylineSlotContent media, the new per-Test/per-Part exports) — each
+// export call creates its own instance, so dedup only ever applies within
+// one export, never stale across separate calls.
+function createLocalMediaResolver(zip: JSZip) {
   const localPathPromiseByUrl = new Map<string, Promise<string>>()
   let counter = 0
-
-  function localPathFor(url: string, kind: 'image' | 'audio'): Promise<string> {
+  return function localPathFor(url: string, kind: 'image' | 'audio'): Promise<string> {
     const existing = localPathPromiseByUrl.get(url)
     if (existing) return existing
     const promise = (async () => {
@@ -173,6 +189,17 @@ async function bundleMedia(zip: JSZip, items: StorylineItem[]): Promise<Storylin
     localPathPromiseByUrl.set(url, promise)
     return promise
   }
+}
+
+// Downloads every image/audio URL referenced across `items` exactly once
+// (multiple slides can reuse the same upload — combo-image slides always
+// do, see resolveItems.ts's deriveComboImages), adds each to `zip` under
+// media/, and returns a deep copy of `items` with every media URL rewritten
+// to that local relative path. Concurrency isn't capped — a version's
+// total media count is small (a handful of clips/images per Part), not
+// worth the complexity of a queue.
+async function bundleMedia(zip: JSZip, items: StorylineItem[]): Promise<StorylineItem[]> {
+  const localPathFor = createLocalMediaResolver(zip)
 
   return Promise.all(items.map(async item => {
     if (!item.media) return item
@@ -189,22 +216,52 @@ async function bundleMedia(zip: JSZip, items: StorylineItem[]): Promise<Storylin
   }))
 }
 
+// Same idea as bundleMedia() above, but over raw (unresolved)
+// StorylineSlotContent instead of resolved StorylineItem media — needed
+// because exportStorylineTest()/exportStorylinePart() ship raw slotContent
+// for the player to resolve client-side (see player-src/shared/
+// resolveItems.ts), not a pre-resolved item list.
+async function bundleSlotContentMedia(
+  zip: JSZip,
+  slotContent: Record<string, StorylineSlotContent>,
+): Promise<Record<string, StorylineSlotContent>> {
+  const localPathFor = createLocalMediaResolver(zip)
+
+  const entries = await Promise.all(
+    Object.entries(slotContent).map(async ([slideId, slot]) => {
+      const next: StorylineSlotContent = { ...slot }
+      if (slot.images?.length) {
+        next.images = await Promise.all(slot.images.map(url => (url ? localPathFor(url, 'image') : url)))
+      }
+      if (slot.audio) {
+        const audio = { ...slot.audio }
+        if (audio.intro) audio.intro = await localPathFor(audio.intro, 'audio')
+        if (audio.recordings?.length) {
+          audio.recordings = await Promise.all(audio.recordings.map(url => (url ? localPathFor(url, 'audio') : url)))
+        }
+        if (audio.volumeCheck) audio.volumeCheck = await localPathFor(audio.volumeCheck, 'audio')
+        next.audio = audio
+      }
+      return [slideId, next] as const
+    }),
+  )
+  return Object.fromEntries(entries)
+}
+
+function downloadZip(zip: JSZip, filename: string): Promise<void> {
+  return zip.generateAsync({ type: 'blob' }).then(zipBlob => {
+    const url = URL.createObjectURL(zipBlob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
+  })
+}
+
 export async function exportStorylineVersion(test: StorylineTest, version: StorylineVersion, theme?: StorylineTheme) {
-  const manifest = await fetchManifest()
-  const assetFiles = collectAssetFiles(manifest, ['examiner.html', 'candidate.html'])
-
   const zip = new JSZip()
-  const filesToFetch = ['examiner.html', 'candidate.html', ...assetFiles]
-
-  for (const name of filesToFetch) {
-    const res = await fetch(`${import.meta.env.BASE_URL}player-shell/${name}`)
-    if (!res.ok) throw new Error(`Failed to fetch player-shell asset: ${name}`)
-    if (name === 'examiner.html') {
-      zip.file('examiner.php', PHP_GATE_HEADER + (await res.text()) + PHP_GATE_FOOTER)
-    } else {
-      zip.file(name, await res.blob())
-    }
-  }
+  await bundlePlayerShellFiles(zip)
 
   const bundledItems = await bundleMedia(zip, version.items)
   zip.file('version.json', JSON.stringify(bundledItems, null, 2))
@@ -215,11 +272,74 @@ export async function exportStorylineVersion(test: StorylineTest, version: Story
   zip.file('theme.json', JSON.stringify(theme ?? {}, null, 2))
   zip.file('HOW-TO-ACTIVATE.txt', buildActivationInstructions(test, version))
 
-  const zipBlob = await zip.generateAsync({ type: 'blob' })
-  const url = URL.createObjectURL(zipBlob)
+  await downloadZip(zip, `${sanitizeFilename(test.name)}-${sanitizeFilename(version.versionLabel)}.zip`)
+}
+
+// --- Dynamic Part-pooling exports (see /home/paul/.claude/plans/
+// encapsulated-drifting-corbato.md §2) ---
+//
+// Instead of one hand-assembled Version exported as one zip, the shell,
+// the shared template, each Test's whole-test content, and each Part are
+// exported independently — WordPress assigns a candidate's 4 Parts at
+// booking time (not built yet — see the plan doc) and the player composes
+// the final content client-side from whichever small static fragments that
+// assignment points at (player-src/shared/dataSource.ts's loadDynamicItems,
+// via a &testId=&p1=&p2=&p3=&p4= launch URL). Each of the 4 functions below
+// is uploaded once per publish/re-publish of the thing it exports, not once
+// per candidate — the whole point being nothing runs at booking-accept
+// time, preserving the same offline-resilience property the original
+// per-Version zip had.
+
+// Uploaded once to a fixed WP location (e.g. /tests/player/), re-run only
+// when the shell itself is rebuilt/redeployed — not per Test, not per Part.
+export async function exportPlayerShell(theme?: StorylineTheme) {
+  const zip = new JSZip()
+  await bundlePlayerShellFiles(zip)
+  zip.file('theme.json', JSON.stringify(theme ?? {}, null, 2))
+  await downloadZip(zip, 'player-shell.zip')
+}
+
+// Uploaded once to a fixed shared location (e.g. /tests/player/), re-run
+// whenever the template changes. A single JSON file, not a zip — the
+// template has no media of its own (images/audio live on slotContent, i.e.
+// Test/Part content, not the template).
+export function exportStorylineTemplate(template: StorylineTemplate) {
+  const blob = new Blob([JSON.stringify({ slides: template.slides }, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `${sanitizeFilename(test.name)}-${sanitizeFilename(version.versionLabel)}.zip`
+  a.download = 'template.json'
   a.click()
   URL.revokeObjectURL(url)
+}
+
+// The whole-test (partNumber-undefined) slide content half of what
+// exportStorylineVersion() used to bundle — uploaded once per Test-content
+// publish, to e.g. /tests/player/tests/<testId>/. Ships raw slotContent,
+// not a pre-resolved item list: the player already needs template.json raw
+// (for previewParts/combo-image derivation against whichever 4 Parts it
+// gets), so it's simpler — and avoids reconciling a partial pre-resolve
+// against live Part data — to have it run resolveItems() exactly once,
+// client-side, over everything together.
+export async function exportStorylineTest(test: StorylineTest) {
+  const zip = new JSZip()
+  const bundledSlotContent = await bundleSlotContentMedia(zip, test.slotContent ?? {})
+  const fragment = { name: test.name, variables: test.variables ?? {}, slotContent: bundledSlotContent }
+  zip.file('test.json', JSON.stringify(fragment, null, 2))
+  await downloadZip(zip, `test-${sanitizeFilename(test.name)}.zip`)
+}
+
+// The main workhorse — one already-published Part, exported once, ever,
+// per publish/re-publish (~90 times for the initial legacy migration, then
+// incrementally after). Uploaded to e.g.
+// /tests/player/parts/<partNumber>/<partId>/. Each Part's media now
+// downloads/bundles exactly once, permanently — a strict improvement over
+// the old per-Version bundleMedia(), which re-downloaded/re-bundled a
+// Part's media into every Version that ever referenced it.
+export async function exportStorylinePart(part: StorylinePart) {
+  const zip = new JSZip()
+  const bundledSlotContent = await bundleSlotContentMedia(zip, part.slotContent)
+  const fragment = { slotContent: bundledSlotContent }
+  zip.file('part.json', JSON.stringify(fragment, null, 2))
+  await downloadZip(zip, `part-${part.partNumber}-${sanitizeFilename(part.label)}.zip`)
 }

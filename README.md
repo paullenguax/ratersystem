@@ -273,7 +273,13 @@ phase.
   `StorylinePartsPage` (Parts Library, filterable by Part number/status/
   backup, archived hidden by default via a "Show archived" toggle since they
   pile up and rarely matter day-to-day) → `StorylinePartEditorPage`
-  (slot-filling for that Part's slides only). A published Version or Part's
+  (slot-filling for that Part's slides only). `StorylineThemeRulesPage`
+  (`/test-versions/themes`) manages the shared theme vocabulary and
+  unmixable Part-1/4 pairs (see "Dynamic Part-pooling" below).
+  `StorylineTestContentEditorPage` (`/test-versions/:testId/content`, "Content"
+  from the Test Types list) is the whole-test-slide equivalent of
+  `StorylinePartEditorPage`, also part of the dynamic Part-pooling work
+  below. A published Version or Part's
   *content* is read-only — edits require "Duplicate" to spin up a new draft
   — but a Part's `label` can be renamed regardless of status (it's
   organizational metadata, not test content, so renaming doesn't touch the
@@ -447,7 +453,10 @@ phase.
   the built-in defaults themselves at the same time (logo 56→84px, slide
   max-width 960→1100px, slide min-height 560→640px) as a "tidy up the first
   few slides" pass.
-- **Export**: `exportStoryline.ts` reads `public/player-shell/.vite/
+- **Export** (the legacy, still-live one-zip-per-Version path used by the
+  Practice/example-test flow — the dynamic Part-pooling exports are a
+  separate set of functions in the same file, documented under "Dynamic
+  Part-pooling" below): `exportStoryline.ts` reads `public/player-shell/.vite/
   manifest.json` (emitted by the player build) to discover every built file
   without hardcoding filenames — walking each chunk's `imports`, `css`, *and*
   `assets` (the last covers static files like the candidate logo that a
@@ -480,19 +489,226 @@ phase.
   manual; WordPress's existing booking/random-assignment/exposure-tracking
   logic needs zero changes, since it only ever sees "a Test_id has a
   TestUrl," not which tool built the content behind it.
+- **Dynamic Part-pooling (Phase A, built 2026-08-01)**: groundwork for
+  replacing whole-Version candidate assignment with true per-candidate Part
+  pooling — see `/home/paul/.claude/plans/encapsulated-drifting-corbato.md`
+  for the full design (kept for reference; only Phase A, Firestore schema +
+  authoring UI, is built — the player runtime-composition redesign and all
+  WP/MySQL-side selection/sync/backfill work described there are later
+  phases, not started). `StorylinePart` gained `themeId` (Part 1/4 only —
+  points at a new flat `storyline_themes` collection, one shared vocabulary
+  for both, edited inline via `StorylinePartsPage`'s new Theme column) and
+  `legacyCode` (unused until the legacy exposure backfill phase; set by hand
+  per Part transcribed from old Storyline content). A new
+  `storyline_theme_rules` collection holds forbidden Part-1-theme/Part-4-
+  theme pairs — content must never combine across a pair in one candidate's
+  session — managed on a new `StorylineThemeRulesPage`
+  (`/test-versions/themes`, linked from the Test Types nav). This is a
+  direct, functioning port of an old prototype's schema
+  (`Storyline-Replacement/Dynamic-Interlocutor-Tool-main/
+  manage_unmixable_themes.php`) that existed there but, per that repo's own
+  `int_tool_test_versions` table, was never actually wired to any real
+  selection logic — enforcement here is still a later (WP-side) phase, but
+  the rule data itself is now real and admin-editable. `StorylineTest`
+  gained its own `slotContent`/`status`/`items`/`publishedAt` — the
+  successor to `StorylineVersion.slotContent` for whole-test
+  (preamble/accept-reject/checklist/closing) slides, since dynamic pooling
+  means there's no more one hand-built Version per candidate to hold a
+  per-candidate copy of that content. Edited on a new
+  `StorylineTestContentEditorPage` (`/test-versions/:testId/content`, linked
+  as "Content" from the Test Types list), with the same draft/publish/
+  immutability posture as a Part, reusing `resolveItems()`/
+  `partCompleteness.ts`'s `missingPartContent()` (which now accepts
+  `partNumber: undefined` to mean "whole-test slides," not just a specific
+  Part number) — `previewParts`-driven slides intentionally resolve empty
+  here, since which 4 Parts a candidate actually gets isn't known until
+  WordPress assigns them at booking time; the not-yet-built exported player
+  is what will re-derive that content client-side once it has the real 4
+  Parts. `StorylineTest` also gained `wpTestId` (entered via the Test Types
+  edit drawer) — the live `wp_teac_tests.id`/`Test_id` this Test corresponds
+  to, required before it can be included in the (not yet built) WP sync.
+  `StorylineVersion`/`exportStorylineVersion()`/`StorylineVersionEditorPage`
+  are all untouched by this phase and keep serving the existing hand-built
+  Practice/example-test path exactly as before.
+- **Dynamic Part-pooling (Phase B, built 2026-08-01)**: the player
+  runtime-composition redesign. Instead of one hand-picked Version exported
+  as one zip, four new functions in `exportStoryline.ts` export reusable
+  fragments independently — `exportPlayerShell()` (shell + `theme.json`,
+  uploaded once, re-run only when the shell code changes),
+  `exportStorylineTemplate()` (`template.json`, just `{slides}`, no media),
+  `exportStorylineTest()` (`test.json` — `{name, variables, slotContent}`,
+  **raw** slot content, not pre-resolved — see below — plus that Test's own
+  bundled media), and `exportStorylinePart()` (`part.json` — `{slotContent}`
+  + bundled media, the main workhorse, run once per Part publish). All four
+  are wired to "Export" buttons: on `StorylineTemplateEditorPage` (two
+  buttons, disabled while there are unsaved edits so a stale export can't
+  silently ship), on `StorylinePartsPage` (per published Part), and on the
+  new `StorylineTestContentEditorPage` (per published Test). Media bundling
+  reuses the exact `bundleMedia()` dedup pattern (promise-cached by URL, not
+  resolved filename) via a new shared `createLocalMediaResolver()` factory
+  — `bundleSlotContentMedia()` is the raw-slotContent counterpart used by
+  the two new per-Test/per-Part exporters, since they ship unresolved
+  content instead of a resolved `StorylineItem[]`. Net effect vs. the old
+  model: a Part's media now downloads/bundles exactly once, ever, instead
+  of once per Version that ever referenced it.
+
+  **Player side**: `player-src/shared/resolveItems.ts` and
+  `deriveComboImages.ts` are new, deliberately-duplicated ports of the
+  admin app's same-named files (same precedent as `player-src/shared/
+  types.ts` already duplicating `StorylineItem` — player-src stays a fully
+  self-contained TS project). `player-src/shared/types.ts` gained the raw
+  (unresolved) shapes needed to call it — `TemplateSlide`,
+  `StorylineSlotContent`, `StorylinePartFragment` (just `{slotContent}` —
+  lighter than the admin app's full authoring `StorylinePart`, the player
+  has no use for id/label/status/theme), `StorylineTestFragment`. A real
+  simplification made during the build, worth knowing if you're comparing
+  against the original design doc: `test.json` ships **raw** `slotContent`
+  rather than a pre-resolved `StorylineItem[]` snapshot — the original plan
+  was to ship the Test's whole-test content pre-resolved and separately
+  re-derive just the `previewParts` slides client-side once real Parts were
+  known. Simpler in practice: since the player needs `template.json` raw
+  regardless (for slide ordering/combo-image scoping), it just runs
+  `resolveItems()` **once**, client-side, over everything together
+  (`template.slides` + `test.variables` + `test.slotContent` + the 4 fetched
+  Part fragments) — identical in shape to what `StorylineVersionEditorPage`'s
+  admin Preview already does, no separate partial-resolve/merge step to get
+  subtly wrong. `player-src/shared/session.ts`'s `getParams()` gained
+  `testId`/`p1`-`p4` — a dynamic launch URL looks like
+  `examiner.php?testId=…&p1=…&p2=…&p3=…&p4=…&id=…&tc=…&in=…&cn=…&check=…`,
+  same `id`/`tc`/`in`/`cn`/`check` as the legacy path. `isDynamic` requires
+  all 4 part IDs present, not just `testId` — a partially-specified URL
+  falls back to the legacy `version.json` fetch rather than trying to
+  resolve with missing Parts. `dataSource.ts`'s `loadItems()` branches on
+  three modes now: preview (localStorage, unchanged), dynamic
+  (`loadDynamicItems()` — fetches `template.json` + `tests/<testId>/
+  test.json` + the 4 `parts/<n>/<id>/part.json` in parallel, then calls the
+  ported `resolveItems()`), and legacy (single `version.json` fetch,
+  unchanged) — the legacy path is untouched, so every already-deployed
+  Version zip keeps working exactly as before. `loadTheme()` didn't need to
+  change — `theme.json` is fetched from the same relative location either
+  way, just exported once via `exportPlayerShell()` for dynamic launches
+  instead of per-zip.
+
+  **Verification performed**: `tsc -b`, `npx tsc -p player-src/tsconfig.json
+  --noEmit`, and `npm run build` (both the player and main builds) all
+  clean. The ported `resolveItems()` was exercised directly (not just
+  type-checked) against fabricated fixtures covering variable substitution,
+  `{topic}`/`{questions}` splicing, `previewParts` cross-part compilation,
+  and per-scope combo-image derivation — all passed. **Not verified**: a
+  real browser run of the new export buttons or a real dynamic-launch URL
+  end to end — no admin login credentials were available in that session.
+  Worth doing before relying on this in production: log in as admin, click
+  each new Export button once for real, and hand-construct a dynamic launch
+  URL against the exported fragments to confirm the full composed player
+  renders correctly.
+- **Dynamic Part-pooling (Phase C, built 2026-08-01)**: WP/MySQL schema +
+  sync, in the *sibling* `Storyline-Replacement/TEAC-Plugin-master` repo
+  (not this one — that's the live WordPress plugin's source, checked out
+  locally at `/home/paul/Programs/Storyline-Replacement/`), plus one new
+  Cloud Function here. `getStorylineSyncData` (`functions/index.js`,
+  secret-gated via a new `STORYLINE_SYNC_SECRET`, same pattern as
+  `enrollmentWebhook`) reads published `storyline_parts` + all
+  `storyline_themes`/`storyline_theme_rules` + `storyline_tests` (for
+  `wpTestId`), and — the one piece of real logic in it — resolves each
+  Part's `testTypes` (role-type *labels*) into concrete `wpTestId`s
+  server-side, so WordPress never needs to understand Firestore's
+  label-matching; a Part with no `testTypes` (eligible for every type, the
+  established convention) expands against every synced Test. New,
+  entirely additive tables on the WP side (`wp_teac_storyline_parts`,
+  `_part_test_types`, `_themes`, `_theme_rules`, `_part_exposure` — exact
+  schema in the plan doc §3) live in a new, deliberately self-contained
+  `TEAC-Plugin-master/includes/class-teac-storyline-sync.php` — created via
+  `dbDelta` (not woven into `class-teac-centres-activator.php`'s existing
+  68-step sequential migration, to keep this reviewable/deployable
+  independently of that file). WordPress **polls** the Cloud Function
+  (`wp_cron`, every 5 minutes, plus a manual "Sync now" button on a new
+  standalone `Storyline Sync` admin page) rather than the reverse — no
+  mysql driver or outbound-DB precedent exists in this codebase, and the
+  droplet is self-hosted, not a managed Cloud SQL instance reachable via a
+  proxy, so pushing outward would mean exposing MySQL's port or building a
+  tunnel that doesn't exist today. Sync is a full reconciliation, not just
+  upsert — rows whose `firestore_id` no longer appears in a sync are
+  deleted, so an unpublished/deleted Part or removed theme rule actually
+  disappears from WP too. **Wiring**: `class-teac-centres.php` (the
+  plugin's main loader) gained one `require_once` + one `TEAC_Storyline_
+  Sync::init()` call, following the exact pattern its other classes already
+  use — nothing about the *existing* booking/version-selection code paths
+  was touched.
+- **Dynamic Part-pooling (Phase D, built 2026-08-01)**: the legacy exposure
+  backfill tool — also in the sibling WP plugin repo, `TEAC-Plugin-master/
+  includes/class-teac-storyline-backfill-cli.php`, a WP-CLI-only command
+  (`wp teac-storyline backfill-legacy-exposure`, self-guarded on
+  `defined('WP_CLI')` so it has zero effect on normal page loads). `Storyline
+  Part.legacyCode` (Phase A) now has a real editor — a "Legacy code" action
+  on `StorylinePartsPage`, same `window.prompt` pattern as Rename — and
+  syncs down via Phase C's `getStorylineSyncData`. The real spreadsheet
+  (`Storyline-Replacement/Spec Updates/TEAC_Test_Versions.xlsx`) was opened
+  and machine-parsed directly (not just referenced) to build `TEAC-Plugin-
+  master/includes/storyline-legacy-version-codes.json` — 103 real, verified
+  Version-Name → 4-part-code mappings from the "Complete Tests" tab (3 rows
+  legitimately skipped: `ADP 004`–`006` are literal "no new version" gaps
+  in the pool). This confirmed the spec's original illustrative decomposition
+  example (`Airline_001` → `001_1..4`) was a simplification — real per-part
+  codes are differently shaped per part type (e.g. `001-A-1-001` / `W001` /
+  `A-3-001` / `A-4-001`), so the backfill is a **lookup** against this JSON,
+  not a parsing algorithm. Also confirmed directly against the sheet:
+  `Approach 007`'s Part 1 code really is missing its dash (`037F-1-007`),
+  and `Airline 008`/`009` really do share one internal tracking hash
+  (harmless — spreadsheet-internal, not a DB key). The CLI command's join
+  chain: historical `wp_teac_booking_checks.TestVersion` → `wp_teac_
+  test_versions.TestUrl` → (regex, `--url-pattern`-overridable) a
+  `RoleType-NNN`-shaped folder segment → (dash→space) a Version Name →
+  the JSON lookup's 4 codes → `wp_teac_storyline_parts.legacy_code` → a
+  local part id → one `wp_teac_storyline_part_exposure` row per resolved
+  Part (`source='legacy_backfill'`, `UNIQUE(Booking_id, storyline_part_id)`
+  makes re-runs after fixing a mapping issue safe via `INSERT IGNORE`).
+  **Defaults to a dry-run** that reports match-rate stats and sample
+  failures at every stage — nothing is written without an explicit
+  `--commit`. **The genuinely unverified step, called out explicitly in the
+  script's own docblock**: whether production `TestUrl` values actually
+  contain that folder-segment shape — only the spreadsheet's separate
+  *backup*-URL column was confirmed to have it (no droplet DB access was
+  available to check production directly), which is exactly why the dry-run
+  exists and `--url-pattern` is overridable rather than hardcoded. **Real
+  verification performed**: the regex-extraction → dash/space-normalize →
+  JSON-lookup logic was pulled out and exercised standalone (`php`, not
+  just read) against the confirmed backup-URL shapes plus deliberately
+  broken inputs (no match at all, matches but not in the lookup, partial
+  legacy_code coverage correctly excluded rather than silently
+  under-resolving) — all passed. **Not verified**: an actual run (dry or
+  otherwise) against the real production database — do that, read the
+  match-rate report, and adjust `--url-pattern` if needed before ever
+  passing `--commit`.
 - **Not built yet**: the real WordPress portal integration (Phase 2 "full
   replacement" — single fixed player URL, signed short-lived tokens instead
   of the current export's reused MD5 gate, Firestore-served content instead
   of a baked-in `version.json`; deliberately shelved until there's an actual
   decision to retire the WordPress-side portal, since the export-based path
-  above already meets the urgent need without it), actual pooling/random-
-  selection logic for picking an unseen Part per candidate (the current
-  system already does this at the whole-*Version* level — many hand-built
-  versions per test type, one randomly assigned per candidate with real
-  per-candidate exposure tracking; a newer not-yet-live rescoping to
-  per-*Part* tracking exists to allow Part-mixing without losing that
-  history — neither is built here yet), and historical exposure backfill
-  from old version-code naming conventions.
+  above already meets the urgent need without it); Phase E of the dynamic
+  Part-pooling work above — the actual selection function
+  (`assign_storyline_parts_for_booking()`) and the live cutover of the 5
+  existing whole-Version-picking call sites in the WP plugin (plan doc §5,
+  the only remaining phase that changes real candidate-facing behavior —
+  deliberately not started without an explicit go-ahead); a real
+  browser+login verification pass on Phase B's export buttons/dynamic-launch
+  URL and a real database run of Phase D's backfill CLI (both "Not
+  verified" call-outs above); and multiple named Script
+  Templates (today `storyline_template` is a single fixed doc, `'current'`
+  — hardcoded as that literal string in six different files — implicitly
+  shared by every Test; no test type has needed a structurally different
+  template yet). **Confirmed 2026-07-30: no real need yet, but there's a
+  clear path when one shows up** — turn `storyline_template` into a real
+  collection (same shape `storyline_parts`/`storyline_tests` already have)
+  and give each `StorylineTest` a `templateId` reference instead of every
+  page hardcoding `'current'`. This is also the prerequisite for a Part 5:
+  `StorylinePartNumber` is a fixed `1|2|3|4` union (baked into 4 places —
+  the type, two `PART_NUMBERS` constants, `resolveItems.ts`'s combo-image
+  loop, and the template editor's Part-tag picker) plus the Parts Library's
+  filter buttons — widening it only makes sense once per-Test template
+  selection exists, otherwise every 4-Part test would be forced to carry
+  an irrelevant 5th slot. Don't build either speculatively; when a real
+  5-Part (or otherwise structurally different) test type actually comes
+  up, do both together.
 - **Violation/completion reporting** (built 2026-07-25): the exported
   player otherwise has zero backend connectivity at all (`dataSource.ts`
   only ever fetches its own `version.json`) — `reportStorylineEvent()`
@@ -541,4 +757,4 @@ phase.
 
 ## Last updated
 
-2026-07-30
+2026-08-01

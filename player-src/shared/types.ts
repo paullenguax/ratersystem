@@ -11,6 +11,78 @@ export interface CandidateInstructionLine {
   color?: string
 }
 
+// --- Raw (unresolved) shapes, needed for client-side resolveItems() ---
+// Ported alongside the resolved StorylineItem shape above for the same
+// reason: player-src stays a fully self-contained TypeScript project. Keep
+// in sync with src/types/index.ts (TemplateSlide/StorylineSlotContent/
+// StorylinePartNumber) and src/features/storyline/resolveItems.ts.
+
+export type StorylinePartNumber = 1 | 2 | 3 | 4
+
+export interface StorylineSlotContent {
+  topic?: string
+  questions?: string[]
+  images?: string[]
+  audio?: {
+    intro?: string
+    recordings?: string[]
+    volumeCheck?: string
+  }
+}
+
+export interface TemplateSlide {
+  id: string
+  order: number
+  kind: TemplateSlideKind
+  label: string
+  candidateState?: string
+  partNumber?: StorylinePartNumber
+  scriptText: string
+  notes?: string
+  candidateInstructions?: CandidateInstructionLine[]
+  checklistItems?: ChecklistItem[]
+  startsTestTimer?: boolean
+  nextButtonLabel?: string
+  previewParts?: StorylinePartNumber[]
+  previewExclude?: boolean
+  timing?: {
+    prepSeconds?: number
+    responseSeconds?: number
+  }
+  slotSpec: {
+    topic?: boolean
+    questions?: boolean
+    images?: number
+    audio?: 'none' | 'single' | 'set'
+    audioSetSize?: number
+    volumeCheck?: boolean
+    maxPlays?: number
+    variables?: string[]
+  }
+}
+
+// The shape of one fetched parts/<n>/<partId>/part.json fragment — just
+// enough for resolveItems() to merge, not the full authoring StorylinePart
+// (no id/label/status/theme/etc. — the player has no use for those).
+export interface StorylinePartFragment {
+  slotContent: Record<string, StorylineSlotContent>
+}
+
+// The shape of one fetched tests/<testId>/test.json fragment. Raw
+// (unresolved) slotContent, not a pre-resolved StorylineItem[] snapshot —
+// deliberate simplification vs. shipping a partial resolve and merging it
+// with freshly-resolved Part content client-side: the player already needs
+// template.json raw (for previewParts/combo-image derivation regardless),
+// so it's simpler and more correct to run resolveItems() exactly once,
+// client-side, over everything together — identical in shape to what
+// StorylineVersionEditorPage's admin Preview already does — than to
+// reconcile a pre-baked whole-test snapshot against live Part data.
+export interface StorylineTestFragment {
+  name: string
+  variables?: Record<string, string>
+  slotContent: Record<string, StorylineSlotContent>
+}
+
 export interface ChecklistItem {
   text: string
   icon?: 'screen' | 'speaker'
