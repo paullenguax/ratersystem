@@ -142,6 +142,23 @@ div.polaroid img {
   flex: 1;
 }
 
+/* Shown only when flags.json's `ungated: true` was exported for this
+   Version — a visual reminder that the usual audio/checklist/test-data
+   confirmation gating is skipped, so nobody mistakes this run for a
+   fully-gated real exam. See examiner.ts's showUngatedBadge(). */
+.ungated-badge {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #92400e;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  white-space: nowrap;
+}
+
 .exam-progress-label {
   font-size: 0.85rem;
   color: #666;

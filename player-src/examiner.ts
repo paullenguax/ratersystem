@@ -1,6 +1,6 @@
 import type { StorylineItem, ChecklistItem } from './shared/types'
 import { getParams, channelName } from './shared/session'
-import { loadItems, loadTheme } from './shared/dataSource'
+import { loadItems, loadTheme, loadFlags } from './shared/dataSource'
 import { applyTheme } from './shared/applyTheme'
 import { initOnlineStatusDot } from './shared/onlineStatus'
 import { renderInlineMarkup } from './shared/markup'
@@ -16,6 +16,17 @@ import teacLogo from './assets/teac-logo.png'
 const BRANDED_KINDS = new Set(['accept_reject_test', 'test_data_confirm', 'admin_checklist'])
 
 const { sessionId, isPreview } = getParams()
+// Set (if applicable) once loadFlags() resolves, before the first render —
+// see the Promise.all in the boot sequence at the bottom of this file.
+// Unlike isPreview, this does NOT affect violation/completion reporting or
+// the Accept/Reject screen's session-lock — an ungated export may still be
+// used with a real candidate (e.g. a backup version an admin wants faster
+// to run through), unlike Preview, which is never real. It only relaxes
+// the Next-button confirmation gating below (bypassesGating()).
+let isUngated = false
+function bypassesGating(): boolean {
+  return isPreview || isUngated
+}
 const channel = new BroadcastChannel(channelName(sessionId))
 let candidateWindow: Window | null = null
 // "{test.name} — {version.versionLabel}" — the one item.testDisplayName is
@@ -722,12 +733,13 @@ function updateNavState() {
   const allPlayed = clips.every(c => (playCounts.get(c.url) ?? 0) > 0)
   const checklistDone = !item?.checklistItems?.length || item.checklistItems.every((_, i) => checkedItems.has(i))
   const testDataDone = item?.kind !== 'test_data_confirm' || testDataComplete()
-  // Preview mode lets an admin click through freely regardless of gating.
-  // The last slide still respects gating (e.g. a closing slide's audio must
-  // finish playing) but is no longer unconditionally disabled — Next
-  // becomes "Finish test" there instead of stopping dead, see
+  // Preview mode (and an ungated Version, see bypassesGating()) lets the
+  // examiner click through freely regardless of gating. The last slide
+  // still respects gating (e.g. a closing slide's audio must finish
+  // playing) but is no longer unconditionally disabled — Next becomes
+  // "Finish test" there instead of stopping dead, see
   // renderCurrentSlide()/finishTest().
-  nextBtn.disabled = !isPreview && (!allPlayed || !checklistDone || !testDataDone)
+  nextBtn.disabled = !bypassesGating() && (!allPlayed || !checklistDone || !testDataDone)
 }
 
 function renderCurrentSlide() {
@@ -882,7 +894,22 @@ document.getElementById('notes-close')?.addEventListener('click', () => {
 
 loadTheme().then(applyTheme)
 
-loadItems().then(loaded => {
+function showUngatedBadge() {
+  const header = document.querySelector('.exam-header')
+  if (!header) return
+  const badge = document.createElement('span')
+  badge.className = 'ungated-badge'
+  badge.textContent = 'UNGATED — confirmation gating skipped'
+  header.appendChild(badge)
+}
+
+// Flags load in parallel with items — both need to be settled before the
+// first render, since updateNavState() (called from renderCurrentSlide())
+// reads isUngated. Theme is independent of rendering (just CSS custom
+// properties) so it stays a separate fire-and-forget above.
+Promise.all([loadFlags(), loadItems()]).then(([flags, loaded]) => {
+  isUngated = !!flags.ungated
+  if (isUngated) showUngatedBadge()
   items = loaded
   testDisplayName = items.find(i => i.kind === 'accept_reject_test')?.testDisplayName
   preloadAllMedia(items)

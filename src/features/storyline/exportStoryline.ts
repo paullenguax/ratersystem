@@ -270,6 +270,12 @@ export async function exportStorylineVersion(test: StorylineTest, version: Story
   // an export built before this feature simply has no theme.json at all
   // and the player falls back to its own built-in defaults.
   zip.file('theme.json', JSON.stringify(theme ?? {}, null, 2))
+  // Same "separate small file, absent = default" pattern as theme.json —
+  // an export built before this feature has no flags.json at all, and the
+  // player treats that identically to `{ungated: false}` (full gating,
+  // today's only behavior). See StorylineVersion.ungated for what this
+  // actually changes in the player.
+  zip.file('flags.json', JSON.stringify({ ungated: !!version.ungated }, null, 2))
   zip.file('HOW-TO-ACTIVATE.txt', buildActivationInstructions(test, version))
 
   await downloadZip(zip, `${sanitizeFilename(test.name)}-${sanitizeFilename(version.versionLabel)}.zip`)

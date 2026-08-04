@@ -62,6 +62,26 @@ export async function loadItems(): Promise<StorylineItem[]> {
   return [...items].sort((a, b) => a.order - b.order)
 }
 
+// Export-time flags (currently just `ungated` — see StorylineVersion.
+// ungated in the main app's types). Only meaningful for the legacy
+// per-Version export path; the dynamic-pooling path doesn't fetch this at
+// all (no per-candidate concept of "skip the confirm gating" exists there
+// yet). Absent flags.json (any export built before this feature, or
+// preview mode, which never fetches this) = every flag false = today's
+// only behavior, same absent-is-safe pattern as loadTheme() below.
+export async function loadFlags(): Promise<{ ungated?: boolean }> {
+  const { isPreview, isDynamic } = getParams()
+  if (isPreview || isDynamic) return {}
+
+  try {
+    const res = await fetch('./flags.json')
+    if (!res.ok) return {}
+    return (await res.json()) as { ungated?: boolean }
+  } catch {
+    return {}
+  }
+}
+
 // A separate file/key from items, not a sibling field on them — theme is
 // global template config, not per-item, and keeping it separate means an
 // export built before this feature (no theme.json at all) just falls back

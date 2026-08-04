@@ -4,7 +4,7 @@ import {
   collection, query, where, getDocs, doc, getDoc,
   addDoc, updateDoc, serverTimestamp,
 } from 'firebase/firestore'
-import { ArrowLeft, Plus, Pencil, Eye, Rocket, Copy, Archive as ArchiveIcon, Download } from 'lucide-react'
+import { ArrowLeft, Plus, Pencil, Eye, Rocket, Copy, Archive as ArchiveIcon, Download, Lock, LockOpen } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
 import type { StorylinePart, StorylinePartNumber, StorylineTemplate, StorylineTest, StorylineVersion } from '@/types'
@@ -144,6 +144,14 @@ export function StorylineVersionsPage() {
     }
   }
 
+  // Metadata, not content — safe to toggle regardless of publish status
+  // (see StorylineVersion.ungated), same reasoning as StorylinePart's
+  // isBackup/active toggles.
+  async function handleToggleUngated(version: StorylineVersion) {
+    await updateDoc(doc(db, 'storyline_versions', version.id), { ungated: !version.ungated })
+    queryClient.invalidateQueries({ queryKey: ['storyline_versions', testId] })
+  }
+
   async function handleArchive(version: StorylineVersion) {
     if (!window.confirm(`Archive "${version.versionLabel}"?`)) return
     await updateDoc(doc(db, 'storyline_versions', version.id), { status: 'archived' })
@@ -179,13 +187,14 @@ export function StorylineVersionsPage() {
                 <TableHead>Status</TableHead>
                 <TableHead>Parts / slides filled</TableHead>
                 <TableHead>Published</TableHead>
+                <TableHead>Gating</TableHead>
                 <TableHead />
               </TableRow>
             </TableHeader>
             <TableBody>
               {versions.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                     No versions yet.
                   </TableCell>
                 </TableRow>
@@ -203,7 +212,17 @@ export function StorylineVersionsPage() {
                       {version.publishedAt ? version.publishedAt.toDate().toLocaleDateString() : '—'}
                     </TableCell>
                     <TableCell>
+                      <Badge variant={version.ungated ? 'outline' : 'secondary'}>
+                        {version.ungated ? 'ungated' : 'gated'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
                       <div className="flex gap-1 justify-end">
+                        <Button variant="ghost" size="sm" onClick={() => handleToggleUngated(version)}>
+                          {version.ungated
+                            ? <><Lock className="size-4 mr-1" /> Make gated</>
+                            : <><LockOpen className="size-4 mr-1" /> Make ungated</>}
+                        </Button>
                         {version.status === 'draft' && (
                           <Button variant="ghost" size="sm" nativeButton={false} render={<Link to={`/test-versions/${testId}/versions/${version.id}/edit`} />}>
                             <Pencil className="size-4 mr-1" /> Edit

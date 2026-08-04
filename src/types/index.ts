@@ -480,6 +480,16 @@ export interface StorylineVersion {
   slotContent: Record<string, StorylineSlotContent>
   // Resolved output (see StorylineItem) — empty until Publish computes it.
   items: StorylineItem[]
+  // Skips the real-exam confirmation gating in the exported player — Next
+  // is never blocked waiting for audio-completion/checklist-ticking/test-
+  // data-confirm on this Version, same posture Preview already has. Does
+  // NOT change violation/completion reporting or the Accept/Reject
+  // screen's session-lock behavior — those still fire normally, since an
+  // ungated export (e.g. a backup version an admin wants faster to run
+  // through) may still be used with a real candidate, unlike Preview.
+  // Metadata, not content — safe to toggle regardless of publish status,
+  // same reasoning as StorylinePart.isBackup/active.
+  ungated?: boolean
   createdAt?: Timestamp
   createdBy?: string
   publishedAt?: Timestamp

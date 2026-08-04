@@ -489,6 +489,25 @@ phase.
   manual; WordPress's existing booking/random-assignment/exposure-tracking
   logic needs zero changes, since it only ever sees "a Test_id has a
   TestUrl," not which tool built the content behind it.
+- **Ungated Versions** (built 2026-08-04, `StorylineVersion.ungated`): a
+  per-Version toggle ("Make ungated"/"Make gated" on `StorylineVersionsPage`,
+  metadata not content — safe regardless of publish status) for exports
+  that don't have a real live booking behind them (backup versions run by a
+  trusted examiner, practice copies, etc.). Exported as a separate
+  `flags.json` alongside `version.json`/`theme.json` — same "absent file =
+  today's default behavior" pattern as `theme.json`, so every already-
+  deployed export keeps working unchanged. In the player, an ungated export
+  behaves like Preview for the Next-button confirmation gating only
+  (`bypassesGating()` in `examiner.ts` — Next is never blocked waiting for
+  audio-completion, checklist-ticking, or the Test Data Confirm fields) —
+  deliberately **not** the same as Preview everywhere: violation/completion
+  reporting and the Accept/Reject screen's session-lock still fire normally,
+  since (unlike Preview) an ungated export might genuinely be run with a
+  real candidate. A small amber "UNGATED" badge appears in the player header
+  whenever this is active, so nobody mistakes the run for a fully-gated real
+  exam. Scoped to the legacy per-Version export path only — the dynamic
+  Part-pooling path (`loadDynamicItems()`) doesn't fetch `flags.json` at
+  all, since there's no per-candidate "skip gating" concept there yet.
 - **Dynamic Part-pooling (Phase A, built 2026-08-01)**: groundwork for
   replacing whole-Version candidate assignment with true per-candidate Part
   pooling — see `/home/paul/.claude/plans/encapsulated-drifting-corbato.md`
