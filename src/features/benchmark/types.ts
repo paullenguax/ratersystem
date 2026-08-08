@@ -30,13 +30,22 @@ export interface BenchmarkItem {
   stem: string
   stimulus: string | null
   audioRef: string | null
-  options: [string, string, string, string]
+  // 2 options for binary minimal-pair items, 4 for standard MCQ
+  options: string[]
   correct: 0 | 1 | 2 | 3
   feedback: string
   active: boolean
   flagged: boolean
   notes: string
   correctedAt?: { seconds: number } | null
+  // Field-test items: sampled into live sittings (see TrialPlayer.jsx's
+  // samplePilotItems) but excluded from scoring. pairKey groups related
+  // minimal-pair items so the sampler shows at most one per sitting.
+  // pilotAttempts is maintained server-side by incrementPilotItemAttempts —
+  // never set it from the admin form.
+  pilot?: boolean
+  pairKey?: string | null
+  pilotAttempts?: number
 }
 
 export interface BenchmarkResponse {

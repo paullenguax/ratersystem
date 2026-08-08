@@ -483,6 +483,7 @@ const BLANK: Omit<BenchmarkItem, 'id'> = {
   modality: 'reading', form: 'A', active: true, flagged: false,
   stem: '', stimulus: '', audioRef: '',
   options: ['', '', '', ''], correct: 0, feedback: '', notes: '',
+  pilot: false, pairKey: '',
 }
 
 function ItemForm({ initial, onSave, onCancel }: {
@@ -491,8 +492,8 @@ function ItemForm({ initial, onSave, onCancel }: {
   onCancel: () => void
 }) {
   const [form, setForm] = useState<Omit<BenchmarkItem, 'id'>>(
-    initial ? { ...initial, options: [...initial.options] as [string,string,string,string], stimulus: initial.stimulus ?? '', audioRef: initial.audioRef ?? '' }
-            : { ...BLANK, options: [...BLANK.options] as [string,string,string,string] }
+    initial ? { ...initial, options: [...initial.options], stimulus: initial.stimulus ?? '', audioRef: initial.audioRef ?? '' }
+            : { ...BLANK, options: [...BLANK.options] }
   )
   const [saving, setSaving] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
@@ -502,9 +503,17 @@ function ItemForm({ initial, onSave, onCancel }: {
     setForm(f => ({ ...f, [k]: v }))
   }
   function setOption(i: number, v: string) {
-    const opts = [...form.options] as [string,string,string,string]
+    const opts = [...form.options]
     opts[i] = v
     setForm(f => ({ ...f, options: opts }))
+  }
+  function setOptionCount(n: 2 | 4) {
+    setForm(f => {
+      const opts = n > f.options.length
+        ? [...f.options, ...Array(n - f.options.length).fill('')]
+        : f.options.slice(0, n)
+      return { ...f, options: opts, correct: Math.min(f.correct, n - 1) as 0 | 1 | 2 | 3 }
+    })
   }
 
   function handleAudioUpload(file: File) {
@@ -528,7 +537,11 @@ function ItemForm({ initial, onSave, onCancel }: {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setSaving(true)
-    const item = { ...form, band: Number(form.band) as 4|5|6, stimulus: form.stimulus?.trim() || null, audioRef: form.audioRef?.trim() || null }
+    const item = {
+      ...form, band: Number(form.band) as 4|5|6,
+      stimulus: form.stimulus?.trim() || null, audioRef: form.audioRef?.trim() || null,
+      pairKey: form.pilot ? (form.pairKey?.trim() || null) : null,
+    }
     if (initial?.id) {
       await setDoc(doc(db, 'benchmark_items', initial.id), item, { merge: true })
     } else {
@@ -579,7 +592,18 @@ function ItemForm({ initial, onSave, onCancel }: {
           <input type="checkbox" checked={form.active} onChange={e => set('active', e.target.checked)} />
           Active
         </label>
+        <label className="flex items-center gap-2 text-sm cursor-pointer">
+          <input type="checkbox" checked={form.pilot ?? false} onChange={e => set('pilot', e.target.checked)} />
+          Pilot (unscored field-test item)
+        </label>
       </div>
+
+      {form.pilot && (
+        <div className="space-y-1 max-w-xs">
+          <label className="text-xs text-muted-foreground">Pair key (groups related minimal-pair items so the sampler shows at most one per sitting)</label>
+          <Input value={form.pairKey ?? ''} onChange={e => set('pairKey', e.target.value)} placeholder="e.g. l-r, ship-sheep" />
+        </div>
+      )}
 
       <div className="space-y-1">
         <label className="text-xs text-muted-foreground">Stimulus / passage (optional — used by comprehension items)</label>
@@ -617,11 +641,27 @@ function ItemForm({ initial, onSave, onCancel }: {
         <Textarea rows={2} value={form.stem} onChange={e => set('stem', e.target.value)} required className="text-sm" />
       </div>
 
+      <div className="space-y-1">
+        <label className="text-xs text-muted-foreground">Number of options</label>
+        <div className="flex gap-2">
+          {([2, 4] as const).map(n => (
+            <button
+              key={n} type="button" onClick={() => setOptionCount(n)}
+              className={`px-3 py-1 rounded text-xs font-medium border ${
+                form.options.length === n ? 'bg-primary text-primary-foreground border-primary' : 'bg-background border-input hover:bg-muted'
+              }`}
+            >
+              {n} (e.g. {n === 2 ? 'minimal pair' : 'standard MCQ'})
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 gap-3">
-        {OPTION_LABELS.map((label, i) => (
-          <div key={label} className="space-y-1">
-            <label className="text-xs text-muted-foreground">Option {label}</label>
-            <Input value={form.options[i]} onChange={e => setOption(i, e.target.value)} required />
+        {form.options.map((value, i) => (
+          <div key={i} className="space-y-1">
+            <label className="text-xs text-muted-foreground">Option {OPTION_LABELS[i]}</label>
+            <Input value={value} onChange={e => setOption(i, e.target.value)} required />
           </div>
         ))}
       </div>
@@ -630,7 +670,7 @@ function ItemForm({ initial, onSave, onCancel }: {
         <label className="text-xs text-muted-foreground">Correct answer</label>
         <select value={form.correct} onChange={e => set('correct', Number(e.target.value) as 0|1|2|3)}
           className="rounded-md border border-input bg-background px-2 py-1.5 text-sm">
-          {OPTION_LABELS.map((l, i) => <option key={l} value={i}>{l}</option>)}
+          {form.options.map((_, i) => <option key={i} value={i}>{OPTION_LABELS[i]}</option>)}
         </select>
       </div>
 
@@ -667,6 +707,27 @@ function CoverageSummary({ items }: { items: BenchmarkItem[] }) {
           {r.construct}: A {r.A} / B {r.B}
         </span>
       ))}
+    </div>
+  )
+}
+
+function AnswerKeyBalance({ items }: { items: BenchmarkItem[] }) {
+  const counts = [0, 0, 0, 0]
+  items.forEach(i => { counts[i.correct]++ })
+  const total = items.length
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+      <span className="font-medium text-foreground">Answer key balance:</span>
+      {OPTION_LABELS.map((label, i) => {
+        const pct = total > 0 ? Math.round((counts[i] / total) * 100) : 0
+        // Flag anything well above the ~25% expected for 4 evenly-used options.
+        const skewed = pct >= 35
+        return (
+          <span key={label} className={skewed ? 'text-amber-600 font-semibold' : ''}>
+            {label}: {counts[i]} ({pct}%)
+          </span>
+        )
+      })}
     </div>
   )
 }
@@ -748,7 +809,9 @@ function ItemsTab() {
 
   return (
     <div className="space-y-4">
-      <CoverageSummary items={items} />
+      {/* Coverage/balance describe the scored bank — pilot items aren't part of it yet */}
+      <CoverageSummary items={items.filter(i => !i.pilot)} />
+      <AnswerKeyBalance items={items.filter(i => !i.pilot)} />
 
       <div className="flex items-center gap-3 flex-wrap">
         <select
@@ -781,6 +844,7 @@ function ItemsTab() {
                 <th className="px-3 py-2 text-left font-medium">Modality</th>
                 <th className="px-3 py-2 text-left font-medium">Construct</th>
                 <th className="px-3 py-2 text-left font-medium">Correct</th>
+                <th className="px-3 py-2 text-left font-medium">Status</th>
                 <th className="px-3 py-2 text-left font-medium">Active</th>
                 <th className="px-2 py-2"></th>
               </tr>
@@ -797,6 +861,13 @@ function ItemsTab() {
                   <td className="px-3 py-1.5">{item.modality}</td>
                   <td className="px-3 py-1.5">{item.construct}</td>
                   <td className="px-3 py-1.5 font-mono font-semibold">{OPTION_LABELS[item.correct]}</td>
+                  <td className="px-3 py-1.5">
+                    {item.pilot
+                      ? <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200" title={item.pairKey ? `Pair key: ${item.pairKey}` : undefined}>
+                          Pilot{typeof item.pilotAttempts === 'number' ? ` · ${item.pilotAttempts}` : ''}
+                        </span>
+                      : <span className="text-muted-foreground">Live</span>}
+                  </td>
                   <td className="px-3 py-1.5">
                     <button
                       onClick={() => handleToggleActive(item)}
