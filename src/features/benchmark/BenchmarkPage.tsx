@@ -11,7 +11,7 @@ import { benchmarkDb as db, benchmarkAuth, benchmarkStorage, functions } from '@
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { Trash2, Link2, ChevronDown, ChevronRight, Plus, Upload, ExternalLink } from 'lucide-react'
+import { Trash2, Link2, ChevronDown, ChevronRight, ChevronLeft, Plus, Upload, ExternalLink } from 'lucide-react'
 import type { Person } from '@/types'
 import {
   CONSTRUCTS, LEVEL_LABELS, LEVEL_COLOURS,
@@ -704,6 +704,20 @@ function ItemsTab() {
     setEditTarget(null)
   }
 
+  // Saves the item but stays on the edit screen, so Next/Previous can be used
+  // right after saving without a round-trip back to the list.
+  function refreshInPlace() {
+    queryClient.invalidateQueries({ queryKey: ['benchmark_items'] })
+  }
+
+  function goToRelative(delta: number) {
+    if (!editTarget) return
+    const idx = visible.findIndex(i => i.id === editTarget.id)
+    if (idx === -1) return
+    const next = visible[idx + delta]
+    if (next) setEditTarget(next)
+  }
+
   if (view === 'new') return (
     <div className="space-y-4">
       <h2 className="font-medium">New item</h2>
@@ -711,12 +725,26 @@ function ItemsTab() {
     </div>
   )
 
-  if (view === 'edit' && editTarget) return (
-    <div className="space-y-4">
-      <h2 className="font-medium">Edit — <span className="font-mono text-sm">{editTarget.id}</span></h2>
-      <ItemForm initial={editTarget} onSave={refresh} onCancel={() => setView('list')} />
-    </div>
-  )
+  if (view === 'edit' && editTarget) {
+    const idx = visible.findIndex(i => i.id === editTarget.id)
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <h2 className="font-medium">Edit — <span className="font-mono text-sm">{editTarget.id}</span></h2>
+          <div className="flex items-center gap-2">
+            {idx !== -1 && <span className="text-xs text-muted-foreground">{idx + 1} of {visible.length}</span>}
+            <Button type="button" variant="outline" size="sm" onClick={() => goToRelative(-1)} disabled={idx <= 0}>
+              <ChevronLeft className="size-4 mr-1" /> Previous
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => goToRelative(1)} disabled={idx === -1 || idx >= visible.length - 1}>
+              Next <ChevronRight className="size-4 ml-1" />
+            </Button>
+          </div>
+        </div>
+        <ItemForm key={editTarget.id} initial={editTarget} onSave={refreshInPlace} onCancel={() => setView('list')} />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-4">
@@ -752,18 +780,23 @@ function ItemsTab() {
                 <th className="px-3 py-2 text-left font-medium">Band</th>
                 <th className="px-3 py-2 text-left font-medium">Modality</th>
                 <th className="px-3 py-2 text-left font-medium">Construct</th>
+                <th className="px-3 py-2 text-left font-medium">Correct</th>
                 <th className="px-3 py-2 text-left font-medium">Active</th>
                 <th className="px-2 py-2"></th>
               </tr>
             </thead>
             <tbody>
-              {visible.map(item => (
-                <tr key={item.id} className={`border-t hover:bg-muted/20 ${!item.active ? 'opacity-50' : ''}`}>
+              {visible.map((item, i) => (
+                <tr
+                  key={item.id}
+                  className={`border-t hover:bg-muted/40 ${i % 2 === 1 ? 'bg-muted/20' : ''} ${!item.active ? 'opacity-50' : ''}`}
+                >
                   <td className="px-3 py-1.5 font-mono text-muted-foreground">{item.id.slice(0,8)}…</td>
                   <td className="px-3 py-1.5">{item.form}</td>
                   <td className="px-3 py-1.5">{item.band}</td>
                   <td className="px-3 py-1.5">{item.modality}</td>
                   <td className="px-3 py-1.5">{item.construct}</td>
+                  <td className="px-3 py-1.5 font-mono font-semibold">{OPTION_LABELS[item.correct]}</td>
                   <td className="px-3 py-1.5">
                     <button
                       onClick={() => handleToggleActive(item)}
