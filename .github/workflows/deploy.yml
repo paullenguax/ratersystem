@@ -42,6 +42,13 @@ jobs:
 
       - name: Deploy via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        env:
+          # FTP-Deploy-Action was built against Node 20; GitHub now defaults
+          # JS actions to Node 24, whose different DNS resolution order makes
+          # this action's bundled FTP client try IPv6 first and hang before
+          # falling back to IPv4 — surfaces as "Timeout (control socket)".
+          # This pins the action back to the Node version it actually works on.
+          ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
         with:
           server: ${{ secrets.FTP_HOST }}
           username: ${{ secrets.FTP_USERNAME }}
