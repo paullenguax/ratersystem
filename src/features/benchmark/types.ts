@@ -72,6 +72,35 @@ export interface TrialScores {
   indicativeLevel: string
 }
 
+// Drives the candidate player's section order/copy/composition
+// (TrialPlayer.jsx in Benchmark Check reads this from
+// `benchmark_config/sections`). Every section is form-split and scored —
+// pilot items are never assigned to a section directly; they're sampled
+// separately (pilotSampleCount) and woven into whichever section's block
+// matches their modality/construct/band, same as an ordinary item would be.
+export interface TestSectionFilter {
+  modality: 'reading' | 'listening' | 'any'
+  construct: BenchmarkConstruct | 'any'
+  band: 4 | 5 | 6 | 'any'
+}
+
+export interface TestSection {
+  id: string
+  order: number
+  title: string
+  introBody: string
+  showIntro: boolean
+  filter: TestSectionFilter
+}
+
+export interface SectionsConfig {
+  sections: TestSection[]
+  // How many unscored pilot items to sample into a sitting overall (spread
+  // across whichever sections match each sampled item), independent of how
+  // many sections exist.
+  pilotSampleCount: number
+}
+
 export interface BenchmarkResult {
   id: string
   mode?: 'trial' | 'adaptive'

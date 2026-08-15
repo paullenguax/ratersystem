@@ -11,11 +11,12 @@ import { benchmarkDb as db, benchmarkAuth, benchmarkStorage, functions } from '@
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { Trash2, Link2, ChevronDown, ChevronRight, ChevronLeft, Plus, Upload, ExternalLink } from 'lucide-react'
+import { Trash2, Link2, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, Plus, Upload, ExternalLink } from 'lucide-react'
 import type { Person } from '@/types'
 import {
   CONSTRUCTS, LEVEL_LABELS, LEVEL_COLOURS,
   type BenchmarkItem, type BenchmarkResult, type BenchmarkConstruct, type TrialScores,
+  type TestSection, type TestSectionFilter, type SectionsConfig,
 } from './types'
 
 function pct(correct: number, total: number) {
@@ -27,7 +28,7 @@ function isTrialScores(s: unknown): s is TrialScores {
   return !!s && typeof s === 'object' && 'totalCorrect' in s
 }
 
-type Tab = 'results' | 'analysis' | 'items' | 'centres'
+type Tab = 'results' | 'analysis' | 'items' | 'sections' | 'centres'
 
 // ── Results tab ───────────────────────────────────────────────────────────────
 
@@ -963,6 +964,218 @@ function ItemsTab() {
   )
 }
 
+// ── Sections tab ──────────────────────────────────────────────────────────────
+
+const SECTIONS_DOC_ID = 'sections'
+
+// Matches today's live behavior exactly — used both as the query's fallback
+// (if the config doc doesn't exist yet) and as the starting point for a
+// first-time save.
+const DEFAULT_SECTIONS_CONFIG: SectionsConfig = {
+  pilotSampleCount: 5,
+  sections: [
+    {
+      id: 'listening', order: 0, title: 'Listening section', showIntro: true,
+      introBody: 'The next few questions include an audio clip. Each clip can only be played a '
+        + 'limited number of times — check the counter under the player — so listen carefully. '
+        + "There's no time limit to think it over.",
+      filter: { modality: 'listening', construct: 'any', band: 'any' },
+    },
+    {
+      id: 'reading', order: 1, title: 'Reading section', showIntro: true,
+      introBody: "That's the listening section done. The rest of the questions are read on "
+        + "screen, at your own pace — there's no time limit.",
+      filter: { modality: 'reading', construct: 'any', band: 'any' },
+    },
+  ],
+}
+
+function emptySection(order: number): TestSection {
+  return {
+    id: `section-${Date.now()}`, order, title: '', introBody: '', showIntro: true,
+    filter: { modality: 'any', construct: 'any', band: 'any' },
+  }
+}
+
+function SectionsTab() {
+  const queryClient = useQueryClient()
+  const { data: config, isLoading } = useQuery({
+    queryKey: ['benchmark_config_sections'],
+    queryFn: async () => {
+      const snap = await getDoc(doc(db, 'benchmark_config', SECTIONS_DOC_ID))
+      return snap.exists() ? (snap.data() as SectionsConfig) : DEFAULT_SECTIONS_CONFIG
+    },
+  })
+
+  const [draft, setDraft] = useState<SectionsConfig | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    if (config && !draft) setDraft(config)
+  }, [config, draft])
+
+  if (isLoading || !draft) {
+    return <div className="text-sm text-muted-foreground">Loading…</div>
+  }
+
+  function updateSection(id: string, patch: Partial<TestSection>) {
+    setDraft(d => d && { ...d, sections: d.sections.map(s => (s.id === id ? { ...s, ...patch } : s)) })
+    setSaved(false)
+  }
+  function updateFilter(id: string, patch: Partial<TestSectionFilter>) {
+    setDraft(d => d && {
+      ...d,
+      sections: d.sections.map(s => (s.id === id ? { ...s, filter: { ...s.filter, ...patch } } : s)),
+    })
+    setSaved(false)
+  }
+  function addSection() {
+    setDraft(d => d && { ...d, sections: [...d.sections, emptySection(d.sections.length)] })
+    setSaved(false)
+  }
+  function removeSection(id: string) {
+    if (!confirm('Remove this section? Any items that only matched this section drop out of the sitting entirely.')) return
+    setDraft(d => d && { ...d, sections: d.sections.filter(s => s.id !== id).map((s, i) => ({ ...s, order: i })) })
+    setSaved(false)
+  }
+  function moveSection(id: string, dir: -1 | 1) {
+    setDraft(d => {
+      if (!d) return d
+      const sorted = [...d.sections].sort((a, b) => a.order - b.order)
+      const idx = sorted.findIndex(s => s.id === id)
+      const swapIdx = idx + dir
+      if (swapIdx < 0 || swapIdx >= sorted.length) return d
+      ;[sorted[idx], sorted[swapIdx]] = [sorted[swapIdx], sorted[idx]]
+      return { ...d, sections: sorted.map((s, i) => ({ ...s, order: i })) }
+    })
+    setSaved(false)
+  }
+
+  async function handleSave() {
+    if (!draft) return
+    setSaving(true)
+    await setDoc(doc(db, 'benchmark_config', SECTIONS_DOC_ID), draft)
+    queryClient.invalidateQueries({ queryKey: ['benchmark_config_sections'] })
+    setSaving(false)
+    setSaved(true)
+  }
+
+  const sorted = [...draft.sections].sort((a, b) => a.order - b.order)
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <p className="text-sm text-muted-foreground max-w-xl">
+          Sections control the order candidates see items in, the transition copy shown before
+          each, and which items (by modality/construct/band) belong to each. Every section pulls
+          from the candidate's assigned Form A/B and counts toward their score — pilot items are
+          sampled separately and woven into whichever section matches them.
+        </p>
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground whitespace-nowrap">Pilot items per sitting</label>
+          <Input
+            type="number" min={0} value={draft.pilotSampleCount}
+            onChange={e => {
+              const n = Math.max(0, Number(e.target.value) || 0)
+              setDraft(d => d && { ...d, pilotSampleCount: n })
+              setSaved(false)
+            }}
+            className="w-24"
+          />
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        {sorted.map((section, i) => (
+          <div key={section.id} className="border rounded-lg p-4 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <Input
+                value={section.title} onChange={e => updateSection(section.id, { title: e.target.value })}
+                placeholder="Section title" className="font-medium max-w-sm"
+              />
+              <div className="flex items-center gap-1 shrink-0">
+                <Button type="button" variant="outline" size="icon" title="Move up"
+                  onClick={() => moveSection(section.id, -1)} disabled={i === 0}>
+                  <ChevronUp className="size-4" />
+                </Button>
+                <Button type="button" variant="outline" size="icon" title="Move down"
+                  onClick={() => moveSection(section.id, 1)} disabled={i === sorted.length - 1}>
+                  <ChevronDown className="size-4" />
+                </Button>
+                <Button type="button" variant="outline" size="icon" title="Remove section"
+                  onClick={() => removeSection(section.id)}>
+                  <Trash2 className="size-4" />
+                </Button>
+              </div>
+            </div>
+
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" checked={section.showIntro} onChange={e => updateSection(section.id, { showIntro: e.target.checked })} />
+              Show a transition screen before this section
+            </label>
+
+            {section.showIntro && (
+              <Textarea
+                rows={2} value={section.introBody}
+                onChange={e => updateSection(section.id, { introBody: e.target.value })}
+                placeholder="Intro copy shown before the first item in this section" className="text-sm"
+              />
+            )}
+
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Modality</label>
+                <select
+                  value={section.filter.modality}
+                  onChange={e => updateFilter(section.id, { modality: e.target.value as TestSectionFilter['modality'] })}
+                  className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+                >
+                  <option value="any">Any</option>
+                  <option value="reading">Reading</option>
+                  <option value="listening">Listening</option>
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Construct</label>
+                <select
+                  value={section.filter.construct}
+                  onChange={e => updateFilter(section.id, { construct: e.target.value as TestSectionFilter['construct'] })}
+                  className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+                >
+                  <option value="any">Any</option>
+                  {CONSTRUCTS.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Band</label>
+                <select
+                  value={section.filter.band}
+                  onChange={e => updateFilter(section.id, { band: (e.target.value === 'any' ? 'any' : Number(e.target.value)) as TestSectionFilter['band'] })}
+                  className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+                >
+                  <option value="any">Any</option>
+                  {[4, 5, 6].map(b => <option key={b} value={b}>{b}</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex items-center gap-3">
+        <Button type="button" variant="outline" onClick={addSection}>
+          <Plus className="size-4 mr-1.5" /> Add section
+        </Button>
+        <Button type="button" onClick={handleSave} disabled={saving}>
+          {saving ? 'Saving…' : 'Save changes'}
+        </Button>
+        {saved && <span className="text-xs text-green-700">Saved</span>}
+      </div>
+    </div>
+  )
+}
+
 // ── Centres tab ───────────────────────────────────────────────────────────────
 
 interface CentreAccount {
@@ -1183,7 +1396,7 @@ export function BenchmarkPage() {
       </div>
 
       <div className="flex gap-2 border-b pb-1">
-        {([['results', 'Results'], ['analysis', 'Item analysis'], ['items', 'Item bank'], ['centres', 'Centres']] as [Tab, string][]).map(([t, label]) => (
+        {([['results', 'Results'], ['analysis', 'Item analysis'], ['items', 'Item bank'], ['sections', 'Sections'], ['centres', 'Centres']] as [Tab, string][]).map(([t, label]) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -1211,6 +1424,7 @@ export function BenchmarkPage() {
           {tab === 'results'  && <ResultsTab />}
           {tab === 'analysis' && <ItemAnalysisTab />}
           {tab === 'items'    && <ItemsTab />}
+          {tab === 'sections' && <SectionsTab />}
           {tab === 'centres'  && <CentresTab />}
         </>
       )}
