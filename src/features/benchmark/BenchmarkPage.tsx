@@ -819,11 +819,30 @@ function AnswerKeyBalance({ items }: { items: BenchmarkItem[] }) {
   )
 }
 
+type ItemSortKey = 'id' | 'form' | 'band' | 'modality' | 'construct' | 'correct' | 'status' | 'active'
+
+const ITEM_SORT_ACCESSORS: Record<ItemSortKey, (i: BenchmarkItem) => string | number> = {
+  id: i => i.id,
+  form: i => i.form,
+  band: i => i.band,
+  modality: i => i.modality,
+  construct: i => i.construct,
+  correct: i => i.correct,
+  status: i => (i.pilot ? 1 : 0),
+  active: i => (i.active ? 1 : 0),
+}
+
 function ItemsTab() {
   const queryClient = useQueryClient()
   const [filterConstruct, setFilterConstruct] = useState<BenchmarkConstruct | 'all'>('all')
   const [view, setView] = useState<'list' | 'new' | 'edit'>('list')
   const [editTarget, setEditTarget] = useState<BenchmarkItem | null>(null)
+  // Firestore returns collection queries in its own internal order, not
+  // insertion or alphabetical order — sort explicitly so the list (and
+  // therefore Previous/Next) is stable and items are findable. Defaults to
+  // ID ascending, but any column header can take over.
+  const [sortKey, setSortKey] = useState<ItemSortKey>('id')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
   const { data: items = [] } = useQuery({
     queryKey: ['benchmark_items'],
@@ -833,12 +852,19 @@ function ItemsTab() {
     },
   })
 
-  // Firestore returns collection queries in its own internal order, not
-  // insertion or alphabetical order — sort explicitly so the list (and
-  // therefore Previous/Next) is stable and items are findable by ID.
+  function toggleSort(key: ItemSortKey) {
+    if (key === sortKey) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'))
+    else { setSortKey(key); setSortDir('asc') }
+  }
+
   const visible = (filterConstruct === 'all' ? items : items.filter(i => i.construct === filterConstruct))
     .slice()
-    .sort((a, b) => a.id.localeCompare(b.id))
+    .sort((a, b) => {
+      const av = ITEM_SORT_ACCESSORS[sortKey](a)
+      const bv = ITEM_SORT_ACCESSORS[sortKey](b)
+      const cmp = typeof av === 'number' && typeof bv === 'number' ? av - bv : String(av).localeCompare(String(bv))
+      return sortDir === 'asc' ? cmp : -cmp
+    })
 
   async function handleToggleActive(item: BenchmarkItem) {
     await setDoc(doc(db, 'benchmark_items', item.id), { active: !item.active }, { merge: true })
@@ -940,14 +966,26 @@ function ItemsTab() {
           <table className="w-full text-xs">
             <thead className="bg-muted/50 text-muted-foreground">
               <tr>
-                <th className="px-3 py-2 text-left font-medium">ID</th>
-                <th className="px-3 py-2 text-left font-medium">Form</th>
-                <th className="px-3 py-2 text-left font-medium">Band</th>
-                <th className="px-3 py-2 text-left font-medium">Modality</th>
-                <th className="px-3 py-2 text-left font-medium">Construct</th>
-                <th className="px-3 py-2 text-left font-medium">Correct</th>
-                <th className="px-3 py-2 text-left font-medium">Status</th>
-                <th className="px-3 py-2 text-left font-medium">Active</th>
+                {([
+                  ['id', 'ID', 'min-w-[9rem]'],
+                  ['form', 'Form', ''],
+                  ['band', 'Band', ''],
+                  ['modality', 'Modality', ''],
+                  ['construct', 'Construct', ''],
+                  ['correct', 'Correct', ''],
+                  ['status', 'Status', ''],
+                  ['active', 'Active', ''],
+                ] as [ItemSortKey, string, string][]).map(([key, label, extraClass]) => (
+                  <th key={key} className={`px-3 py-2 text-left font-medium ${extraClass}`}>
+                    <button
+                      type="button" onClick={() => toggleSort(key)}
+                      className="flex items-center gap-1 hover:text-foreground"
+                    >
+                      {label}
+                      {sortKey === key && <span aria-hidden="true">{sortDir === 'asc' ? '▲' : '▼'}</span>}
+                    </button>
+                  </th>
+                ))}
                 <th className="px-2 py-2"></th>
               </tr>
             </thead>
@@ -957,7 +995,7 @@ function ItemsTab() {
                   key={item.id}
                   className={`border-t hover:bg-muted/40 ${i % 2 === 1 ? 'bg-muted/20' : ''} ${!item.active ? 'opacity-50' : ''}`}
                 >
-                  <td className="px-3 py-1.5 font-mono text-muted-foreground">{item.id.slice(0,8)}…</td>
+                  <td className="px-3 py-1.5 font-mono text-muted-foreground min-w-[9rem]">{item.id}</td>
                   <td className="px-3 py-1.5">{item.form}</td>
                   <td className="px-3 py-1.5">{item.band}</td>
                   <td className="px-3 py-1.5">{item.modality}</td>
