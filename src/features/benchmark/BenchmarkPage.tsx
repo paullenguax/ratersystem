@@ -825,7 +825,12 @@ function ItemsTab() {
     },
   })
 
-  const visible = filterConstruct === 'all' ? items : items.filter(i => i.construct === filterConstruct)
+  // Firestore returns collection queries in its own internal order, not
+  // insertion or alphabetical order — sort explicitly so the list (and
+  // therefore Previous/Next) is stable and items are findable by ID.
+  const visible = (filterConstruct === 'all' ? items : items.filter(i => i.construct === filterConstruct))
+    .slice()
+    .sort((a, b) => a.id.localeCompare(b.id))
 
   async function handleToggleActive(item: BenchmarkItem) {
     await setDoc(doc(db, 'benchmark_items', item.id), { active: !item.active }, { merge: true })
