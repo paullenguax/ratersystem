@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  collection, getDocs, doc, addDoc, setDoc, deleteDoc,
+  collection, getDocs, getDoc, doc, addDoc, setDoc, deleteDoc,
   updateDoc, orderBy, query, serverTimestamp,
 } from 'firebase/firestore'
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage'
@@ -495,6 +495,9 @@ function ItemForm({ initial, onSave, onCancel }: {
     initial ? { ...initial, options: [...initial.options], stimulus: initial.stimulus ?? '', audioRef: initial.audioRef ?? '' }
             : { ...BLANK, options: [...BLANK.options] }
   )
+  const [itemId, setItemId] = useState(initial?.id ?? '')
+  const [editingId, setEditingId] = useState(false)
+  const [idError, setIdError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -536,14 +539,47 @@ function ItemForm({ initial, onSave, onCancel }: {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    setIdError(null)
+    const trimmedId = itemId.trim()
+    if (trimmedId.includes('/')) {
+      setIdError('ID can\'t contain "/"')
+      return
+    }
+    if (initial?.id && !trimmedId) {
+      setIdError('ID can\'t be empty')
+      return
+    }
+
     setSaving(true)
     const item = {
       ...form, band: Number(form.band) as 4|5|6,
       stimulus: form.stimulus?.trim() || null, audioRef: form.audioRef?.trim() || null,
       pairKey: form.pilot ? (form.pairKey?.trim() || null) : null,
     }
-    if (initial?.id) {
+
+    if (initial?.id && trimmedId !== initial.id) {
+      // Renaming: Firestore has no rename op, so copy to the new ID then
+      // drop the old doc. Any responses already recorded under the old ID
+      // stay pointed at it — their stats will show up as a separate row in
+      // Item Analysis rather than merging into the renamed item's history.
+      const newRef = doc(db, 'benchmark_items', trimmedId)
+      if ((await getDoc(newRef)).exists()) {
+        setIdError(`"${trimmedId}" is already in use by another item`)
+        setSaving(false)
+        return
+      }
+      await setDoc(newRef, item)
+      await deleteDoc(doc(db, 'benchmark_items', initial.id))
+    } else if (initial?.id) {
       await setDoc(doc(db, 'benchmark_items', initial.id), item, { merge: true })
+    } else if (trimmedId) {
+      const newRef = doc(db, 'benchmark_items', trimmedId)
+      if ((await getDoc(newRef)).exists()) {
+        setIdError(`"${trimmedId}" is already in use by another item`)
+        setSaving(false)
+        return
+      }
+      await setDoc(newRef, { ...item, createdAt: serverTimestamp() })
     } else {
       await addDoc(collection(db, 'benchmark_items'), { ...item, createdAt: serverTimestamp() })
     }
@@ -553,6 +589,31 @@ function ItemForm({ initial, onSave, onCancel }: {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 max-w-2xl">
+      <div className="space-y-1">
+        <label className="text-xs text-muted-foreground">ID</label>
+        {!initial || editingId ? (
+          <Input
+            value={itemId} onChange={e => setItemId(e.target.value)}
+            placeholder={initial ? undefined : 'optional — leave blank to auto-generate'}
+            className="font-mono text-sm max-w-xs" autoFocus={editingId}
+          />
+        ) : (
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-sm text-muted-foreground">{itemId}</span>
+            <button type="button" onClick={() => setEditingId(true)} className="text-xs text-muted-foreground hover:text-foreground underline">
+              Change ID
+            </button>
+          </div>
+        )}
+        {initial && editingId && (
+          <p className="text-[11px] text-muted-foreground">
+            Renaming moves this item to a new document ID — any responses already recorded under the old ID
+            stay filed under it separately in Item Analysis, rather than merging into the new one.
+          </p>
+        )}
+        {idError && <p className="text-xs text-destructive">{idError}</p>}
+      </div>
+
       <div className="grid grid-cols-4 gap-3">
         <div className="space-y-1">
           <label className="text-xs text-muted-foreground">Form</label>
