@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   collection, getDocs, getDoc, doc, addDoc, setDoc, deleteDoc,
-  updateDoc, orderBy, query, serverTimestamp,
+  updateDoc, orderBy, query, serverTimestamp, deleteField,
 } from 'firebase/firestore'
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage'
 import { httpsCallable } from 'firebase/functions'
@@ -43,7 +43,7 @@ function ResultsTab() {
     queryKey: ['benchmark_results'],
     queryFn: async () => {
       const snap = await getDocs(query(collection(db, 'benchmark_results'), orderBy('timestamp', 'desc')))
-      return snap.docs.map(d => ({ id: d.id, ...d.data() }) as BenchmarkResult)
+      return snap.docs.map(d => ({ ...d.data(), id: d.id }) as BenchmarkResult)
     },
   })
 
@@ -51,7 +51,7 @@ function ResultsTab() {
     queryKey: ['people'],
     queryFn: async () => {
       const snap = await getDocs(collection(db, 'people'))
-      return snap.docs.map(d => ({ id: d.id, ...d.data() }) as Person)
+      return snap.docs.map(d => ({ ...d.data(), id: d.id }) as Person)
     },
   })
 
@@ -290,7 +290,7 @@ function ItemAnalysisTab() {
     queryKey: ['benchmark_results'],
     queryFn: async () => {
       const snap = await getDocs(query(collection(db, 'benchmark_results'), orderBy('timestamp', 'desc')))
-      return snap.docs.map(d => ({ id: d.id, ...d.data() }) as BenchmarkResult)
+      return snap.docs.map(d => ({ ...d.data(), id: d.id }) as BenchmarkResult)
     },
   })
 
@@ -306,7 +306,7 @@ function ItemAnalysisTab() {
     queryKey: ['benchmark_items'],
     queryFn: async () => {
       const snap = await getDocs(collection(db, 'benchmark_items'))
-      return snap.docs.map(d => ({ id: d.id, ...d.data() }) as BenchmarkItem)
+      return snap.docs.map(d => ({ ...d.data(), id: d.id }) as BenchmarkItem)
     },
   })
   const itemById = useMemo(() => Object.fromEntries(items.map(i => [i.id, i])), [items])
@@ -492,10 +492,15 @@ function ItemForm({ initial, onSave, onCancel }: {
   onSave: (savedId: string) => void
   onCancel: () => void
 }) {
-  const [form, setForm] = useState<Omit<BenchmarkItem, 'id'>>(
-    initial ? { ...initial, options: [...initial.options], stimulus: initial.stimulus ?? '', audioRef: initial.audioRef ?? '' }
-            : { ...BLANK, options: [...BLANK.options] }
-  )
+  const [form, setForm] = useState<Omit<BenchmarkItem, 'id'>>(() => {
+    // Omit<BenchmarkItem, 'id'> only hides `id` at the type level — spreading
+    // `initial` still copies the real `id` property onto the runtime object.
+    // Destructuring it away here is what actually keeps it out, so it can
+    // never get carried into a write payload (see handleSubmit).
+    if (!initial) return { ...BLANK, options: [...BLANK.options] }
+    const { id: _unused, ...rest } = { ...initial, options: [...initial.options], stimulus: initial.stimulus ?? '', audioRef: initial.audioRef ?? '' }
+    return rest
+  })
   const [itemId, setItemId] = useState(initial?.id ?? '')
   const [editingId, setEditingId] = useState(false)
   const [idError, setIdError] = useState<string | null>(null)
@@ -574,7 +579,10 @@ function ItemForm({ initial, onSave, onCancel }: {
         await deleteDoc(doc(db, 'benchmark_items', initial.id))
         finalId = trimmedId
       } else if (initial?.id) {
-        await setDoc(doc(db, 'benchmark_items', initial.id), item, { merge: true })
+        // id: deleteField() self-heals any item saved before the fix above
+        // existed, whose data payload picked up a stray `id` field from a
+        // rename — harmless to include even when there's nothing to clean.
+        await setDoc(doc(db, 'benchmark_items', initial.id), { ...item, id: deleteField() }, { merge: true })
         finalId = initial.id
       } else if (trimmedId) {
         const newRef = doc(db, 'benchmark_items', trimmedId)
@@ -821,7 +829,7 @@ function ItemsTab() {
     queryKey: ['benchmark_items'],
     queryFn: async () => {
       const snap = await getDocs(collection(db, 'benchmark_items'))
-      return snap.docs.map(d => ({ id: d.id, ...d.data() }) as BenchmarkItem)
+      return snap.docs.map(d => ({ ...d.data(), id: d.id }) as BenchmarkItem)
     },
   })
 
@@ -1278,7 +1286,7 @@ function CentresTab() {
     queryKey: ['centre_accounts'],
     queryFn: async () => {
       const snap = await getDocs(collection(db, 'centre_accounts'))
-      return snap.docs.map(d => ({ id: d.id, ...d.data() }) as CentreAccount)
+      return snap.docs.map(d => ({ ...d.data(), id: d.id }) as CentreAccount)
     },
   })
 
