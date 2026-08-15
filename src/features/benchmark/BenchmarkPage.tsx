@@ -489,7 +489,7 @@ const BLANK: Omit<BenchmarkItem, 'id'> = {
 
 function ItemForm({ initial, onSave, onCancel }: {
   initial?: BenchmarkItem | null
-  onSave: () => void
+  onSave: (savedId: string) => void
   onCancel: () => void
 }) {
   const [form, setForm] = useState<Omit<BenchmarkItem, 'id'>>(
@@ -558,34 +558,41 @@ function ItemForm({ initial, onSave, onCancel }: {
       pairKey: form.pilot ? (form.pairKey?.trim() || null) : null,
     }
 
-    if (initial?.id && trimmedId !== initial.id) {
-      // Renaming: Firestore has no rename op, so copy to the new ID then
-      // drop the old doc. Any responses already recorded under the old ID
-      // stay pointed at it — their stats will show up as a separate row in
-      // Item Analysis rather than merging into the renamed item's history.
-      const newRef = doc(db, 'benchmark_items', trimmedId)
-      if ((await getDoc(newRef)).exists()) {
-        setIdError(`"${trimmedId}" is already in use by another item`)
-        setSaving(false)
-        return
+    try {
+      let finalId: string
+      if (initial?.id && trimmedId !== initial.id) {
+        // Renaming: Firestore has no rename op, so copy to the new ID then
+        // drop the old doc. Any responses already recorded under the old ID
+        // stay pointed at it — their stats will show up as a separate row in
+        // Item Analysis rather than merging into the renamed item's history.
+        const newRef = doc(db, 'benchmark_items', trimmedId)
+        if ((await getDoc(newRef)).exists()) {
+          setIdError(`"${trimmedId}" is already in use by another item`)
+          return
+        }
+        await setDoc(newRef, item)
+        await deleteDoc(doc(db, 'benchmark_items', initial.id))
+        finalId = trimmedId
+      } else if (initial?.id) {
+        await setDoc(doc(db, 'benchmark_items', initial.id), item, { merge: true })
+        finalId = initial.id
+      } else if (trimmedId) {
+        const newRef = doc(db, 'benchmark_items', trimmedId)
+        if ((await getDoc(newRef)).exists()) {
+          setIdError(`"${trimmedId}" is already in use by another item`)
+          return
+        }
+        await setDoc(newRef, { ...item, createdAt: serverTimestamp() })
+        finalId = trimmedId
+      } else {
+        finalId = (await addDoc(collection(db, 'benchmark_items'), { ...item, createdAt: serverTimestamp() })).id
       }
-      await setDoc(newRef, item)
-      await deleteDoc(doc(db, 'benchmark_items', initial.id))
-    } else if (initial?.id) {
-      await setDoc(doc(db, 'benchmark_items', initial.id), item, { merge: true })
-    } else if (trimmedId) {
-      const newRef = doc(db, 'benchmark_items', trimmedId)
-      if ((await getDoc(newRef)).exists()) {
-        setIdError(`"${trimmedId}" is already in use by another item`)
-        setSaving(false)
-        return
-      }
-      await setDoc(newRef, { ...item, createdAt: serverTimestamp() })
-    } else {
-      await addDoc(collection(db, 'benchmark_items'), { ...item, createdAt: serverTimestamp() })
+      onSave(finalId)
+    } catch (err) {
+      setIdError(err instanceof Error ? err.message : 'Save failed — try again')
+    } finally {
+      setSaving(false)
     }
-    setSaving(false)
-    onSave()
   }
 
   return (
@@ -838,9 +845,16 @@ function ItemsTab() {
   }
 
   // Saves the item but stays on the edit screen, so Next/Previous can be used
-  // right after saving without a round-trip back to the list.
-  function refreshInPlace() {
-    queryClient.invalidateQueries({ queryKey: ['benchmark_items'] })
+  // right after saving without a round-trip back to the list. Re-points
+  // editTarget at the freshly-saved item (by its possibly-new ID) once the
+  // refetch lands — without this, a renamed item keeps showing its old ID
+  // in the header, and resubmitting re-runs the rename against a doc that
+  // no longer exists, which reads as "ID already in use" (it's just seeing
+  // the item it itself just created).
+  async function refreshInPlace(savedId: string) {
+    await queryClient.invalidateQueries({ queryKey: ['benchmark_items'] })
+    const fresh = queryClient.getQueryData<BenchmarkItem[]>(['benchmark_items'])?.find(i => i.id === savedId)
+    if (fresh) setEditTarget(fresh)
   }
 
   function goToRelative(delta: number) {
