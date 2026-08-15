@@ -886,6 +886,9 @@ function ItemsTab() {
             <Button type="button" variant="outline" size="sm" onClick={() => goToRelative(1)} disabled={idx === -1 || idx >= visible.length - 1}>
               Next <ChevronRight className="size-4 ml-1" />
             </Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => { setView('list'); setEditTarget(null) }}>
+              Back to list
+            </Button>
           </div>
         </div>
         <ItemForm key={editTarget.id} initial={editTarget} onSave={refreshInPlace} onCancel={() => setView('list')} />
