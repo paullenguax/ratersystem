@@ -30,6 +30,9 @@ export interface BenchmarkItem {
   stem: string
   stimulus: string | null
   audioRef: string | null
+  // How many times a candidate may play the audio before it locks — defaults
+  // to 2 in the player when unset (see AudioPlayer.jsx in Benchmark Check).
+  maxPlays?: number
   // 2 options for binary minimal-pair items, 4 for standard MCQ
   options: string[]
   correct: 0 | 1 | 2 | 3

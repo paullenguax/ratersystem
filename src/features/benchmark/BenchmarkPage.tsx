@@ -481,7 +481,7 @@ const OPTION_LABELS = ['A', 'B', 'C', 'D'] as const
 const BLANK: Omit<BenchmarkItem, 'id'> = {
   source: 'new', band: 4, construct: 'vocabulary',
   modality: 'reading', form: 'A', active: true, flagged: false,
-  stem: '', stimulus: '', audioRef: '',
+  stem: '', stimulus: '', audioRef: '', maxPlays: 2,
   options: ['', '', '', ''], correct: 0, feedback: '', notes: '',
   pilot: false, pairKey: '',
 }
@@ -694,6 +694,16 @@ function ItemForm({ initial, onSave, onCancel }: {
             </div>
           )}
           {form.audioRef && <audio controls src={form.audioRef} className="w-full mt-1" />}
+        </div>
+      )}
+
+      {form.modality === 'listening' && (
+        <div className="space-y-1 max-w-[160px]">
+          <label className="text-xs text-muted-foreground">Max plays</label>
+          <Input
+            type="number" min={1} value={form.maxPlays ?? 2}
+            onChange={e => set('maxPlays', Math.max(1, Number(e.target.value) || 1))}
+          />
         </div>
       )}
 
