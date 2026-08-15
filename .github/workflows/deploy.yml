@@ -55,4 +55,10 @@ jobs:
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: dist/
           server-dir: lenguax.com/public_html/ratersystem/
+          # Give SiteGround more grace before declaring a control-socket
+          # timeout — repeated "Timeout (control socket)" failures even
+          # without the Node-24 issue point to it being slow to respond
+          # under load rather than genuinely unreachable.
+          timeout: 120000
+          log-level: verbose
           dangerous-clean-slate: false
