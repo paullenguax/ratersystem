@@ -49,7 +49,15 @@ function slidePreviewEntry(slide: TemplateSlide, slot?: StorylineSlotContent): {
   const topic = slide.slotSpec.topic ? slot?.topic : undefined
   const questions = slide.slotSpec.questions ? slot?.questions?.filter(Boolean) : undefined
   if (!topic && !questions?.length) return undefined
-  return { label: slide.label, topic, questions }
+  // Firestore's updateDoc() rejects a literal `undefined` field value (must
+  // be omitted entirely, not just falsy) — items resolved here get written
+  // straight to StorylineVersion.items at Publish time, so every optional
+  // field below is included only when it has a real value, never assigned
+  // undefined outright.
+  const entry: { label: string; topic?: string; questions?: string[] } = { label: slide.label }
+  if (topic) entry.topic = topic
+  if (questions?.length) entry.questions = questions
+  return entry
 }
 
 type PreviewEntry = { label: string; topic?: string; questions?: string[]; partNumber: StorylinePartNumber }
@@ -59,13 +67,18 @@ function resolveMedia(slide: TemplateSlide, slot?: StorylineSlotContent): Storyl
   const audioClips: { label: string; url: string; maxPlays?: number }[] = []
   const maxPlays = slide.slotSpec.maxPlays
 
+  // maxPlays is optional (see TemplateSlide.slotSpec.maxPlays) — spread in
+  // only when set, never as an explicit `maxPlays: undefined` key (Firestore
+  // rejects literal undefined field values on the updateDoc() write at
+  // Publish time — see slidePreviewEntry() above for the same rule).
+  const maxPlaysField = maxPlays !== undefined ? { maxPlays } : {}
   if (slide.slotSpec.audio === 'single' && slot?.audio?.recordings?.[0]) {
-    audioClips.push({ label: slide.label, url: slot.audio.recordings[0], maxPlays })
+    audioClips.push({ label: slide.label, url: slot.audio.recordings[0], ...maxPlaysField })
   }
   if (slide.slotSpec.audio === 'set') {
-    if (slot?.audio?.intro) audioClips.push({ label: 'Introduction', url: slot.audio.intro, maxPlays })
+    if (slot?.audio?.intro) audioClips.push({ label: 'Introduction', url: slot.audio.intro, ...maxPlaysField })
     slot?.audio?.recordings?.forEach((url, i) => {
-      if (url) audioClips.push({ label: `Recording ${i + 1}`, url, maxPlays })
+      if (url) audioClips.push({ label: `Recording ${i + 1}`, url, ...maxPlaysField })
     })
   }
   // Unlimited-replay by design — a level check, not scored content.
@@ -135,6 +148,11 @@ export function resolveItems(
 
   return sorted.map(slide => {
     const slot = slotFor(slide)
+    // Every optional field below is assigned only when it has a real value —
+    // never set to a literal `undefined` — because this resolved item gets
+    // written straight to StorylineVersion.items via Firestore's updateDoc()
+    // at Publish time, which rejects any field whose value is undefined
+    // (must be omitted from the object entirely, not just falsy).
     const item: StorylineItem = {
       id: slide.id,
       order: slide.order,
@@ -142,15 +160,22 @@ export function resolveItems(
       label: slide.label,
       candidateState: slide.candidateState ?? '',
       examinerText: resolveScriptText(slide, testVariables, slot),
-      notes: slide.notes ? substituteVariables(slide.notes, testVariables) : undefined,
-      candidateInstructions: slide.candidateInstructions?.map(line => ({ ...line, text: substituteVariables(line.text, testVariables) })),
-      checklistItems: normalizeChecklistItems(slide.checklistItems),
-      testDisplayName: slide.kind === 'accept_reject_test' ? testDisplayName : undefined,
-      startsTestTimer: slide.startsTestTimer,
-      nextButtonLabel: slide.nextButtonLabel,
-      previewContent: slide.previewParts?.length ? slide.previewParts.flatMap(n => previewByPart[n] ?? []) : undefined,
-      timing: slide.timing,
     }
+    if (slide.notes) item.notes = substituteVariables(slide.notes, testVariables)
+    if (slide.candidateInstructions?.length) {
+      item.candidateInstructions = slide.candidateInstructions.map(line => ({ ...line, text: substituteVariables(line.text, testVariables) }))
+    }
+    const checklistItems = normalizeChecklistItems(slide.checklistItems)
+    if (checklistItems?.length) item.checklistItems = checklistItems
+    if (slide.kind === 'accept_reject_test' && testDisplayName) item.testDisplayName = testDisplayName
+    if (slide.startsTestTimer) item.startsTestTimer = slide.startsTestTimer
+    if (slide.nextButtonLabel) item.nextButtonLabel = slide.nextButtonLabel
+    if (slide.previewParts?.length) {
+      const previewContent = slide.previewParts.flatMap(n => previewByPart[n] ?? [])
+      if (previewContent.length) item.previewContent = previewContent
+    }
+    if (slide.timing) item.timing = slide.timing
+
     let media = resolveMedia(slide, slot)
     const combo = slide.partNumber ? partCombos[slide.partNumber]?.[slide.id] : wholeTestCombo[slide.id]
     if (combo) media = { ...media, images: combo.images }

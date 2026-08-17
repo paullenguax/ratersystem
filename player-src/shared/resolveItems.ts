@@ -44,7 +44,17 @@ function slidePreviewEntry(slide: TemplateSlide, slot?: StorylineSlotContent): {
   const topic = slide.slotSpec.topic ? slot?.topic : undefined
   const questions = slide.slotSpec.questions ? slot?.questions?.filter(Boolean) : undefined
   if (!topic && !questions?.length) return undefined
-  return { label: slide.label, topic, questions }
+  // Keep in sync with src/features/storyline/resolveItems.ts — that copy
+  // omits undefined-valued optional fields rather than assigning them
+  // explicitly, since its output gets written straight to Firestore via
+  // updateDoc() (which rejects a literal undefined field value). Not load-
+  // bearing here (this copy's output only ever feeds JSON/DOM rendering,
+  // never a Firestore write), kept identical anyway per the file's own
+  // "keep in sync" contract.
+  const entry: { label: string; topic?: string; questions?: string[] } = { label: slide.label }
+  if (topic) entry.topic = topic
+  if (questions?.length) entry.questions = questions
+  return entry
 }
 
 type PreviewEntry = { label: string; topic?: string; questions?: string[]; partNumber: StorylinePartNumber }
@@ -54,13 +64,14 @@ function resolveMedia(slide: TemplateSlide, slot?: StorylineSlotContent): Storyl
   const audioClips: { label: string; url: string; maxPlays?: number }[] = []
   const maxPlays = slide.slotSpec.maxPlays
 
+  const maxPlaysField = maxPlays !== undefined ? { maxPlays } : {}
   if (slide.slotSpec.audio === 'single' && slot?.audio?.recordings?.[0]) {
-    audioClips.push({ label: slide.label, url: slot.audio.recordings[0], maxPlays })
+    audioClips.push({ label: slide.label, url: slot.audio.recordings[0], ...maxPlaysField })
   }
   if (slide.slotSpec.audio === 'set') {
-    if (slot?.audio?.intro) audioClips.push({ label: 'Introduction', url: slot.audio.intro, maxPlays })
+    if (slot?.audio?.intro) audioClips.push({ label: 'Introduction', url: slot.audio.intro, ...maxPlaysField })
     slot?.audio?.recordings?.forEach((url, i) => {
-      if (url) audioClips.push({ label: `Recording ${i + 1}`, url, maxPlays })
+      if (url) audioClips.push({ label: `Recording ${i + 1}`, url, ...maxPlaysField })
     })
   }
   if (slide.slotSpec.volumeCheck && slot?.audio?.volumeCheck) {
@@ -122,15 +133,22 @@ export function resolveItems(
       label: slide.label,
       candidateState: slide.candidateState ?? '',
       examinerText: resolveScriptText(slide, testVariables, slot),
-      notes: slide.notes ? substituteVariables(slide.notes, testVariables) : undefined,
-      candidateInstructions: slide.candidateInstructions?.map(line => ({ ...line, text: substituteVariables(line.text, testVariables) })),
-      checklistItems: normalizeChecklistItems(slide.checklistItems),
-      testDisplayName: slide.kind === 'accept_reject_test' ? testDisplayName : undefined,
-      startsTestTimer: slide.startsTestTimer,
-      nextButtonLabel: slide.nextButtonLabel,
-      previewContent: slide.previewParts?.length ? slide.previewParts.flatMap(n => previewByPart[n] ?? []) : undefined,
-      timing: slide.timing,
     }
+    if (slide.notes) item.notes = substituteVariables(slide.notes, testVariables)
+    if (slide.candidateInstructions?.length) {
+      item.candidateInstructions = slide.candidateInstructions.map(line => ({ ...line, text: substituteVariables(line.text, testVariables) }))
+    }
+    const checklistItems = normalizeChecklistItems(slide.checklistItems)
+    if (checklistItems?.length) item.checklistItems = checklistItems
+    if (slide.kind === 'accept_reject_test' && testDisplayName) item.testDisplayName = testDisplayName
+    if (slide.startsTestTimer) item.startsTestTimer = slide.startsTestTimer
+    if (slide.nextButtonLabel) item.nextButtonLabel = slide.nextButtonLabel
+    if (slide.previewParts?.length) {
+      const previewContent = slide.previewParts.flatMap(n => previewByPart[n] ?? [])
+      if (previewContent.length) item.previewContent = previewContent
+    }
+    if (slide.timing) item.timing = slide.timing
+
     let media = resolveMedia(slide, slot)
     const combo = slide.partNumber ? partCombos[slide.partNumber]?.[slide.id] : wholeTestCombo[slide.id]
     if (combo) media = { ...media, images: combo.images }
