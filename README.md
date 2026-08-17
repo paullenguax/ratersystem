@@ -288,6 +288,25 @@ phase.
   if any of that Part's tagged slides are missing required content
   (`partCompleteness.ts`'s `missingPartContent()`, checked against the
   template's slotSpec for topic/questions/images/audio/volumeCheck).
+  **This only guards content authored *after* a requirement existed** — a
+  slotSpec field added to the template later (e.g. Part 2's volume-check
+  clip) never gets retroactively enforced against Parts already published
+  before that change, since published Parts are immutable. Since 2026-08-18,
+  every row in the Parts Library table (draft or published) shows a
+  "N missing" destructive badge whenever `missingPartContent()` finds a gap
+  against the *current* template, specifically so an old Part that predates
+  a requirement is visible without having to Duplicate it just to find out
+  — the fix is still Duplicate → fill in the gap → Publish the copy, this
+  just makes it obvious which ones need it.
+  On the field-order confusion this surfaced: Part 2's Section 1 slide
+  needs both a volume-check clip and the main recording, and the upload
+  form used to list the "Recording" field *above* "Volume check clip" even
+  though the slide's own script always plays the volume check first
+  (`{volumeCheck}` precedes `{audio}` in scriptText) — easy to fill in
+  backwards. Fixed by rendering volume-check first everywhere this slot
+  pairing appears (`StorylinePartEditorPage.tsx`, `StorylineVersionEditor
+  Page.tsx`, `StorylineTestContentEditorPage.tsx`) and relabeling it
+  "Volume check clip (played first, before the recording below)".
 - **Access**: `storyline_tests`/`storyline_versions`/`storyline_parts`/
   `storyline_template`/`storylines/` Storage are admin-only for read *and*
   write (unlike `test_bank`'s `isSignedIn()`-read — test content should stay
@@ -853,4 +872,4 @@ phase.
 
 ## Last updated
 
-2026-08-06
+2026-08-18

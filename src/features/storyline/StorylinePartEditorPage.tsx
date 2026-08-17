@@ -185,6 +185,23 @@ export function StorylinePartEditorPage() {
                 </div>
               )}
 
+              {/* Rendered before the recording field(s) below, matching the
+                  order this slide's own script actually uses them in — see
+                  scriptText's {volumeCheck} token, which always comes
+                  before {audio}. Uploading in script order here is what
+                  keeps this from feeling "jumbled" against the recording
+                  field(s) that follow. */}
+              {slide.slotSpec.volumeCheck && (
+                <MediaUploadField
+                  label="Volume check clip (played first, before the recording below)"
+                  accept="audio/*"
+                  value={slot.audio?.volumeCheck}
+                  storagePathPrefix={storagePathPrefix}
+                  disabled={disabled}
+                  onChange={url => updateSlot(slide.id, { ...slot, audio: { ...slot.audio, volumeCheck: url } })}
+                />
+              )}
+
               {slide.slotSpec.audio === 'single' && (
                 <MediaUploadField
                   label="Recording"
@@ -224,17 +241,6 @@ export function StorylinePartEditorPage() {
                     ))}
                   </div>
                 </div>
-              )}
-
-              {slide.slotSpec.volumeCheck && (
-                <MediaUploadField
-                  label="Volume check clip"
-                  accept="audio/*"
-                  value={slot.audio?.volumeCheck}
-                  storagePathPrefix={storagePathPrefix}
-                  disabled={disabled}
-                  onChange={url => updateSlot(slide.id, { ...slot, audio: { ...slot.audio, volumeCheck: url } })}
-                />
               )}
             </div>
           )

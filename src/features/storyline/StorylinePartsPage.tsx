@@ -311,7 +311,29 @@ export function StorylinePartsPage() {
                     <TableRow>
                       <TableCell>Part {part.partNumber}</TableCell>
                       <TableCell>{part.label}</TableCell>
-                      <TableCell><Badge variant={statusVariant(part.status)}>{part.status}</Badge></TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <Badge variant={statusVariant(part.status)}>{part.status}</Badge>
+                          {(() => {
+                            // Checked against the *current* template, not
+                            // the one live when this Part was published —
+                            // a template requirement (e.g. Part 2's volume-
+                            // check clip) added after a Part was already
+                            // published never gets retroactively enforced
+                            // (published Parts are immutable), so this is
+                            // the only way to spot the gap short of
+                            // duplicating every Part to check by hand.
+                            if (!template) return null
+                            const missing = missingPartContent(template.slides, part.partNumber, part.slotContent)
+                            if (missing.length === 0) return null
+                            return (
+                              <Badge variant="destructive" title={`Missing:\n${missing.map(m => `- ${m}`).join('\n')}`}>
+                                {missing.length} missing
+                              </Badge>
+                            )
+                          })()}
+                        </div>
+                      </TableCell>
                       <TableCell>
                         {part.status === 'published' ? (
                           <Badge variant={part.active === false ? 'secondary' : 'default'}>
