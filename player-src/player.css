@@ -502,32 +502,6 @@ div.polaroid img {
   justify-content: center;
 }
 
-/* Practice player only — the self-service player shows images as the
-   actual candidate-facing content (not an examiner's own small reference
-   thumbnail), so they're sized much larger than .exam-thumbs. */
-.practice-images {
-  display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.practice-image-wrap {
-  position: relative;
-  flex: 1;
-  min-width: 260px;
-}
-
-.practice-image {
-  width: 100%;
-  max-height: 480px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  object-fit: contain;
-  cursor: zoom-in;
-  display: block;
-  background: white;
-}
-
 .exam-zoom-backdrop {
   position: fixed;
   inset: 0;

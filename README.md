@@ -531,36 +531,60 @@ phase.
   defaults it on and allows toggling, `'live'`/`'backup'` force it off and
   disable the toggle entirely. `versionType === 'practice'` now also
   branches export behavior — see the next entry.
-- **Self-service Practice player** (built 2026-08-06, `player-src/
-  practice.ts`/`practice.html`, exported via `exportStorylinePractice()` in
-  `exportStoryline.ts`): a third player-src entry point, alongside examiner.
-  ts/candidate.ts, for `versionType === 'practice'` Versions — `handleExport`
-  on `StorylineVersionsPage` branches to it automatically, Live/Backup keep
-  going through `exportStorylineVersion()` unchanged. Deliberately the
-  simple counterpart: one person plays both roles alone on one device
-  (hearing audio through their own speakers, since there's no examiner in
-  the room to play it for them), no `BroadcastChannel`/second window, no
-  violation reporting, no `reportStorylineEvent`/WP `callSendStats`/
-  `callRejectTest` calls, no PHP gate at all (ships as plain static
-  `story.html` — the filename intentionally matches the old pre-
+- **Self-service Practice player** (built 2026-08-06, redesigned same day to
+  restore the two-window shape, `player-src/practice.ts`/`practice.html`,
+  exported via `exportStorylinePractice()` in `exportStoryline.ts`): a third
+  player-src entry point, alongside examiner.ts/candidate.ts, for
+  `versionType === 'practice'` Versions — `handleExport` on
+  `StorylineVersionsPage` branches to it automatically, Live/Backup keep
+  going through `exportStorylineVersion()` unchanged. Mirrors the real
+  exam's two-window shape on purpose (so practicing feels like the real
+  thing) — this window drives audio/text/controls/timers, and opens a
+  genuine `candidate.html` popup for the actual images, reusing that file
+  completely unmodified (`bundlePracticeShellFiles()` bundles it alongside
+  `story.html`) since it has no WordPress calls or violation reporting of
+  its own to strip. What's actually stripped: no violation reporting at
+  all — not even "candidate window closed", which examiner.ts reports but
+  practice.ts's `updateCandidateStatus()` deliberately doesn't — no
+  `reportStorylineEvent`/WP `callSendStats`/`callRejectTest` calls, no
+  Next-button gating (always enabled), no PHP gate at all (ships as plain
+  static `story.html` — the filename intentionally matches the old pre-
   RaterSystemNew Storyline system's sample-test convention). Booking-only
-  slide kinds (`accept_reject_test`, `test_data_confirm`, `admin_checklist`)
-  are filtered out of the item list entirely rather than rendered inert.
-  Keeps: linear Next/Back (never gated — no completion requirement exists
-  in this mode), per-slide script text + freely-replayable audio, images
-  shown at full candidate-facing size (`.practice-images`/`.practice-image`
-  in `player.css`, not the small `.exam-thumbs` sizing meant for an
-  examiner's own reference view) with click-to-zoom, prep/response and
+  slide kinds `test_data_confirm`/`admin_checklist` are filtered out
+  entirely (`SKIPPED_KINDS`); `accept_reject_test` is kept but re-rendered
+  as a non-interactive intro (`renderIntro()`, `BRANDED_KINDS`) — the same
+  blue/white branded chrome (logo strip) the real exam gives its pre-test
+  screens, showing `testDisplayName` plus a plain-language "this is a
+  sample, nothing is recorded" note, instead of real accept/reject controls
+  that only mean something against a real booking. Images render as small
+  reference thumbnails in this window (`.exam-thumbs`, same sizing as the
+  examiner console) — the actual full-size copies are on the candidate
+  window, same split as the real exam. Also keeps: linear Next/Back,
+  per-slide script text + freely-replayable audio, prep/response and
   session timers (informational only, ported unchanged), `previewParts`
-  content. The export zip also bundles `HOW-TO-PUBLISH.txt` and a starter
-  `home.html` (a plain hand-edited landing page listing links to each
-  published `story.html` — deliberately *not* auto-generated from
-  Firestore; add one `<li><a>` line per sample test by hand, matching how
-  the old system's `home.html` worked) — upload the folder straight to a
-  public path on the host (e.g. `lenguax.com/sample/`), no WordPress
-  involvement at all. All the "complex stuff" (violation tracking, exposure/
-  part-counting, the examiner console, the WP booking gate) stays scoped to
-  Live/Backup exports only, per explicit design intent.
+  content, click-to-zoom on the reference thumbnails. The export zip also
+  bundles `HOW-TO-PUBLISH.txt` and a starter `home.html` — see the next
+  entry. All the "complex stuff" (violation tracking, exposure/part-
+  counting, the WP booking gate) stays scoped to Live/Backup exports only,
+  per explicit design intent.
+- **"Flight Strip" sample-tests landing page** (built 2026-08-06,
+  `buildHomeTemplate()`/`HOME_SHELL_HEAD`/`HOME_SHELL_FOOT`/
+  `HOME_LOGO_BASE64` in `exportStoryline.ts`, standalone starter copy at
+  `sample-site/index.html`): the hand-maintained landing page bundled into
+  every Practice export as `home.html` — deliberately *not* auto-generated
+  from Firestore, since this folder can contain whatever tests an admin
+  chooses to publish here in whatever order they want. Add one
+  `<li><a href="./folder/story.html">Name</a></li>` line per sample test by
+  hand (the arrow after it is CSS-generated, `.strip-board a::after`, never
+  typed) — same one-line-per-test workflow the old system's `home.html`
+  had. Styled as an ATC flight-progress-strip board (colored tab per entry,
+  shifts to amber on hover) since most candidates are pilots/ATCOs; the
+  Lenguax mark is embedded as base64 so the page stays one self-contained
+  file with nothing else to lose when copied around by hand. `HOME_SHELL_
+  HEAD`/`FOOT` are shared between the one generated `<li>` line and
+  `sample-site/index.html` so they can't visually drift apart — if the CSS/
+  shell ever changes, regenerate `sample-site/index.html` from a fresh
+  export's `home.html` rather than hand-editing its shell.
 - **Dynamic Part-pooling (Phase A, built 2026-08-01)**: groundwork for
   replacing whole-Version candidate assignment with true per-candidate Part
   pooling — see `/home/paul/.claude/plans/encapsulated-drifting-corbato.md`

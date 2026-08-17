@@ -1,28 +1,93 @@
 import type { StorylineItem } from './shared/types'
+import { channelName } from './shared/session'
 import { loadItems, loadTheme } from './shared/dataSource'
 import { applyTheme } from './shared/applyTheme'
 import { renderInlineMarkup } from './shared/markup'
 import { preloadAllMedia } from './shared/preloadMedia'
+import teacLogo from './assets/teac-logo.png'
 
 // Self-service practice/sample player — the third and simplest of the three
-// player-src entry points (see examiner.ts/candidate.ts for the real,
-// proctored exam pair). One person plays both roles alone, on one device,
-// hearing audio through their own speakers instead of an examiner's. By
-// design this reports nothing anywhere and calls no WordPress endpoint —
-// no violation tracking, no completion/exposure reporting, no Next-button
-// gating. All of that stays scoped to versions exported as Live/Backup (see
-// StorylineVersion.versionType, exportStorylineVersion()) — this entry
-// point, exported by exportStorylinePractice(), is purely static content
-// playback for a version marked Practice.
+// player-src entry points. Mirrors the real exam's two-window shape (this
+// window drives audio/text/controls, a genuine candidate.html popup shows
+// the actual images — reused completely unmodified, see candidate.ts) so
+// practicing feels like the real thing, but by design reports nothing
+// anywhere and calls no WordPress endpoint — no violation tracking (not
+// even "candidate window closed"), no completion/exposure reporting, no
+// Next-button gating. All of that stays scoped to versions exported as
+// Live/Backup (see StorylineVersion.versionType, exportStorylineVersion())
+// — this entry point, exported by exportStorylinePractice(), is purely
+// static content playback for a version marked Practice.
 //
 // Slide kinds that only make sense inside a real proctored booking
-// (accept/reject the test, confirm centre/examiner/candidate details, the
-// examiner's private room-setup checklist) are dropped entirely rather than
-// rendered inert — see SKIPPED_KINDS.
-const SKIPPED_KINDS = new Set(['accept_reject_test', 'test_data_confirm', 'admin_checklist'])
+// (confirm centre/examiner/candidate details, the examiner's private
+// room-setup checklist) are dropped entirely rather than rendered inert —
+// see SKIPPED_KINDS. accept_reject_test is kept, but re-rendered as a
+// simple non-interactive "here's which test this is" intro (see
+// BRANDED_KINDS/renderIntro) instead of the real accept/reject controls,
+// which depend on a real booking to mean anything.
+const SKIPPED_KINDS = new Set(['test_data_confirm', 'admin_checklist'])
+const BRANDED_KINDS = new Set(['accept_reject_test'])
+
+// practice.html/story.html is opened directly with no launch URL supplying
+// a session id (unlike examiner.php, which WordPress generates per
+// booking) — mint one locally, just to scope the BroadcastChannel to this
+// one page load/candidate-window pair.
+const sessionId = crypto.randomUUID()
+const channel = new BroadcastChannel(channelName(sessionId))
+let candidateWindow: Window | null = null
 
 let items: StorylineItem[] = []
 let currentIndex = 0
+
+// --- Candidate window (images only — see candidate.ts) -------------------
+function candidateUrl(): string {
+  const params = new URLSearchParams()
+  params.set('session', sessionId)
+  return `./candidate.html?${params.toString()}`
+}
+
+function openCandidateWindow() {
+  candidateWindow = window.open(candidateUrl(), `candidateWindow_${sessionId}`, 'width=1024,height=768')
+  candidateWindow?.focus()
+  updateCandidateStatus()
+}
+
+function openOrFocusCandidateWindow() {
+  if (candidateWindow && !candidateWindow.closed) candidateWindow.focus()
+  else openCandidateWindow()
+}
+
+document.getElementById('open-candidate')?.addEventListener('click', openOrFocusCandidateWindow)
+document.getElementById('candidate-status')?.addEventListener('click', openOrFocusCandidateWindow)
+
+// Polled rather than event-driven (no reliable "closed" event across
+// browsers) — same approach as examiner.ts, minus the violation report:
+// nobody's proctoring a practice run, so a closed candidate window here is
+// just a status dot, never something worth logging anywhere.
+function updateCandidateStatus() {
+  const open = !!candidateWindow && !candidateWindow.closed
+  const btn = document.getElementById('candidate-status')
+  if (!btn) return
+  btn.classList.toggle('open', open)
+  btn.title = open ? 'Candidate window open' : 'Candidate window closed — click to open'
+}
+window.setInterval(updateCandidateStatus, 1000)
+updateCandidateStatus()
+
+function sendAdvance(item: StorylineItem) {
+  if (!item.candidateState) return
+  channel.postMessage({ type: 'advance', candidateState: item.candidateState })
+}
+
+// candidate.ts posts `ready` on first load and on every reopen — reply with
+// whatever state the current slide should be showing so a (re)opened
+// window never sits blank. Same pattern as examiner.ts.
+channel.onmessage = event => {
+  const data = event.data as { type: string }
+  if (data?.type !== 'ready') return
+  const item = items[currentIndex]
+  if (item?.candidateState) channel.postMessage({ type: 'advance', candidateState: item.candidateState })
+}
 
 // --- Audio playback — same one-clip-at-a-time console as the real player,
 // minus play-count limits/warnings/logging: no reporting or gating here,
@@ -140,6 +205,9 @@ function renderTextAndAudio(content: HTMLElement, item: StorylineItem) {
 }
 
 // --- Image zoom (click to pop out to near-full-size, click again/backdrop to collapse) ---
+// This window only ever shows small reference thumbnails (same as the real
+// examiner console) — the actual full-size images are on the candidate
+// window (candidate.ts's .polaroid panels), same split as the real exam.
 let zoomEl: HTMLElement | null = null
 
 function closeZoom() {
@@ -319,6 +387,23 @@ function endSession(message: string) {
   setNavVisible(false)
 }
 
+// The intro screen — branded blue/white, same treatment the real exam gives
+// its pre-test screens (see BRANDED_KINDS), just showing which test this is
+// rather than real accept/reject controls, which only mean something
+// against a real booking.
+function renderIntro(content: HTMLElement, item: StorylineItem) {
+  if (item.testDisplayName) {
+    const name = document.createElement('div')
+    name.className = 'test-display-name'
+    name.textContent = item.testDisplayName
+    content.appendChild(name)
+  }
+  const note = document.createElement('div')
+  note.className = 'slide-text'
+  note.textContent = "This is a sample test for practice — it isn't scored and nothing about this run is recorded. Click Next when you're ready to begin."
+  content.appendChild(note)
+}
+
 function renderCurrentSlide() {
   if (sessionEnded) return
   const card = document.getElementById('slide-card')
@@ -341,38 +426,61 @@ function renderCurrentSlide() {
   if (progressFill) progressFill.style.width = `${((currentIndex + 1) / items.length) * 100}%`
 
   card.innerHTML = ''
+  const branded = BRANDED_KINDS.has(item.kind)
+  card.classList.toggle('branded', branded)
 
-  const heading = document.createElement('div')
-  heading.className = 'slide-heading'
-  heading.textContent = item.label
-  card.appendChild(heading)
+  let content: HTMLElement = card
+  if (branded) {
+    const logoStrip = document.createElement('div')
+    logoStrip.className = 'branded-logo-strip'
+    const logoImg = document.createElement('img')
+    logoImg.src = teacLogo
+    logoImg.alt = 'Test of English for Aeronautical Communication'
+    logoStrip.appendChild(logoImg)
+    card.appendChild(logoStrip)
 
-  renderTextAndAudio(card, item)
+    content = document.createElement('div')
+    content.className = 'branded-content'
+    card.appendChild(content)
+  }
 
-  if (item.previewContent?.length) renderPreviewContent(card, item.previewContent)
+  if (item.kind === 'accept_reject_test') {
+    // No item.label heading here — the admin-authored slide name (e.g.
+    // "Accept/Reject") is meaningful to an examiner, not to a solo
+    // practice-taker. renderIntro()'s testDisplayName already serves as
+    // this screen's heading.
+    renderIntro(content, item)
+  } else {
+    const heading = document.createElement('div')
+    heading.className = 'slide-heading'
+    heading.textContent = item.label
+    content.appendChild(heading)
+    renderTextAndAudio(content, item)
+    if (item.previewContent?.length) renderPreviewContent(content, item.previewContent)
 
-  const images = item.media?.images
-  if (images?.length) {
-    const thumbRow = document.createElement('div')
-    thumbRow.className = 'practice-images'
-    images.forEach((url, i) => {
-      const thumb = document.createElement('div')
-      thumb.className = 'practice-image-wrap'
-      const img = document.createElement('img')
-      img.src = url
-      img.alt = ''
-      img.className = 'practice-image'
-      img.addEventListener('click', () => openZoom(img))
-      thumb.appendChild(img)
-      if (images.length > 1) {
-        const tag = document.createElement('span')
-        tag.className = 'exam-thumb-label'
-        tag.textContent = imageLabel(i)
-        thumb.appendChild(tag)
-      }
-      thumbRow.appendChild(thumb)
-    })
-    card.appendChild(thumbRow)
+    const images = item.media?.images
+    if (images?.length) {
+      const thumbRow = document.createElement('div')
+      thumbRow.className = 'exam-thumbs'
+      images.forEach((url, i) => {
+        const thumb = document.createElement('div')
+        thumb.className = 'exam-thumb-wrap'
+        const img = document.createElement('img')
+        img.src = url
+        img.alt = ''
+        img.className = 'exam-thumb'
+        img.addEventListener('click', () => openZoom(img))
+        thumb.appendChild(img)
+        if (images.length > 1) {
+          const tag = document.createElement('span')
+          tag.className = 'exam-thumb-label'
+          tag.textContent = imageLabel(i)
+          thumb.appendChild(tag)
+        }
+        thumbRow.appendChild(thumb)
+      })
+      content.appendChild(thumbRow)
+    }
   }
 
   refreshClipButtons()
@@ -390,6 +498,7 @@ function renderCurrentSlide() {
 
   if (item.startsTestTimer) startGlobalTimer()
   startSlideTimer(item)
+  sendAdvance(item)
 }
 
 document.getElementById('prev-btn')?.addEventListener('click', () => {
