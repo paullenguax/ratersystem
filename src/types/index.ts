@@ -490,6 +490,14 @@ export interface StorylineVersion {
   // Metadata, not content — safe to toggle regardless of publish status,
   // same reasoning as StorylinePart.isBackup/active.
   ungated?: boolean
+  // Undefined is treated as 'live' everywhere this is read (backward-
+  // compatible default for every Version created before this field existed).
+  // 'backup' unlocks isBackup-flagged Parts in this Version's Part picker
+  // (normally excluded — a backup version is exactly where reserve content
+  // belongs). Choosing 'practice' at creation defaults ungated to true (still
+  // freely overridable afterward) since practice runs don't typically need
+  // the real-exam confirmation gating.
+  versionType?: 'live' | 'backup' | 'practice'
   createdAt?: Timestamp
   createdBy?: string
   publishedAt?: Timestamp

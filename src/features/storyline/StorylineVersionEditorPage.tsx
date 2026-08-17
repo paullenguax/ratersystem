@@ -127,6 +127,9 @@ export function StorylineVersionEditorPage() {
         <Badge variant={version.status === 'draft' ? 'outline' : version.status === 'published' ? 'default' : 'secondary'}>
           {version.status}
         </Badge>
+        {(version.versionType ?? 'live') !== 'live' && (
+          <Badge variant="outline">{version.versionType}</Badge>
+        )}
         <Button variant="outline" size="sm" onClick={handlePreview}>
           <Eye className="size-4 mr-2" /> Preview
         </Button>
@@ -143,16 +146,19 @@ export function StorylineVersionEditorPage() {
         <div className="grid grid-cols-1 gap-3">
           {PART_NUMBERS.map(n => {
             // Only offer Parts that are actually ready for normal use — published,
-            // active, not a reserve/backup, and eligible for this Test's type
-            // (untagged Parts are eligible for every type, see
-            // StorylinePart.testTypes) — but keep an already-selected Part
-            // visible even if it's since been deactivated/archived/marked backup/
-            // retagged out of eligibility, so an existing draft doesn't silently
-            // lose its selection.
+            // active, and eligible for this Test's type (untagged Parts are
+            // eligible for every type, see StorylinePart.testTypes) — but keep
+            // an already-selected Part visible even if it's since been
+            // deactivated/archived/retagged out of eligibility, so an existing
+            // draft doesn't silently lose its selection. Reserve/backup Parts
+            // are excluded from normal ('live'/'practice') versions, but a
+            // 'backup' version is exactly where they belong, so they're
+            // included there instead.
             const options = parts.filter(p =>
               p.partNumber === n &&
               (p.id === partRefs[n] || (
-                p.status === 'published' && p.active !== false && !p.isBackup &&
+                p.status === 'published' && p.active !== false &&
+                (version.versionType === 'backup' || !p.isBackup) &&
                 (!p.testTypes?.length || !test?.testType || p.testTypes.includes(test.testType))
               ))
             )

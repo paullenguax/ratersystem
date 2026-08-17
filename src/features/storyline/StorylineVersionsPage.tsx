@@ -9,11 +9,19 @@ import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
 import type { StorylinePart, StorylinePartNumber, StorylineTemplate, StorylineTest, StorylineVersion } from '@/types'
 import { previewStorylineVersion } from './useStorylinePreview'
-import { exportStorylineVersion } from './exportStoryline'
+import { exportStorylineVersion, exportStorylinePractice } from './exportStoryline'
 import { resolveItems } from './resolveItems'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { useState } from 'react'
+
+type VersionType = NonNullable<StorylineVersion['versionType']>
+
+const VERSION_TYPE_LABEL: Record<VersionType, string> = {
+  live: 'Live', backup: 'Backup', practice: 'Practice',
+}
 
 async function fetchTest(testId: string): Promise<StorylineTest | null> {
   const snap = await getDoc(doc(db, 'storyline_tests', testId))
@@ -64,6 +72,8 @@ export function StorylineVersionsPage() {
   const { data: template } = useQuery({ queryKey: ['storyline_template'], queryFn: fetchTemplate })
   const { data: parts = [] } = useQuery({ queryKey: ['storyline_parts'], queryFn: fetchParts })
 
+  const [newDraftType, setNewDraftType] = useState<VersionType>('live')
+
   function selectedParts(version: StorylineVersion) {
     const selected: Partial<Record<StorylinePartNumber, StorylinePart>> = {}
     for (const n of PART_NUMBERS) {
@@ -81,6 +91,10 @@ export function StorylineVersionsPage() {
       partRefs: {},
       slotContent: {},
       items: [],
+      versionType: newDraftType,
+      // Practice runs don't typically need real-exam gating — still freely
+      // toggleable afterward, this is just a helpful starting default.
+      ungated: newDraftType === 'practice',
       createdBy: user?.uid ?? null,
       createdAt: serverTimestamp(),
     })
@@ -95,11 +109,31 @@ export function StorylineVersionsPage() {
       partRefs: version.partRefs ?? {},
       slotContent: version.slotContent ?? {},
       items: [],
+      versionType: version.versionType ?? 'live',
+      // Only Practice versions may export ungated — Live and Backup exports
+      // (real exams / backup examiners) must always keep real gating. Admins
+      // check a Live/Backup version's flow via Preview instead, which
+      // already bypasses gating unconditionally without touching this flag.
+      ungated: (version.versionType ?? 'live') === 'practice' ? (version.ungated ?? false) : false,
       createdBy: user?.uid ?? null,
       createdAt: serverTimestamp(),
     })
     queryClient.invalidateQueries({ queryKey: ['storyline_versions', testId] })
     navigate(`/test-versions/${testId}/versions/${docRef.id}/edit`)
+  }
+
+  // Metadata, not content — freely changeable regardless of publish status,
+  // same reasoning as isBackup. Switching to 'practice' nudges ungated on as
+  // a starting default; switching to 'live'/'backup' forces ungated off —
+  // those exports must never skip real-exam gating (see handleToggleUngated).
+  async function handleChangeVersionType(version: StorylineVersion, versionType: VersionType) {
+    await updateDoc(doc(db, 'storyline_versions', version.id), {
+      versionType,
+      ...(versionType === 'practice'
+        ? (!version.ungated ? { ungated: true } : {})
+        : { ungated: false }),
+    })
+    queryClient.invalidateQueries({ queryKey: ['storyline_versions', testId] })
   }
 
   async function handlePublish(version: StorylineVersion) {
@@ -135,10 +169,18 @@ export function StorylineVersionsPage() {
     }
   }
 
+  // Practice exports skip the entire proctor/WordPress-gated path — see
+  // exportStorylinePractice()'s file header. Live/Backup keep going through
+  // exportStorylineVersion() unchanged; that's the only place violation
+  // tracking, exposure/part-counting, and the WP booking gate apply.
   async function handleExport(version: StorylineVersion) {
     if (!test) return
     try {
-      await exportStorylineVersion(test, version, template?.theme)
+      if ((version.versionType ?? 'live') === 'practice') {
+        await exportStorylinePractice(test, version, template?.theme)
+      } else {
+        await exportStorylineVersion(test, version, template?.theme)
+      }
     } catch (err) {
       window.alert(`Export failed: ${String(err)}`)
     }
@@ -146,8 +188,11 @@ export function StorylineVersionsPage() {
 
   // Metadata, not content — safe to toggle regardless of publish status
   // (see StorylineVersion.ungated), same reasoning as StorylinePart's
-  // isBackup/active toggles.
+  // isBackup/active toggles. Gated off entirely for Live/Backup — see the
+  // button's disabled state below and handleChangeVersionType above; Live
+  // exams and Backup examiner copies must never be able to skip gating.
   async function handleToggleUngated(version: StorylineVersion) {
+    if ((version.versionType ?? 'live') !== 'practice') return
     await updateDoc(doc(db, 'storyline_versions', version.id), { ungated: !version.ungated })
     queryClient.invalidateQueries({ queryKey: ['storyline_versions', testId] })
   }
@@ -170,7 +215,17 @@ export function StorylineVersionsPage() {
         </div>
       </div>
 
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <Select value={newDraftType} onValueChange={v => setNewDraftType(v as VersionType)}>
+          <SelectTrigger className="w-32">
+            <SelectValue>{(v: string) => VERSION_TYPE_LABEL[v as VersionType]}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="live">Live</SelectItem>
+            <SelectItem value="backup">Backup</SelectItem>
+            <SelectItem value="practice">Practice</SelectItem>
+          </SelectContent>
+        </Select>
         <Button onClick={handleNewDraft}>
           <Plus className="size-4 mr-2" /> New draft
         </Button>
@@ -185,6 +240,7 @@ export function StorylineVersionsPage() {
               <TableRow>
                 <TableHead>Version</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Type</TableHead>
                 <TableHead>Parts / slides filled</TableHead>
                 <TableHead>Published</TableHead>
                 <TableHead>Gating</TableHead>
@@ -194,7 +250,7 @@ export function StorylineVersionsPage() {
             <TableBody>
               {versions.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                     No versions yet.
                   </TableCell>
                 </TableRow>
@@ -203,6 +259,21 @@ export function StorylineVersionsPage() {
                   <TableRow key={version.id}>
                     <TableCell>{version.versionLabel}</TableCell>
                     <TableCell><Badge variant={statusVariant(version.status)}>{version.status}</Badge></TableCell>
+                    <TableCell>
+                      <Select
+                        value={version.versionType ?? 'live'}
+                        onValueChange={v => handleChangeVersionType(version, v as VersionType)}
+                      >
+                        <SelectTrigger className="w-28">
+                          <SelectValue>{(v: string) => VERSION_TYPE_LABEL[v as VersionType]}</SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="live">Live</SelectItem>
+                          <SelectItem value="backup">Backup</SelectItem>
+                          <SelectItem value="practice">Practice</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </TableCell>
                     <TableCell className="text-muted-foreground text-sm">
                       {version.status === 'draft'
                         ? `${Object.keys(version.partRefs ?? {}).length}/4 parts, ${Object.keys(version.slotContent ?? {}).length} slides`
@@ -218,7 +289,15 @@ export function StorylineVersionsPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-1 justify-end">
-                        <Button variant="ghost" size="sm" onClick={() => handleToggleUngated(version)}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={(version.versionType ?? 'live') !== 'practice'}
+                          title={(version.versionType ?? 'live') !== 'practice'
+                            ? 'Only Practice versions can be ungated — use Preview to check this version\'s flow instead.'
+                            : undefined}
+                          onClick={() => handleToggleUngated(version)}
+                        >
                           {version.ungated
                             ? <><Lock className="size-4 mr-1" /> Make gated</>
                             : <><LockOpen className="size-4 mr-1" /> Make ungated</>}

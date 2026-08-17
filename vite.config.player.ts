@@ -32,6 +32,7 @@ export default defineConfig({
       input: {
         examiner: path.resolve(__dirname, 'player-src/examiner.html'),
         candidate: path.resolve(__dirname, 'player-src/candidate.html'),
+        practice: path.resolve(__dirname, 'player-src/practice.html'),
       },
       output: {
         entryFileNames: 'assets/[name]-[hash].js',

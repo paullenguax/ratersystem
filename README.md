@@ -489,25 +489,78 @@ phase.
   manual; WordPress's existing booking/random-assignment/exposure-tracking
   logic needs zero changes, since it only ever sees "a Test_id has a
   TestUrl," not which tool built the content behind it.
-- **Ungated Versions** (built 2026-08-04, `StorylineVersion.ungated`): a
-  per-Version toggle ("Make ungated"/"Make gated" on `StorylineVersionsPage`,
-  metadata not content — safe regardless of publish status) for exports
-  that don't have a real live booking behind them (backup versions run by a
-  trusted examiner, practice copies, etc.). Exported as a separate
-  `flags.json` alongside `version.json`/`theme.json` — same "absent file =
-  today's default behavior" pattern as `theme.json`, so every already-
-  deployed export keeps working unchanged. In the player, an ungated export
-  behaves like Preview for the Next-button confirmation gating only
-  (`bypassesGating()` in `examiner.ts` — Next is never blocked waiting for
-  audio-completion, checklist-ticking, or the Test Data Confirm fields) —
-  deliberately **not** the same as Preview everywhere: violation/completion
-  reporting and the Accept/Reject screen's session-lock still fire normally,
-  since (unlike Preview) an ungated export might genuinely be run with a
-  real candidate. A small amber "UNGATED" badge appears in the player header
-  whenever this is active, so nobody mistakes the run for a fully-gated real
-  exam. Scoped to the legacy per-Version export path only — the dynamic
-  Part-pooling path (`loadDynamicItems()`) doesn't fetch `flags.json` at
-  all, since there's no per-candidate "skip gating" concept there yet.
+- **Ungated Versions** (built 2026-08-04, restricted to Practice-only
+  2026-08-06, `StorylineVersion.ungated`): a per-Version toggle ("Make
+  ungated"/"Make gated" on `StorylineVersionsPage`, metadata not content —
+  safe regardless of publish status) for exports that don't have a real live
+  booking behind them. Exported as a separate `flags.json` alongside
+  `version.json`/`theme.json` — same "absent file = today's default
+  behavior" pattern as `theme.json`, so every already-deployed export keeps
+  working unchanged. In the player, an ungated export behaves like Preview
+  for the Next-button confirmation gating only (`bypassesGating()` in
+  `examiner.ts` — Next is never blocked waiting for audio-completion,
+  checklist-ticking, or the Test Data Confirm fields) — deliberately **not**
+  the same as Preview everywhere: violation/completion reporting and the
+  Accept/Reject screen's session-lock still fire normally, since (unlike
+  Preview) an ungated export might genuinely be run outside the admin app.
+  A small amber "UNGATED" badge appears in the player header whenever this
+  is active, so nobody mistakes the run for a fully-gated real exam. Scoped
+  to the legacy per-Version export path only — the dynamic Part-pooling
+  path (`loadDynamicItems()`) doesn't fetch `flags.json` at all, since
+  there's no per-candidate "skip gating" concept there yet.
+  **Hard restriction added 2026-08-06**: only `versionType === 'practice'`
+  versions may ever be ungated — `handleToggleUngated` is a no-op and the
+  "Make ungated" button is disabled for Live/Backup versions, and switching
+  a version's type away from `'practice'` force-sets `ungated: false` in
+  the same write. Real exams (Live) and backup-examiner copies (Backup)
+  must always ship gated — the way an admin checks a Live/Backup version's
+  flow without gating is Preview, which already bypasses gating
+  unconditionally (`bypassesGating()` is `isPreview || isUngated`) without
+  ever touching that version's real `ungated` flag or its exported artifact.
+- **Version type — Live/Backup/Practice (built 2026-08-06,
+  `StorylineVersion.versionType`)**: a per-Version category, undefined
+  treated as `'live'` (backward-compatible default). Set via a small picker
+  next to "New draft" on `StorylineVersionsPage` (carried over on
+  Duplicate), and changeable afterward via the same Type column — metadata,
+  not content, so free to change regardless of publish status like
+  `isBackup`. Two effects: choosing `'backup'` unlocks `isBackup`-flagged
+  Parts in that Version's Part picker on `StorylineVersionEditorPage`
+  (normally excluded from the `'live'`/`'practice'` picker entirely, with
+  no override — a `'backup'` version is exactly where reserve Parts
+  belong); `ungated` is now hard-linked to type (see above) — `'practice'`
+  defaults it on and allows toggling, `'live'`/`'backup'` force it off and
+  disable the toggle entirely. `versionType === 'practice'` now also
+  branches export behavior — see the next entry.
+- **Self-service Practice player** (built 2026-08-06, `player-src/
+  practice.ts`/`practice.html`, exported via `exportStorylinePractice()` in
+  `exportStoryline.ts`): a third player-src entry point, alongside examiner.
+  ts/candidate.ts, for `versionType === 'practice'` Versions — `handleExport`
+  on `StorylineVersionsPage` branches to it automatically, Live/Backup keep
+  going through `exportStorylineVersion()` unchanged. Deliberately the
+  simple counterpart: one person plays both roles alone on one device
+  (hearing audio through their own speakers, since there's no examiner in
+  the room to play it for them), no `BroadcastChannel`/second window, no
+  violation reporting, no `reportStorylineEvent`/WP `callSendStats`/
+  `callRejectTest` calls, no PHP gate at all (ships as plain static
+  `story.html` — the filename intentionally matches the old pre-
+  RaterSystemNew Storyline system's sample-test convention). Booking-only
+  slide kinds (`accept_reject_test`, `test_data_confirm`, `admin_checklist`)
+  are filtered out of the item list entirely rather than rendered inert.
+  Keeps: linear Next/Back (never gated — no completion requirement exists
+  in this mode), per-slide script text + freely-replayable audio, images
+  shown at full candidate-facing size (`.practice-images`/`.practice-image`
+  in `player.css`, not the small `.exam-thumbs` sizing meant for an
+  examiner's own reference view) with click-to-zoom, prep/response and
+  session timers (informational only, ported unchanged), `previewParts`
+  content. The export zip also bundles `HOW-TO-PUBLISH.txt` and a starter
+  `home.html` (a plain hand-edited landing page listing links to each
+  published `story.html` — deliberately *not* auto-generated from
+  Firestore; add one `<li><a>` line per sample test by hand, matching how
+  the old system's `home.html` worked) — upload the folder straight to a
+  public path on the host (e.g. `lenguax.com/sample/`), no WordPress
+  involvement at all. All the "complex stuff" (violation tracking, exposure/
+  part-counting, the examiner console, the WP booking gate) stays scoped to
+  Live/Backup exports only, per explicit design intent.
 - **Dynamic Part-pooling (Phase A, built 2026-08-01)**: groundwork for
   replacing whole-Version candidate assignment with true per-candidate Part
   pooling — see `/home/paul/.claude/plans/encapsulated-drifting-corbato.md`
@@ -776,4 +829,4 @@ phase.
 
 ## Last updated
 
-2026-08-01
+2026-08-06

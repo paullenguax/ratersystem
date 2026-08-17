@@ -147,6 +147,88 @@ async function bundlePlayerShellFiles(zip: JSZip): Promise<void> {
   }
 }
 
+// Same idea as bundlePlayerShellFiles(), but for the self-service practice
+// player (player-src/practice.ts/practice.html) instead of the examiner/
+// candidate pair — no PHP gate (no WordPress session/booking hash exists
+// for a self-service visitor to be checked against), so this ships as
+// plain static files. Written into the zip as story.html, not practice.html
+// — matching the filename the old pre-RaterSystemNew Storyline system's
+// sample-test exports used, since admins are already used to that name.
+async function bundlePracticeShellFiles(zip: JSZip): Promise<void> {
+  const manifest = await fetchManifest()
+  const assetFiles = collectAssetFiles(manifest, ['practice.html'])
+  const filesToFetch = ['practice.html', ...assetFiles]
+
+  for (const name of filesToFetch) {
+    const res = await fetch(`${import.meta.env.BASE_URL}player-shell/${name}`)
+    if (!res.ok) throw new Error(`Failed to fetch player-shell asset: ${name}`)
+    if (name === 'practice.html') {
+      zip.file('story.html', await res.text())
+    } else {
+      zip.file(name, await res.blob())
+    }
+  }
+}
+
+function buildPracticeInstructions(test: StorylineTest, version: StorylineVersion): string {
+  return `How to publish "${test.name} — ${version.versionLabel}" as a sample test
+${'='.repeat(30 + test.name.length + version.versionLabel.length)}
+
+1. Upload every file in this zip into its own subfolder on the website
+   (e.g. /sample/${sanitizeFilename(test.name)}-${sanitizeFilename(version.versionLabel)}/).
+   No WordPress install needed — story.html is a plain static page, safe to
+   host anywhere.
+
+2. Link to that folder's story.html from your sample-tests landing page
+   (e.g. /sample/home.html — see home.html included in this zip for a
+   starting point if you don't have one yet). Just add one more <li><a>
+   line per sample test you publish.
+
+That's it — story.html plays the test start to finish on its own, in one
+window, with no login and nothing to report anywhere. All images and audio
+are already bundled into the media/ folder alongside it, so nothing streams
+from elsewhere once it's uploaded.
+
+This is deliberately the simple path: no violation tracking, no exposure/
+part-counting, no examiner console, no WordPress booking system involved —
+that machinery is reserved for versions exported as Live or Backup (see
+"How to activate" instructions in that export instead). If this test ever
+needs any of that, export it as Live/Backup instead of Practice.
+`
+}
+
+// A hand-maintained landing page, not something the app regenerates — bundled
+// as a starting point the first time, then edited directly on the server by
+// hand (add one <li><a> per sample test) exactly like the old pre-
+// RaterSystemNew Storyline system's home.html worked. Deliberately not
+// wired up to auto-list published Practice versions from Firestore: this
+// folder can contain tests from any test type/edition an admin has chosen
+// to publish here, in whatever order/grouping they want, which a purely
+// generated list can't express as simply as a hand-edited page can.
+function buildHomeTemplate(test: StorylineTest, version: StorylineVersion): string {
+  const folder = `${sanitizeFilename(test.name)}-${sanitizeFilename(version.versionLabel)}`
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Sample Tests</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 60px auto; padding: 0 20px; }
+    h1 { font-size: 1.5rem; }
+    ul { line-height: 2.2; font-size: 1.1rem; }
+  </style>
+</head>
+<body>
+  <h1>Choose which sample test to open</h1>
+  <ul>
+    <!-- Add one line like this per sample test you publish: -->
+    <li><a href="./${folder}/story.html">${test.name} — ${version.versionLabel}</a></li>
+  </ul>
+</body>
+</html>
+`
+}
+
 const EXTENSION_BY_CONTENT_TYPE: Record<string, string> = {
   'audio/mpeg': 'mp3',
   'audio/mp3': 'mp3',
@@ -279,6 +361,27 @@ export async function exportStorylineVersion(test: StorylineTest, version: Story
   zip.file('HOW-TO-ACTIVATE.txt', buildActivationInstructions(test, version))
 
   await downloadZip(zip, `${sanitizeFilename(test.name)}-${sanitizeFilename(version.versionLabel)}.zip`)
+}
+
+// Practice/sample-test export — deliberately the simple counterpart to
+// exportStorylineVersion() above. No PHP gate, no flags.json (no gating
+// concept at all in practice.ts — see its file header), no WordPress
+// involvement whatsoever. Only ever called for versionType === 'practice'
+// (StorylineVersionsPage enforces this at the call site) — Live and Backup
+// versions keep going through exportStorylineVersion()'s full gated path,
+// since that's real proctored-exam machinery this export intentionally
+// doesn't carry.
+export async function exportStorylinePractice(test: StorylineTest, version: StorylineVersion, theme?: StorylineTheme) {
+  const zip = new JSZip()
+  await bundlePracticeShellFiles(zip)
+
+  const bundledItems = await bundleMedia(zip, version.items)
+  zip.file('version.json', JSON.stringify(bundledItems, null, 2))
+  zip.file('theme.json', JSON.stringify(theme ?? {}, null, 2))
+  zip.file('HOW-TO-PUBLISH.txt', buildPracticeInstructions(test, version))
+  zip.file('home.html', buildHomeTemplate(test, version))
+
+  await downloadZip(zip, `${sanitizeFilename(test.name)}-${sanitizeFilename(version.versionLabel)}-practice.zip`)
 }
 
 // --- Dynamic Part-pooling exports (see /home/paul/.claude/plans/
