@@ -18,6 +18,7 @@ import { StorylinePartsPage } from '@/features/storyline/StorylinePartsPage'
 import { StorylinePartEditorPage } from '@/features/storyline/StorylinePartEditorPage'
 import { StorylineThemeRulesPage } from '@/features/storyline/StorylineThemeRulesPage'
 import { StorylineTestContentEditorPage } from '@/features/storyline/StorylineTestContentEditorPage'
+import { SampleCollectionPage } from '@/features/storyline/SampleCollectionPage'
 import { SessionsPage } from '@/features/sessions/SessionsPage'
 import { AssignmentsPage } from '@/features/assignments/AssignmentsPage'
 import { AssignmentReviewPage } from '@/features/assignments/AssignmentReviewPage'
@@ -72,6 +73,7 @@ export default function App() {
                 <Route index element={<DashboardPage />} />
                 <Route path="people"      element={<ProtectedRoute allowedRoles={['admin']}><PeoplePage /></ProtectedRoute>} />
                 <Route path="test-bank"   element={<ProtectedRoute allowedRoles={['admin']}><TestBankPage /></ProtectedRoute>} />
+                <Route path="sample-collection" element={<ProtectedRoute allowedRoles={['admin', 'senior_rater', 'trainee']}><SampleCollectionPage /></ProtectedRoute>} />
                 <Route path="test-versions" element={<ProtectedRoute allowedRoles={['admin']}><StorylineTestsPage /></ProtectedRoute>} />
                 <Route path="test-versions/template" element={<ProtectedRoute allowedRoles={['admin']}><StorylineTemplateEditorPage /></ProtectedRoute>} />
                 <Route path="test-versions/parts" element={<ProtectedRoute allowedRoles={['admin']}><StorylinePartsPage /></ProtectedRoute>} />

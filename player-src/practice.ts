@@ -371,6 +371,14 @@ function setNavVisible(visible: boolean) {
   if (nav) nav.style.display = visible ? '' : 'none'
 }
 
+// Every exported Practice zip is meant to be unpacked into its own
+// subfolder one level under the shared home.html/index.html (see HOW-TO-
+// PUBLISH.txt — e.g. lenguax.com/sample/Airline/story.html next to
+// lenguax.com/sample/index.html), so "back to the index" is always exactly
+// one level up, regardless of which folder this particular export ends up
+// named.
+const BACK_TO_INDEX_URL = '../index.html'
+
 function endSession(message: string) {
   sessionEnded = true
   if (activeAudio) { activeAudio.pause(); activeAudio = null }
@@ -383,6 +391,12 @@ function endSession(message: string) {
     msg.className = 'session-ended-message'
     msg.textContent = message
     card.appendChild(msg)
+
+    const backLink = document.createElement('a')
+    backLink.className = 'session-ended-back'
+    backLink.href = BACK_TO_INDEX_URL
+    backLink.textContent = '← Back to sample tests'
+    card.appendChild(backLink)
   }
   setNavVisible(false)
 }

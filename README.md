@@ -264,9 +264,14 @@ phase.
   content + its 4 Parts' content into the final flat `StorylineItem[]` —
   used identically by Preview, Publish (snapshots the result into
   `version.items`), and Export. It also takes a `testDisplayName` param
-  (`"{test.name} — {version.versionLabel}"`, computed by the caller — the
-  only field on `StorylineItem` not derived from `TemplateSlide`/slot
-  content) for the `accept_reject_test` slide to display.
+  (`"{test.name}: {version.versionLabel}"` — colon, not em-dash, since
+  2026-08-18 — computed by the caller — the only field on `StorylineItem`
+  not derived from `TemplateSlide`/slot content) for the
+  `accept_reject_test` slide to display. Baked into `version.items` at
+  Publish time, so this only affects *new* publishes — an already-published
+  Version (and any already-exported zip built from it) keeps whatever
+  separator was live when it was published; re-publish (Duplicate → fill in
+  → Publish) a Version to pick up the new one.
 - **Pages**: `StorylineTestsPage` → `StorylineVersionsPage` (draft/publish/
   duplicate-as-new-draft/archive lifecycle, Part picker, Preview, Export) →
   `StorylineVersionEditorPage` (whole-test slot-filling + per-Part Select).
@@ -586,6 +591,14 @@ phase.
   entry. All the "complex stuff" (violation tracking, exposure/part-
   counting, the WP booking gate) stays scoped to Live/Backup exports only,
   per explicit design intent.
+  **Finish button (added 2026-08-18)**: `endSession()` now appends a
+  "← Back to sample tests" link (`.session-ended-back`) to
+  `BACK_TO_INDEX_URL = '../index.html'` — every Practice export unpacks
+  into its own subfolder one level under the shared index/home.html (see
+  `HOW-TO-PUBLISH.txt`), so "one level up" is always correct regardless of
+  which folder a given export ends up named. examiner.ts's real-exam
+  `endSession()` deliberately doesn't get this link — a real exam ends with
+  an examiner already there, not a solo visitor who needs somewhere to go.
 - **"Flight Strip" sample-tests landing page** (built 2026-08-06,
   `buildHomeTemplate()`/`HOME_SHELL_HEAD`/`HOME_SHELL_FOOT`/
   `HOME_LOGO_BASE64` in `exportStoryline.ts`, standalone starter copy at
@@ -604,6 +617,16 @@ phase.
   `sample-site/index.html` so they can't visually drift apart — if the CSS/
   shell ever changes, regenerate `sample-site/index.html` from a fresh
   export's `home.html` rather than hand-editing its shell.
+- **Sample Collection page** (built 2026-08-18, `SampleCollectionPage.tsx`,
+  route `/sample-collection`, nav entry in `AppShell.tsx`, roles `admin`/
+  `senior_rater`/`trainee`): an in-app quick-link list to whatever's
+  published at `lenguax.com/sample/`, for trying a sample test without
+  leaving RaterSystem. `SAMPLE_TESTS` is a hand-maintained array of
+  `{label, folder}` — deliberately not derived from Firestore, same
+  reasoning as `sample-site/index.html`: this reflects whatever's actually
+  been uploaded to that folder, not what's merely marked Practice in
+  Firestore. Keep the two lists (this one and `sample-site/index.html`) in
+  sync by hand when a folder's added/renamed/removed.
 - **Dynamic Part-pooling (Phase A, built 2026-08-01)**: groundwork for
   replacing whole-Version candidate assignment with true per-candidate Part
   pooling — see `/home/paul/.claude/plans/encapsulated-drifting-corbato.md`

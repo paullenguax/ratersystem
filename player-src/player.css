@@ -467,6 +467,23 @@ div.polaroid img {
   text-align: center;
 }
 
+/* Practice player only — examiner.ts's endSession() never adds this link,
+   since a real exam ends with an examiner already there to handle what's
+   next, not a solo visitor who needs somewhere to go. */
+.session-ended-back {
+  display: inline-block;
+  padding: 12px 24px;
+  background: var(--accent-color, #00528c);
+  color: white;
+  border-radius: 6px;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.session-ended-back:hover {
+  opacity: 0.9;
+}
+
 .exam-thumbs {
   display: flex;
   gap: 16px;

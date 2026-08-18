@@ -148,7 +148,7 @@ export function StorylineVersionsPage() {
       return
     }
     if (!window.confirm(`Publish "${version.versionLabel}"? Published versions are immutable — further edits require duplicating as a new draft.`)) return
-    const items = resolveItems(template.slides, test?.variables, version.slotContent ?? {}, chosenParts, `${test?.name} — ${version.versionLabel}`)
+    const items = resolveItems(template.slides, test?.variables, version.slotContent ?? {}, chosenParts, `${test?.name}: ${version.versionLabel}`)
     await updateDoc(doc(db, 'storyline_versions', version.id), {
       items,
       status: 'published',
@@ -163,7 +163,7 @@ export function StorylineVersionsPage() {
         window.alert('No Script Template found — set one up first.')
         return
       }
-      previewStorylineVersion(resolveItems(template.slides, test?.variables, version.slotContent ?? {}, selectedParts(version), `${test?.name} — ${version.versionLabel}`), template.theme)
+      previewStorylineVersion(resolveItems(template.slides, test?.variables, version.slotContent ?? {}, selectedParts(version), `${test?.name}: ${version.versionLabel}`), template.theme)
     } else {
       previewStorylineVersion(version.items, template?.theme)
     }
