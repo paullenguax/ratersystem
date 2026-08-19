@@ -599,6 +599,11 @@ phase.
   which folder a given export ends up named. examiner.ts's real-exam
   `endSession()` deliberately doesn't get this link — a real exam ends with
   an examiner already there, not a solo visitor who needs somewhere to go.
+  **Notes drawer (added 2026-08-19)**: the slide-in `#notes-drawer`
+  showing `item.notes` (the "Notes" header button) was missing from the
+  original build — ported back in verbatim from examiner.html/examiner.ts
+  (same markup/CSS/toggle logic, no changes needed). Shows on every slide
+  including the intro, same as the real exam.
 - **"Flight Strip" sample-tests landing page** (built 2026-08-06,
   `buildHomeTemplate()`/`HOME_SHELL_HEAD`/`HOME_SHELL_FOOT`/
   `HOME_LOGO_BASE64` in `exportStoryline.ts`, standalone starter copy at

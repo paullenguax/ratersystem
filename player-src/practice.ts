@@ -60,6 +60,13 @@ function openOrFocusCandidateWindow() {
 document.getElementById('open-candidate')?.addEventListener('click', openOrFocusCandidateWindow)
 document.getElementById('candidate-status')?.addEventListener('click', openOrFocusCandidateWindow)
 
+document.getElementById('notes-toggle')?.addEventListener('click', () => {
+  document.getElementById('notes-drawer')?.classList.toggle('open')
+})
+document.getElementById('notes-close')?.addEventListener('click', () => {
+  document.getElementById('notes-drawer')?.classList.remove('open')
+})
+
 // Polled rather than event-driven (no reliable "closed" event across
 // browsers) — same approach as examiner.ts, minus the violation report:
 // nobody's proctoring a practice run, so a closed candidate window here is
@@ -423,6 +430,7 @@ function renderCurrentSlide() {
   const card = document.getElementById('slide-card')
   const progressLabel = document.getElementById('progress-label')
   const progressFill = document.getElementById('progress-fill') as HTMLElement | null
+  const notesContent = document.getElementById('notes-content')
   if (!card) return
 
   if (items.length === 0) {
@@ -509,6 +517,8 @@ function renderCurrentSlide() {
   }
   const prevBtn = document.getElementById('prev-btn') as HTMLButtonElement | null
   if (prevBtn) prevBtn.disabled = currentIndex === 0
+
+  if (notesContent) notesContent.innerHTML = renderInlineMarkup(item.notes || 'No notes for this slide.')
 
   if (item.startsTestTimer) startGlobalTimer()
   startSlideTimer(item)
