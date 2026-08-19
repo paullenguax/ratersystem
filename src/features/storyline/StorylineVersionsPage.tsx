@@ -73,6 +73,11 @@ export function StorylineVersionsPage() {
   const { data: parts = [] } = useQuery({ queryKey: ['storyline_parts'], queryFn: fetchParts })
 
   const [newDraftType, setNewDraftType] = useState<VersionType>('live')
+  // Archived versions pile up fast once a fix means re-publishing a
+  // Duplicate of something already live (colon separator, notes drawer,
+  // etc.) — hidden by default, same as StorylinePartsPage's "Show archived".
+  const [showArchived, setShowArchived] = useState(false)
+  const visibleVersions = showArchived ? versions : versions.filter(v => v.status !== 'archived')
 
   function selectedParts(version: StorylineVersion) {
     const selected: Partial<Record<StorylinePartNumber, StorylinePart>> = {}
@@ -215,7 +220,16 @@ export function StorylineVersionsPage() {
         </div>
       </div>
 
-      <div className="flex justify-end gap-2">
+      <div className="flex items-center justify-end gap-2">
+        <label className="flex items-center gap-2 text-sm cursor-pointer select-none mr-2">
+          <input
+            type="checkbox"
+            checked={showArchived}
+            onChange={e => setShowArchived(e.target.checked)}
+            className="rounded"
+          />
+          <span>Show archived</span>
+        </label>
         <Select value={newDraftType} onValueChange={v => setNewDraftType(v as VersionType)}>
           <SelectTrigger className="w-32">
             <SelectValue>{(v: string) => VERSION_TYPE_LABEL[v as VersionType]}</SelectValue>
@@ -248,14 +262,14 @@ export function StorylineVersionsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {versions.length === 0 ? (
+              {visibleVersions.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                    No versions yet.
+                    {versions.length === 0 ? 'No versions yet.' : 'No versions match this filter.'}
                   </TableCell>
                 </TableRow>
               ) : (
-                versions.map(version => (
+                visibleVersions.map(version => (
                   <TableRow key={version.id}>
                     <TableCell>{version.versionLabel}</TableCell>
                     <TableCell><Badge variant={statusVariant(version.status)}>{version.status}</Badge></TableCell>

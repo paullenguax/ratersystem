@@ -273,11 +273,16 @@ phase.
   separator was live when it was published; re-publish (Duplicate → fill in
   → Publish) a Version to pick up the new one.
 - **Pages**: `StorylineTestsPage` → `StorylineVersionsPage` (draft/publish/
-  duplicate-as-new-draft/archive lifecycle, Part picker, Preview, Export) →
-  `StorylineVersionEditorPage` (whole-test slot-filling + per-Part Select).
-  `StorylinePartsPage` (Parts Library, filterable by Part number/status/
-  backup, archived hidden by default via a "Show archived" toggle since they
-  pile up and rarely matter day-to-day) → `StorylinePartEditorPage`
+  duplicate-as-new-draft/archive lifecycle, Part picker, Preview, Export;
+  archived versions hidden by default via a "Show archived" toggle, added
+  2026-08-19 — matches Parts Library's toggle below, added for the same
+  reason: re-publishing a Duplicate to pick up a code fix, e.g. the
+  testDisplayName colon separator, leaves the old published Version behind,
+  and those pile up fast) → `StorylineVersionEditorPage` (whole-test
+  slot-filling + per-Part Select). `StorylinePartsPage` (Parts Library,
+  filterable by Part number/status/backup, archived hidden by default via a
+  "Show archived" toggle since they pile up and rarely matter day-to-day) →
+  `StorylinePartEditorPage`
   (slot-filling for that Part's slides only). `StorylineThemeRulesPage`
   (`/test-versions/themes`) manages the shared theme vocabulary and
   unmixable Part-1/4 pairs (see "Dynamic Part-pooling" below).
