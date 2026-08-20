@@ -400,12 +400,9 @@ div.polaroid img {
   color: #444;
 }
 
-.test-data-field input {
+.test-data-field strong {
   flex: 1;
-  padding: 8px 10px;
-  border: 1px solid #ccc;
-  border-radius: 6px;
-  font: inherit;
+  font-weight: 700;
 }
 
 .test-data-agree {

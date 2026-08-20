@@ -15,7 +15,7 @@ import teacLogo from './assets/teac-logo.png'
 // per-Part flow the rest of the redesign deliberately kept plain/modern.
 const BRANDED_KINDS = new Set(['accept_reject_test', 'test_data_confirm', 'admin_checklist'])
 
-const { sessionId, isPreview } = getParams()
+const { sessionId, isPreview, testNumber, centreName, examinerName, candidateName } = getParams()
 // Set (if applicable) once loadFlags() resolves, before the first render —
 // see the Promise.all in the boot sequence at the bottom of this file.
 // Unlike isPreview, this does NOT affect violation/completion reporting or
@@ -474,13 +474,18 @@ function renderPreviewContent(card: HTMLElement, entries: NonNullable<StorylineI
 }
 
 // --- Live field substitution (Test Data confirm) ------------------------
-// The Test Data confirm slide is filled in by the examiner live, during the
-// session — a manual stand-in for what a real booking system will supply
-// later (Phase 2). Unlike everything else, this can't be resolved ahead of
-// time in resolveItems.ts, so it's a small bit of genuinely new runtime
-// state, applied to examinerText at render time only (never mutates item).
+// Sourced directly from the real WP booking-accept flow's own launch URL
+// (tc/in/cn/id — see getParams() in session.ts for exactly where these
+// come from and why they're already trustworthy by the time this code
+// runs). Known at boot, not something the examiner enters — the Test Data
+// Confirm slide (renderTestDataConfirm()) just displays these read-only,
+// as a "is this the right candidate/test" sanity check, matching the old
+// Storyline system's equivalent screen exactly. Undefined in Preview mode
+// (no real booking behind a preview) — renderTestDataConfirm() shows "—"
+// for whichever fields are missing rather than crashing or showing
+// "undefined".
 
-let liveFields: { centreName?: string; testNumber?: string; examinerName?: string; candidateName?: string } = {}
+const liveFields = { centreName, testNumber, examinerName, candidateName }
 
 function applyLiveFieldSubstitutions(text: string): string {
   const subs: Record<string, string> = {
@@ -571,31 +576,33 @@ function renderChecklist(container: HTMLElement, rawItems: (string | ChecklistIt
 }
 
 // --- Test Data confirm ---------------------------------------------------
+// Read-only display of liveFields (sourced from the real booking's launch
+// URL, see getParams()) — a "John from the waiting room wandering into
+// Bob's test" sanity check, not a spelling-correction step (that's a
+// separate paperwork process) and not something the examiner types in, so
+// unlike every other slide's gating, the only thing to actually confirm
+// here is the agree-to-terms checkbox.
 
 const TEST_DATA_FIELDS = [
-  { id: 'td-centre', label: 'Centre Name' },
-  { id: 'td-testnum', label: 'Test Number' },
-  { id: 'td-examiner', label: 'Examiner Name' },
-  { id: 'td-candidate', label: 'Candidate Name' },
+  { label: 'Centre Name', value: () => liveFields.centreName },
+  { label: 'Test Number', value: () => liveFields.testNumber },
+  { label: 'Examiner Name', value: () => liveFields.examinerName },
+  { label: 'Candidate Name', value: () => liveFields.candidateName },
 ]
 
 function renderTestDataConfirm(card: HTMLElement) {
   const wrap = document.createElement('div')
   wrap.className = 'test-data-fields'
   for (const f of TEST_DATA_FIELDS) {
-    const row = document.createElement('label')
+    const row = document.createElement('div')
     row.className = 'test-data-field'
     const span = document.createElement('span')
     span.textContent = f.label
-    const input = document.createElement('input')
-    input.type = 'text'
-    input.id = f.id
-    // These are hand-typed candidate/centre/examiner identity fields on a
-    // machine that may be shared across multiple real sittings at a test
-    // centre — never offer to remember/suggest previously-typed values.
-    input.autocomplete = 'off'
-    input.addEventListener('input', () => updateNavState())
-    row.append(span, input)
+    const value = document.createElement('strong')
+    // Undefined only in Preview (no real booking behind it) — never shown
+    // as "undefined".
+    value.textContent = f.value() || '—'
+    row.append(span, value)
     wrap.appendChild(row)
   }
   const agreeRow = document.createElement('label')
@@ -611,15 +618,8 @@ function renderTestDataConfirm(card: HTMLElement) {
   card.appendChild(wrap)
 }
 
-function testDataValues() {
-  const get = (id: string) => (document.getElementById(id) as HTMLInputElement | null)?.value.trim() ?? ''
-  const agree = (document.getElementById('td-agree') as HTMLInputElement | null)?.checked ?? false
-  return { centreName: get('td-centre'), testNumber: get('td-testnum'), examinerName: get('td-examiner'), candidateName: get('td-candidate'), agree }
-}
-
 function testDataComplete(): boolean {
-  const v = testDataValues()
-  return !!(v.centreName && v.testNumber && v.examinerName && v.candidateName && v.agree)
+  return (document.getElementById('td-agree') as HTMLInputElement | null)?.checked ?? false
 }
 
 // --- Accept/Reject test ---------------------------------------------------
@@ -876,11 +876,6 @@ document.getElementById('next-btn')?.addEventListener('click', () => {
   if (sessionEnded) return
   const nextBtn = document.getElementById('next-btn') as HTMLButtonElement | null
   if (nextBtn?.disabled) return
-  const item = items[currentIndex]
-  if (item.kind === 'test_data_confirm') {
-    const v = testDataValues()
-    liveFields = { centreName: v.centreName, testNumber: v.testNumber, examinerName: v.examinerName, candidateName: v.candidateName }
-  }
   if (currentIndex >= items.length - 1) {
     finishTest()
     return

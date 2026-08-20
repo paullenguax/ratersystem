@@ -426,21 +426,39 @@ phase.
   handler a no-op for the rest of the session — recoverable only by
   re-launching Preview/export); in Preview mode Reject just logs instead,
   since preview is for free exploration. `test_data_confirm` renders 4
-  plain text inputs (Centre Name/Test Number/Examiner Name/Candidate
-  Name, each `autocomplete="off"` since 2026-08-20 — hand-typed candidate/
-  examiner identity on a machine that may be shared across real sittings
-  at a test centre, never offer to remember/suggest a prior value) + an
-  agree-to-terms checkbox — a manual stand-in for what a real booking
-  system will supply once Phase 2 exists — gated the same way as audio
-  (Next disabled until complete, bypassed in Preview). The values
-  typed there are the one piece of genuinely new *runtime* state in the
-  player (`liveFields` in `examiner.ts`, populated when Next is clicked on
-  that slide): `applyLiveFieldSubstitutions()` fills the same
-  `{Centre Name}`/`{Test Number}`/`{Examiner Name}`/`{Candidate Name}`/
-  `{Date}` tokens into `examinerText` at render time for every slide after
-  it (e.g. the Preamble) — everything else in this app resolves once at
-  authoring time, this is the one thing that has to happen live, since the
-  data doesn't exist until the examiner types it in mid-session.
+  **read-only** fields (Centre Name/Test Number/Examiner Name/Candidate
+  Name — not editable inputs since 2026-08-20, previously was, see below)
+  + an agree-to-terms checkbox, gated the same way as audio (Next disabled
+  until the checkbox is ticked, bypassed in Preview).
+  **Corrected 2026-08-20, was a real regression from the old Storyline
+  system, not a deliberate "wait for Phase 2" placeholder as previously
+  documented here:** the real WordPress booking-accept flow
+  (`getTestUrlByTestVersion()` in `Front-End-master/functions.php`, a
+  sibling repo, unrelated to and unmodified by this app) already builds
+  the launch URL with the real centre name/examiner's WP display name/
+  candidate's WP display name/test GUID as `tc`/`in`/`cn`/`id` query
+  params, looked up from the database at accept-time — and `examiner.php`
+  already validates them server-side (the `check` hash *is* an MD5 over
+  exactly these four values) before the page even loads. The old Storyline
+  content read these same params directly into a read-only "confirm your
+  details" display (verified against the checked-in old exports under
+  `Storyline-Replacement/interlocutor-tool-master/`); examiner.ts's
+  client-side JS just never read them, so the migration silently
+  regressed this to blank hand-typed inputs. `getParams()` (`session.ts`)
+  now also parses `tc`/`in`/`cn`/`id` into `centreName`/`examinerName`/
+  `candidateName`/`testNumber`; `liveFields` in `examiner.ts` is set
+  directly from these at module load (no longer mutated on Next-click,
+  since there's nothing left to capture — it's `const` now). Undefined in
+  Preview (no real booking behind a preview) — shown as `—` rather than
+  "undefined". This was deliberately **not** made editable — the point of
+  this screen was always a "is this actually Bob's test, not John's"
+  identity sanity check (a separate paperwork process already covers name-
+  spelling accuracy), so a read-only display matching the old system is
+  the correct fix, not a pre-filled-but-editable compromise.
+  `applyLiveFieldSubstitutions()` still fills the same `{Centre Name}`/
+  `{Test Number}`/`{Examiner Name}`/`{Candidate Name}`/`{Date}` tokens into
+  `examinerText` at render time for every slide (e.g. the Preamble), just
+  now sourced from `liveFields` set once at boot instead of typed input.
 - **Build**: a *separate* `vite.config.player.ts` (multi-page, content-hashed
   asset names via a manifest, `outDir` pointed straight at `public/player-
   shell`) builds this shell. Wired as an npm `prebuild` script, so `public/
