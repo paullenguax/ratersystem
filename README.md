@@ -637,6 +637,45 @@ phase.
   been uploaded to that folder, not what's merely marked Practice in
   Firestore. Keep the two lists (this one and `sample-site/index.html`) in
   sync by hand when a folder's added/renamed/removed.
+- **Live text for `versionType === 'live'` exports** (built 2026-08-20, plan
+  at `/home/paul/.claude/plans/deep-wibbling-flurry.md`): a new
+  `getStorylineLiveContent` Cloud Function (`functions/index.js`) lets
+  already-deployed Live exams pick up template/Part wording edits
+  immediately, no re-Publish/re-Export/re-upload cycle. `exportStorylineVersion()`
+  embeds `flags.json.liveContentId = version.id` only when
+  `versionType === 'live'` (Backup gets no `liveContentId`, same export
+  function otherwise; Practice never reaches this path at all). At boot,
+  `player-src/examiner.ts` calls the new `loadLiveText()`/`applyLiveText()`
+  pair in `dataSource.ts` — fetches fresh `{id, examinerText, notes}` per
+  item from the function (bounded by a 4s timeout), then overwrites *only*
+  those two fields on the bundled static items; everything else (`media`,
+  `candidateInstructions`, `checklistItems`, `previewContent`, `timing`)
+  always comes from the zip's `version.json`, so images/audio stay exactly
+  as offline-resilient as before — any failure (no `liveContentId`, network
+  error, timeout, non-200) collapses to `null` and the bundled text is used
+  unchanged, silently, no error shown to the examiner. The function itself
+  re-runs the same `resolveItems()` computation `handlePublish()` already
+  does client-side, fresh on every request, against a third plain-JS port
+  of `resolveItems()`/`deriveComboImages()` (`functions/resolveItems.js`/
+  `functions/deriveComboImages.js` — a third leg of the existing
+  two-copy-keep-in-sync convention, needed since `functions/` has no build
+  step to share TS modules with `src/`/`player-src/`). Trust model: no
+  secret (can't be safely embedded in a browser running at a random test
+  centre, same constraint as `reportStorylineEvent`) — gated only by
+  requiring the exact Version document ID plus a server-side check that
+  `versionType === 'live'` and `status === 'published'`; every other
+  rejection reason (draft, backup/practice, missing referenced doc)
+  collapses to the same 404 so a probing request can't distinguish them.
+  Response sets `Cache-Control: no-store` (a stale cached response would
+  silently defeat the entire point of this feature). Live text is fetched
+  once at boot only, not per-slide — an examiner already mid-exam in an
+  open tab won't see a same-session update; it applies from the *next*
+  candidate's boot onward. Since `storyline_template/current` is one shared
+  doc across every Test type, a template edit takes effect on every
+  currently-deployed Live Version built from it, globally, the moment it's
+  saved — there's no staged/approval step between an admin's edit and a
+  real candidate seeing it, which is the intended tradeoff, not an
+  oversight.
 - **Dynamic Part-pooling (Phase A, built 2026-08-01)**: groundwork for
   replacing whole-Version candidate assignment with true per-candidate Part
   pooling — see `/home/paul/.claude/plans/encapsulated-drifting-corbato.md`
@@ -905,4 +944,4 @@ phase.
 
 ## Last updated
 
-2026-08-18
+2026-08-20

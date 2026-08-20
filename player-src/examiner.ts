@@ -1,6 +1,6 @@
 import type { StorylineItem, ChecklistItem } from './shared/types'
 import { getParams, channelName } from './shared/session'
-import { loadItems, loadTheme, loadFlags } from './shared/dataSource'
+import { loadItems, loadTheme, loadFlags, loadLiveText, applyLiveText } from './shared/dataSource'
 import { applyTheme } from './shared/applyTheme'
 import { initOnlineStatusDot } from './shared/onlineStatus'
 import { renderInlineMarkup } from './shared/markup'
@@ -906,11 +906,17 @@ function showUngatedBadge() {
 // Flags load in parallel with items — both need to be settled before the
 // first render, since updateNavState() (called from renderCurrentSlide())
 // reads isUngated. Theme is independent of rendering (just CSS custom
-// properties) so it stays a separate fire-and-forget above.
-Promise.all([loadFlags(), loadItems()]).then(([flags, loaded]) => {
+// properties) so it stays a separate fire-and-forget above. The live-text
+// fetch (Live-typed Versions only, see flags.liveContentId) happens after
+// flags/items resolve, since it needs flags.liveContentId — it's the only
+// variable-latency step here (loadFlags/loadItems are same-origin static
+// fetches), bounded by loadLiveText()'s own internal timeout so a slow or
+// unreachable live-content endpoint never meaningfully delays exam start.
+Promise.all([loadFlags(), loadItems()]).then(async ([flags, loaded]) => {
   isUngated = !!flags.ungated
   if (isUngated) showUngatedBadge()
-  items = loaded
+  const liveText = await loadLiveText(flags.liveContentId)
+  items = applyLiveText(loaded, liveText)
   testDisplayName = items.find(i => i.kind === 'accept_reject_test')?.testDisplayName
   preloadAllMedia(items)
   renderCurrentSlide()

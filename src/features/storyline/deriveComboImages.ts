@@ -13,6 +13,8 @@ export interface ComboImageResult {
 // already there. Only produces a result once enough single-image slides
 // have actually been filled in; `slides` must already be scoped to one
 // Part (or the whole-test slides) and given in template order.
+// Ported (kept in sync, no automated enforcement) at player-src/shared/
+// deriveComboImages.ts and functions/deriveComboImages.js.
 export function deriveComboImages(
   slides: TemplateSlide[],
   getUploadedImage: (slideId: string) => string | undefined,

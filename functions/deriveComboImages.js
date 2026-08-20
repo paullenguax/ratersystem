@@ -1,14 +1,8 @@
-import type { TemplateSlide } from './types'
-
-// Ported from src/features/storyline/deriveComboImages.ts — keep in sync
-// (also keep functions/deriveComboImages.js, a third plain-JS port used by
-// getStorylineLiveContent, in sync with both).
-// Player-src stays a fully self-contained TypeScript project, see types.ts.
-
-export interface ComboImageResult {
-  images: string[]
-  sourceLabels: string[]
-}
+// Ported from src/features/storyline/deriveComboImages.ts /
+// player-src/shared/deriveComboImages.ts — keep in sync (a third leg of
+// this codebase's established "duplicate, no automated enforcement"
+// convention for this pair of functions, needed here because functions/
+// has no build step to share TS modules with src/ or player-src/).
 
 // A slide needing more than one image (e.g. "show both pictures together")
 // always reuses the images already uploaded to the single-image slides
@@ -18,12 +12,9 @@ export interface ComboImageResult {
 // already there. Only produces a result once enough single-image slides
 // have actually been filled in; `slides` must already be scoped to one
 // Part (or the whole-test slides) and given in template order.
-export function deriveComboImages(
-  slides: TemplateSlide[],
-  getUploadedImage: (slideId: string) => string | undefined,
-): Record<string, ComboImageResult> {
-  const result: Record<string, ComboImageResult> = {}
-  const collected: { label: string; url: string }[] = []
+function deriveComboImages(slides, getUploadedImage) {
+  const result = {}
+  const collected = []
 
   for (const slide of [...slides].sort((a, b) => a.order - b.order)) {
     const need = slide.slotSpec.images ?? 0
@@ -39,3 +30,5 @@ export function deriveComboImages(
   }
   return result
 }
+
+exports.deriveComboImages = deriveComboImages

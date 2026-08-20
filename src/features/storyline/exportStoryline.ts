@@ -485,7 +485,15 @@ export async function exportStorylineVersion(test: StorylineTest, version: Story
   // player treats that identically to `{ungated: false}` (full gating,
   // today's only behavior). See StorylineVersion.ungated for what this
   // actually changes in the player.
-  zip.file('flags.json', JSON.stringify({ ungated: !!version.ungated }, null, 2))
+  const flags: { ungated: boolean; liveContentId?: string } = { ungated: !!version.ungated }
+  // Only Live versions get a liveContentId — Backup must stay exactly as
+  // static/offline-resilient as it's always been (this is the same
+  // exportStorylineVersion() function Backup uses), and Practice never
+  // reaches this function at all (see exportStorylinePractice()). See
+  // getStorylineLiveContent in functions/index.js and loadLiveText() in
+  // player-src/shared/dataSource.ts for what this actually enables.
+  if ((version.versionType ?? 'live') === 'live') flags.liveContentId = version.id
+  zip.file('flags.json', JSON.stringify(flags, null, 2))
   zip.file('HOW-TO-ACTIVATE.txt', buildActivationInstructions(test, version))
 
   await downloadZip(zip, `${sanitizeFilename(test.name)}-${sanitizeFilename(version.versionLabel)}.zip`)

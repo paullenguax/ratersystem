@@ -102,7 +102,11 @@ function resolveMedia(slide: TemplateSlide, slot?: StorylineSlotContent): Storyl
 //
 // Used both for live Preview (computed on the fly, not persisted) and once
 // at Publish time (persisted into StorylineVersion.items, after which the
-// version no longer depends on the template or its Parts at all).
+// version no longer depends on the template or its Parts at all). Also
+// ported a third time, to plain JS, at functions/resolveItems.js —
+// getStorylineLiveContent (functions/index.js) re-runs this exact
+// computation fresh on every request, for Live-typed Versions' live-text
+// feature. Keep all three in sync.
 export function resolveItems(
   slides: TemplateSlide[],
   testVariables: Record<string, string> | undefined,

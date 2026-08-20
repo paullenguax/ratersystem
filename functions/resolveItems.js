@@ -1,20 +1,24 @@
-import type { TemplateSlide, StorylineSlotContent, StorylineItem, StorylinePartFragment, StorylinePartNumber, ChecklistItem } from './types'
-import { deriveComboImages, type ComboImageResult } from './deriveComboImages'
+const { deriveComboImages } = require('./deriveComboImages')
 
-// Ported from src/features/storyline/resolveItems.ts — keep in sync (also
-// keep functions/resolveItems.js, a third plain-JS port used by
-// getStorylineLiveContent, in sync with both).
-// Player-src stays a fully self-contained TypeScript project, see types.ts.
-// The only real difference from the original: `parts` here is keyed to the
-// lighter StorylinePartFragment (just slotContent, fetched from a Part's
-// exported part.json) instead of the full authoring StorylinePart — the
-// player has no use for id/label/status/theme/etc.
+// Ported from src/features/storyline/resolveItems.ts /
+// player-src/shared/resolveItems.ts — keep in sync (a third leg of this
+// codebase's established "duplicate, no automated enforcement" convention,
+// needed here because functions/ has no build step to share TS modules
+// with src/ or player-src/). Behavioral port of the player-src/shared/
+// copy specifically — `parts` here is keyed to the lighter
+// `{slotContent}`-only shape (matching a raw Firestore storyline_parts
+// doc), not the full authoring StorylinePart.
+//
+// Used by getStorylineLiveContent (index.js) to re-run the exact same
+// resolve computation the admin app already does at Preview/Publish time,
+// fresh on every request — see that function for why (live text for
+// versionType 'live' Versions).
 
-function normalizeChecklistItems(items: (string | ChecklistItem)[] | undefined): ChecklistItem[] | undefined {
+function normalizeChecklistItems(items) {
   return items?.map(item => (typeof item === 'string' ? { text: item } : item))
 }
 
-function substituteVariables(text: string, variables?: Record<string, string>): string {
+function substituteVariables(text, variables) {
   if (!variables) return text
   let result = text
   for (const [key, value] of Object.entries(variables)) {
@@ -23,12 +27,12 @@ function substituteVariables(text: string, variables?: Record<string, string>): 
   return result
 }
 
-function formatQuestions(questions?: string[]): string {
+function formatQuestions(questions) {
   if (!questions || questions.length === 0) return ''
   return questions.map(q => `- ${q}`).join('\n')
 }
 
-function resolveScriptText(slide: TemplateSlide, testVariables: Record<string, string> | undefined, slot?: StorylineSlotContent): string {
+function resolveScriptText(slide, testVariables, slot) {
   let text = substituteVariables(slide.scriptText, testVariables)
   if (slide.slotSpec.topic) {
     text = text.includes('{topic}') ? text.replace('{topic}', slot?.topic ?? '') : text
@@ -42,28 +46,19 @@ function resolveScriptText(slide: TemplateSlide, testVariables: Record<string, s
   return text
 }
 
-function slidePreviewEntry(slide: TemplateSlide, slot?: StorylineSlotContent): { label: string; topic?: string; questions?: string[] } | undefined {
+function slidePreviewEntry(slide, slot) {
   const topic = slide.slotSpec.topic ? slot?.topic : undefined
   const questions = slide.slotSpec.questions ? slot?.questions?.filter(Boolean) : undefined
   if (!topic && !questions?.length) return undefined
-  // Keep in sync with src/features/storyline/resolveItems.ts — that copy
-  // omits undefined-valued optional fields rather than assigning them
-  // explicitly, since its output gets written straight to Firestore via
-  // updateDoc() (which rejects a literal undefined field value). Not load-
-  // bearing here (this copy's output only ever feeds JSON/DOM rendering,
-  // never a Firestore write), kept identical anyway per the file's own
-  // "keep in sync" contract.
-  const entry: { label: string; topic?: string; questions?: string[] } = { label: slide.label }
+  const entry = { label: slide.label }
   if (topic) entry.topic = topic
   if (questions?.length) entry.questions = questions
   return entry
 }
 
-type PreviewEntry = { label: string; topic?: string; questions?: string[]; partNumber: StorylinePartNumber }
-
-function resolveMedia(slide: TemplateSlide, slot?: StorylineSlotContent): StorylineItem['media'] {
+function resolveMedia(slide, slot) {
   const images = slot?.images?.filter(Boolean)
-  const audioClips: { label: string; url: string; maxPlays?: number }[] = []
+  const audioClips = []
   const maxPlays = slide.slotSpec.maxPlays
 
   const maxPlaysField = maxPlays !== undefined ? { maxPlays } : {}
@@ -80,29 +75,16 @@ function resolveMedia(slide: TemplateSlide, slot?: StorylineSlotContent): Storyl
     audioClips.push({ label: 'Volume check', url: slot.audio.volumeCheck })
   }
 
-  const media: NonNullable<StorylineItem['media']> = {}
+  const media = {}
   if (images && images.length > 0) media.images = images
   if (audioClips.length > 0) media.audioClips = audioClips
   return Object.keys(media).length > 0 ? media : undefined
 }
 
-// Merges the shared script template with a test's whole-test slot fills and
-// the 4 assigned Parts' slot fills into the resolved StorylineItem[] shape
-// the player renders. Called client-side at player boot, once the 4
-// assigned Part IDs are known (see dataSource.ts) — the same computation
-// src/features/storyline/resolveItems.ts does in the admin app for Preview
-// and (whole-test-only) Publish, just run here against real candidate
-// Part data instead of a hand-picked Version's.
-export function resolveItems(
-  slides: TemplateSlide[],
-  testVariables: Record<string, string> | undefined,
-  testSlotContent: Record<string, StorylineSlotContent>,
-  parts: Partial<Record<StorylinePartNumber, StorylinePartFragment>>,
-  testDisplayName?: string,
-): StorylineItem[] {
+function resolveItems(slides, testVariables, testSlotContent, parts, testDisplayName) {
   const sorted = [...slides].sort((a, b) => a.order - b.order)
 
-  function slotFor(slide: TemplateSlide): StorylineSlotContent | undefined {
+  function slotFor(slide) {
     return slide.partNumber ? parts[slide.partNumber]?.slotContent[slide.id] : testSlotContent[slide.id]
   }
 
@@ -110,8 +92,8 @@ export function resolveItems(
     sorted.filter(s => !s.partNumber),
     id => testSlotContent[id]?.images?.[0],
   )
-  const partCombos: Partial<Record<StorylinePartNumber, Record<string, ComboImageResult>>> = {}
-  for (const n of [1, 2, 3, 4] as StorylinePartNumber[]) {
+  const partCombos = {}
+  for (const n of [1, 2, 3, 4]) {
     const part = parts[n]
     partCombos[n] = deriveComboImages(
       sorted.filter(s => s.partNumber === n),
@@ -119,7 +101,7 @@ export function resolveItems(
     )
   }
 
-  const previewByPart: Partial<Record<StorylinePartNumber, PreviewEntry[]>> = {}
+  const previewByPart = {}
   for (const slide of sorted) {
     if (!slide.partNumber || slide.previewExclude) continue
     const entry = slidePreviewEntry(slide, slotFor(slide))
@@ -128,7 +110,7 @@ export function resolveItems(
 
   return sorted.map(slide => {
     const slot = slotFor(slide)
-    const item: StorylineItem = {
+    const item = {
       id: slide.id,
       order: slide.order,
       kind: slide.kind,
@@ -158,3 +140,5 @@ export function resolveItems(
     return item
   })
 }
+
+exports.resolveItems = resolveItems

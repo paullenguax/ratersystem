@@ -2,6 +2,7 @@ const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https')
 const { onDocumentUpdated, onDocumentWritten } = require('firebase-functions/v2/firestore')
 const { defineSecret } = require('firebase-functions/params')
 const admin = require('firebase-admin')
+const { resolveItems } = require('./resolveItems')
 
 admin.initializeApp()
 
@@ -1153,6 +1154,119 @@ exports.reportStorylineEvent = onRequest(
     }
 
     res.status(200).json({ ok: true })
+  }
+)
+
+// ── getStorylineLiveContent ──────────────────────────────────────────────
+// Called by examiner.ts at boot, for exported Versions with
+// versionType === 'live' only (see flags.json's liveContentId, set by
+// exportStorylineVersion() in exportStoryline.ts) — lets an admin's edit to
+// a Test's shared template wording or a Part's content apply to every
+// already-deployed live exam immediately, without a re-Publish/re-Export/
+// re-upload cycle. Backup and Practice exports never carry a
+// liveContentId, so they never call this — fully static, exactly as
+// before this function existed.
+//
+// Same "no real auth possible" situation as reportStorylineEvent above
+// (browser at a random test centre) — gated only by requiring the exact
+// Firestore Version id (a random ~20-char auto-ID, only ever embedded
+// inside that specific exam's own already-access-controlled zip) plus the
+// versionType/status checks below. A deliberate, accepted narrowing of
+// confidentiality versus the PHP session/booking-hash gate examiner.php
+// itself provides — see /home/paul/.claude/plans/deep-wibbling-flurry.md
+// for the full reasoning; do not "fix" this by adding a secret that a
+// client-side fetch can't safely hold anyway.
+//
+// Returns only examinerText/notes per resolved item id — deliberately not
+// the full StorylineItem (which would include live Firebase Storage URLs
+// in .media, not the zip's bundled relative media/ paths). This makes it
+// structurally impossible for the player's merge step to accidentally pull
+// in live media and quietly break offline-resilience for images/audio,
+// which must stay bundled/static even for Live Versions.
+//
+// A missing referenced doc (template/test/any of the 4 Parts) is treated
+// as a hard failure, not a partial resolve — a partial result would be
+// silently *wrong* text, worse than the client's safe fallback to its
+// bundled static snapshot. An inactive/backup/archived-but-still-existing
+// Part is NOT an error: those flags govern future selection eligibility,
+// not whether an already-assigned reference still resolves.
+exports.getStorylineLiveContent = onRequest(
+  { cors: true, maxInstances: 10 },
+  async (req, res) => {
+    if (req.method !== 'GET') {
+      res.status(405).send('Method not allowed')
+      return
+    }
+
+    const versionId = req.query.versionId
+    if (!versionId || typeof versionId !== 'string') {
+      res.status(400).send('Missing versionId')
+      return
+    }
+
+    const db = admin.firestore()
+    try {
+      const versionSnap = await db.collection('storyline_versions').doc(versionId).get()
+      if (!versionSnap.exists) {
+        res.status(404).send('Not found')
+        return
+      }
+      const version = versionSnap.data()
+      if ((version.versionType ?? 'live') !== 'live' || version.status !== 'published') {
+        res.status(404).send('Not found')
+        return
+      }
+
+      const partIds = version.partRefs ?? {}
+      const [testSnap, templateSnap, part1Snap, part2Snap, part3Snap, part4Snap] = await Promise.all([
+        db.collection('storyline_tests').doc(version.testId).get(),
+        db.collection('storyline_template').doc('current').get(),
+        partIds[1] ? db.collection('storyline_parts').doc(partIds[1]).get() : Promise.resolve(null),
+        partIds[2] ? db.collection('storyline_parts').doc(partIds[2]).get() : Promise.resolve(null),
+        partIds[3] ? db.collection('storyline_parts').doc(partIds[3]).get() : Promise.resolve(null),
+        partIds[4] ? db.collection('storyline_parts').doc(partIds[4]).get() : Promise.resolve(null),
+      ])
+
+      const partSnaps = { 1: part1Snap, 2: part2Snap, 3: part3Snap, 4: part4Snap }
+      const missing = []
+      if (!testSnap.exists) missing.push(`storyline_tests/${version.testId}`)
+      if (!templateSnap.exists) missing.push('storyline_template/current')
+      for (const n of [1, 2, 3, 4]) {
+        if (partIds[n] && !partSnaps[n].exists) missing.push(`storyline_parts/${partIds[n]}`)
+      }
+      if (missing.length > 0) {
+        console.error(`getStorylineLiveContent: missing referenced doc(s) for version ${versionId}:`, missing)
+        res.status(404).send('Not found')
+        return
+      }
+
+      const test = testSnap.data()
+      const template = templateSnap.data()
+      const parts = {}
+      for (const n of [1, 2, 3, 4]) {
+        if (partIds[n]) parts[n] = { slotContent: partSnaps[n].data().slotContent }
+      }
+
+      const resolved = resolveItems(
+        template.slides,
+        test.variables,
+        version.slotContent ?? {},
+        parts,
+        `${test.name}: ${version.versionLabel}`,
+      )
+
+      const items = resolved.map(item => ({
+        id: item.id,
+        examinerText: item.examinerText,
+        notes: item.notes ?? null,
+      }))
+
+      res.set('Cache-Control', 'no-store')
+      res.status(200).json({ items })
+    } catch (err) {
+      console.error('getStorylineLiveContent error:', err)
+      res.status(500).send('Internal error')
+    }
   }
 )
 
