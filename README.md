@@ -427,9 +427,12 @@ phase.
   re-launching Preview/export); in Preview mode Reject just logs instead,
   since preview is for free exploration. `test_data_confirm` renders 4
   plain text inputs (Centre Name/Test Number/Examiner Name/Candidate
-  Name) + an agree-to-terms checkbox — a manual stand-in for what a real
-  booking system will supply once Phase 2 exists — gated the same way as
-  audio (Next disabled until complete, bypassed in Preview). The values
+  Name, each `autocomplete="off"` since 2026-08-20 — hand-typed candidate/
+  examiner identity on a machine that may be shared across real sittings
+  at a test centre, never offer to remember/suggest a prior value) + an
+  agree-to-terms checkbox — a manual stand-in for what a real booking
+  system will supply once Phase 2 exists — gated the same way as audio
+  (Next disabled until complete, bypassed in Preview). The values
   typed there are the one piece of genuinely new *runtime* state in the
   player (`liveFields` in `examiner.ts`, populated when Next is clicked on
   that slide): `applyLiveFieldSubstitutions()` fills the same

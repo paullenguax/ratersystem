@@ -590,6 +590,10 @@ function renderTestDataConfirm(card: HTMLElement) {
     const input = document.createElement('input')
     input.type = 'text'
     input.id = f.id
+    // These are hand-typed candidate/centre/examiner identity fields on a
+    // machine that may be shared across multiple real sittings at a test
+    // centre — never offer to remember/suggest previously-typed values.
+    input.autocomplete = 'off'
     input.addEventListener('input', () => updateNavState())
     row.append(span, input)
     wrap.appendChild(row)
