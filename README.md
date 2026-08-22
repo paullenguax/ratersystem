@@ -717,7 +717,16 @@ phase.
   manage_unmixable_themes.php`) that existed there but, per that repo's own
   `int_tool_test_versions` table, was never actually wired to any real
   selection logic — enforcement here is still a later (WP-side) phase, but
-  the rule data itself is now real and admin-editable. `StorylineTest`
+  the rule data itself is now real and admin-editable.
+  **Fixed 2026-08-20**: `firestore.rules` never actually had a `match`
+  block for `storyline_themes`/`storyline_theme_rules` at all (unlike
+  every other `storyline_*` collection) — Firestore denies by default for
+  any unmatched path, so every read/write on `StorylineThemeRulesPage` was
+  silently failing (no error handling on that page surfaces a
+  permission-denied rejection to the user, so "+ Add" appeared to just do
+  nothing, and "No themes yet" was indistinguishable from "the read
+  failed"). Added, matching the same `allow read, write: if isAdmin()`
+  posture already used for every sibling `storyline_*` collection. `StorylineTest`
   gained its own `slotContent`/`status`/`items`/`publishedAt` — the
   successor to `StorylineVersion.slotContent` for whole-test
   (preamble/accept-reject/checklist/closing) slides, since dynamic pooling
