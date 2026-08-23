@@ -280,10 +280,20 @@ phase.
   testDisplayName colon separator, leaves the old published Version behind,
   and those pile up fast) → `StorylineVersionEditorPage` (whole-test
   slot-filling + per-Part Select). `StorylinePartsPage` (Parts Library,
-  filterable by Part number/status/backup, archived hidden by default via a
-  "Show archived" toggle since they pile up and rarely matter day-to-day) →
-  `StorylinePartEditorPage`
-  (slot-filling for that Part's slides only). `StorylineThemeRulesPage`
+  filterable by Part number/status/backup/test type, archived hidden by
+  default via a "Show archived" toggle since they pile up and rarely
+  matter day-to-day) → `StorylinePartEditorPage`
+  (slot-filling for that Part's slides only). Since 2026-08-20 all of
+  Parts Library's filters (Part number, status, backup, test type, search
+  text, show-archived) live in the URL (`useSearchParams`, `replace: true`
+  so toggling a filter doesn't spam browser history) instead of plain
+  `useState`, and the Part editor's back arrow uses real `navigate(-1)`
+  instead of a fixed `Link` — so clicking into a Part to edit it and
+  going back (in-app arrow or the browser's own Back) restores exactly
+  the filter state you left, instead of resetting to defaults. Not
+  persisted to the URL: `newPartNumber` (which Part number "New Part"
+  will create) and `editingTestTypesId` (which row's tag-editor is
+  expanded) — transient per-visit UI state, not filters. `StorylineThemeRulesPage`
   (`/test-versions/themes`) manages the shared theme vocabulary and
   unmixable Part-1/4 pairs (see "Dynamic Part-pooling" below).
   `StorylineTestContentEditorPage` (`/test-versions/:testId/content`, "Content"

@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { collection, getDocs, getDoc, addDoc, doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'
 import { ArrowLeft, Plus, Pencil, Rocket, Copy, Archive as ArchiveIcon, Trash2, PauseCircle, PlayCircle, Shield, ShieldOff, Tag, Download } from 'lucide-react'
@@ -48,13 +48,46 @@ function statusVariant(status: StorylinePart['status']) {
 export function StorylinePartsPage() {
   const queryClient = useQueryClient()
   const { user } = useAuth()
-  const [filter, setFilter] = useState<'all' | StorylinePartNumber>('all')
-  const [statusFilter, setStatusFilter] = useState<'all' | StorylinePart['status']>('all')
-  const [backupFilter, setBackupFilter] = useState<'all' | 'backup' | 'normal'>('all')
-  const [showArchived, setShowArchived] = useState(false)
-  const [search, setSearch] = useState('')
+
+  // Filters live in the URL, not plain useState — so clicking into a Part
+  // to edit it and then going back (in-app arrow or the browser's own Back)
+  // restores exactly where you left off, instead of resetting to defaults.
+  // replace: true so toggling filters doesn't spam browser history — Back
+  // should step between pages, not between individual filter clicks.
+  const [searchParams, setSearchParams] = useSearchParams()
+  function setParam(key: string, value: string, isDefault: boolean) {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev)
+      if (isDefault) next.delete(key)
+      else next.set(key, value)
+      return next
+    }, { replace: true })
+  }
+
+  const filterParam = searchParams.get('part')
+  const filter: 'all' | StorylinePartNumber = filterParam && ['1', '2', '3', '4'].includes(filterParam)
+    ? (Number(filterParam) as StorylinePartNumber) : 'all'
+  const setFilter = (v: 'all' | StorylinePartNumber) => setParam('part', String(v), v === 'all')
+
+  const statusFilter = (searchParams.get('status') ?? 'all') as 'all' | StorylinePart['status']
+  const setStatusFilter = (v: 'all' | StorylinePart['status']) => setParam('status', v, v === 'all')
+
+  const backupFilter = (searchParams.get('backup') ?? 'all') as 'all' | 'backup' | 'normal'
+  const setBackupFilter = (v: 'all' | 'backup' | 'normal') => setParam('backup', v, v === 'all')
+
+  const showArchived = searchParams.get('archived') === '1'
+  const setShowArchived = (v: boolean) => setParam('archived', '1', !v)
+
+  const search = searchParams.get('q') ?? ''
+  const setSearch = (v: string) => setParam('q', v, v.trim() === '')
+
+  const testTypeFilter = (searchParams.get('testType') ?? 'all') as 'all' | StorylineTestType
+  const setTestTypeFilter = (v: 'all' | StorylineTestType) => setParam('testType', v, v === 'all')
+
+  // Not filters — transient, per-visit UI state, deliberately not persisted
+  // to the URL (a tag-editor left stuck open, or a "create as Part 3" pick
+  // that's no longer what you want, would be a confusing thing to restore).
   const [newPartNumber, setNewPartNumber] = useState<StorylinePartNumber>(1)
-  const [testTypeFilter, setTestTypeFilter] = useState<'all' | StorylineTestType>('all')
   const [editingTestTypesId, setEditingTestTypesId] = useState<string | null>(null)
 
   const { data: parts = [], isLoading } = useQuery({ queryKey: ['storyline_parts'], queryFn: fetchParts })

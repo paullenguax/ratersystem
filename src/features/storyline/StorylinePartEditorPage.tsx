@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { doc, getDoc, updateDoc } from 'firebase/firestore'
 import { ArrowLeft, Save } from 'lucide-react'
@@ -25,6 +25,7 @@ async function fetchTemplate(): Promise<StorylineTemplate | null> {
 
 export function StorylinePartEditorPage() {
   const { partId } = useParams<{ partId: string }>()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
 
   const { data: part, isLoading: partLoading } = useQuery({
@@ -83,7 +84,11 @@ export function StorylinePartEditorPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon" nativeButton={false} render={<Link to="/test-versions/parts" />}>
+        {/* Real back-navigation (browser history), not a fixed Link — so
+            whatever filters were active on the Parts Library (now stored in
+            its URL, see StorylinePartsPage.tsx) are still there when you
+            land back on it, instead of resetting to a bare URL. */}
+        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
           <ArrowLeft className="size-4" />
         </Button>
         <div className="flex-1">
