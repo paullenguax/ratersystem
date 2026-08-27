@@ -387,12 +387,19 @@ function createLocalMediaResolver(zip: JSZip) {
   return function localPathFor(url: string, kind: 'image' | 'audio'): Promise<string> {
     const existing = localPathPromiseByUrl.get(url)
     if (existing) return existing
+    // Assign the number here, synchronously, on first sight of a URL — so
+    // media/ files are numbered in the order the items/clips are walked,
+    // not in whatever order their downloads happen to finish (a network
+    // race, which made the numbering look random in the zip). Only the
+    // digits are fixed up front; the extension still comes from the
+    // response content-type below.
+    const seq = String(++counter).padStart(3, '0')
     const promise = (async () => {
       const res = await fetch(url)
       if (!res.ok) throw new Error(`Failed to download media for bundling: ${url}`)
       const contentType = (res.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase()
       const ext = EXTENSION_BY_CONTENT_TYPE[contentType] ?? (kind === 'audio' ? 'mp3' : 'jpg')
-      const filename = `media/${String(++counter).padStart(3, '0')}.${ext}`
+      const filename = `media/${seq}.${ext}`
       zip.file(filename, await res.arrayBuffer())
       return filename
     })()
