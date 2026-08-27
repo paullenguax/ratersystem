@@ -102,8 +102,6 @@ div.polaroid img {
 .candidate-instructions .candidate-instruction-note {
   margin-top: 28px;
   margin-left: 1.4em;
-  padding-left: 0.7em;
-  border-left: 3px solid currentColor;
   list-style: none;
 }
 
@@ -369,6 +367,12 @@ div.polaroid img {
   font-style: italic;
   color: #00107a;
   white-space: pre-wrap;
+}
+
+/* The topic is a category label, not something read aloud — keep it black
+   even though the questions beneath it (also .preview-highlight) stay blue. */
+.preview-highlight.preview-topic {
+  color: #000;
 }
 
 .preview-questions {

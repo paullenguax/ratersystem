@@ -18,18 +18,19 @@ export function renderInlineMarkup(text: string): string {
 
 // Examiner script text (`.slide-text`) is styled royal-blue italic to mean
 // "say this aloud". Anything the interlocutor should DO rather than say —
-// a stage direction — is written in `[[ double brackets ]]`, shown as
-// `[ … ]` and rendered upright and black via `.stage-direction`, so italic
-// blue stays reserved for spoken words. Double brackets in the source (not
-// single) so this never clashes with single-bracket `[placeholder]`
-// author-fill tokens in the same field. Must open and close on one line;
-// `**bold**` / `__underline__` still work inside and out.
+// a stage direction — is written in `[[ double brackets ]]` in the source
+// and rendered upright and black via `.stage-direction` (the brackets
+// themselves are stripped), so italic blue stays reserved for spoken words.
+// Double brackets in the source (not single) so this never clashes with
+// single-bracket `[placeholder]` author-fill tokens in the same field. Must
+// open and close on one line; `**bold**` / `__underline__` still work
+// inside and out.
 export function renderScriptText(text: string): string {
   return text
     .split(/(\[\[[^\]\n]*\]\])/g)
     .map(segment =>
       /^\[\[[^\]\n]*\]\]$/.test(segment)
-        ? `<span class="stage-direction">[ ${renderInlineMarkup(segment.slice(2, -2).trim())} ]</span>`
+        ? `<span class="stage-direction">${renderInlineMarkup(segment.slice(2, -2).trim())}</span>`
         : renderInlineMarkup(segment),
     )
     .join('')

@@ -397,22 +397,23 @@ phase.
   slide's `notes`. Script styling follows the old Storyline convention so the
   two kinds of text are visually distinct: **what the interlocutor says
   aloud** (`.slide-text`/`examinerText`, and the compiled Part-preview
-  `.preview-highlight`) renders royal-blue (`#00107a`) italic, while
-  **instructions to the interlocutor** (the `#notes-content` drawer) renders
-  black. Royal-blue italic is reserved for spoken words only: a stage
-  direction written inside a script-text line — something to *do*, not say —
-  is wrapped in `[[ double brackets ]]` (double, so it never clashes with
-  single-bracket `[placeholder]` author-fill tokens in the same field),
-  shown as `[ … ]` and rendered upright/black via `renderScriptText()` +
+  questions in `.preview-highlight`) renders royal-blue (`#00107a`) italic,
+  while **instructions to the interlocutor** (the `#notes-content` drawer)
+  renders black. Royal-blue italic is reserved for spoken words only: a
+  stage direction written inside a script-text line — something to *do*, not
+  say — is wrapped in `[[ double brackets ]]` (double, so it never clashes
+  with single-bracket `[placeholder]` author-fill tokens in the same field);
+  `renderScriptText()` strips the brackets and renders it upright/black via
   `.stage-direction` (shared `markup.ts`, used by both `examiner.ts` and
-  `practice.ts`). The blue-chrome setup screens override `.slide-text` back
-  to upright white so it stays legible on the solid blue block. On the
+  `practice.ts`). The Part-preview `Topic:` line keeps `.preview-topic` →
+  black (a category label, not spoken), even though the questions under it
+  stay blue. The blue-chrome setup screens override `.slide-text` back to
+  upright white so it stays legible on the solid blue block. On the
   candidate screen, a `candidateInstructions` line written wholly in
   `[ brackets ]` (e.g. "[ Take notes to explain the details. ]") is treated
-  as a secondary "how to do the task" note — indented with a left rule
-  (`.candidate-instruction-note`), keeping the author's line colour — and the
-  candidate instruction body text is set at `1.95rem` for second-monitor
-  legibility. A continuous timer starts the moment the slide tagged
+  as a secondary "how to do the task" note — indented (`.candidate-instruction-note`),
+  keeping the author's line colour — and the candidate instruction body text
+  is set at `1.95rem` for second-monitor legibility. A continuous timer starts the moment the slide tagged
   `startsTestTimer` is reached and runs for the rest of the session; a
   slide's own `timing.prepSeconds`/`responseSeconds` (if set) auto-starts a
   second countdown the moment that slide becomes current — purely

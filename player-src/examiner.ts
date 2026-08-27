@@ -454,7 +454,7 @@ function renderPreviewContent(card: HTMLElement, entries: NonNullable<StorylineI
     block.className = 'preview-entry'
     if (entry.topic) {
       const p = document.createElement('p')
-      p.className = 'preview-highlight'
+      p.className = 'preview-highlight preview-topic'
       p.innerHTML = `Topic: ${renderInlineMarkup(entry.topic)}`
       block.appendChild(p)
     }
