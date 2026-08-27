@@ -273,13 +273,18 @@ phase.
   separator was live when it was published; re-publish (Duplicate → fill in
   → Publish) a Version to pick up the new one.
 - **Pages**: `StorylineTestsPage` → `StorylineVersionsPage` (draft/publish/
-  duplicate-as-new-draft/archive lifecycle, Part picker, Preview, Export;
-  archived versions hidden by default via a "Show archived" toggle, added
-  2026-08-19 — matches Parts Library's toggle below, added for the same
+  duplicate-as-new-draft/archive/delete lifecycle, Part picker, Preview,
+  Export; archived versions hidden by default via a "Show archived" toggle,
+  added 2026-08-19 — matches Parts Library's toggle below, added for the same
   reason: re-publishing a Duplicate to pick up a code fix, e.g. the
   testDisplayName colon separator, leaves the old published Version behind,
-  and those pile up fast) → `StorylineVersionEditorPage` (whole-test
-  slot-filling + per-Part Select). `StorylinePartsPage` (Parts Library,
+  and those pile up fast). A **Delete** button (added 2026-08-27) shows only
+  once a version is archived — a deliberate two-step (archive, then delete)
+  so the clutter can be cleared without a stray click nuking a live version;
+  it removes only the Firestore doc (any exported zip already on WordPress,
+  and any `storylines/versions/<testId>/<id>/` media in Storage, are left
+  alone). → `StorylineVersionEditorPage` (whole-test slot-filling + per-Part
+  Select). `StorylinePartsPage` (Parts Library,
   filterable by Part number/status/backup/test type, archived hidden by
   default via a "Show archived" toggle since they pile up and rarely
   matter day-to-day) → `StorylinePartEditorPage`

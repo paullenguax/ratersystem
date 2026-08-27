@@ -2,9 +2,9 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   collection, query, where, getDocs, doc, getDoc,
-  addDoc, updateDoc, serverTimestamp,
+  addDoc, updateDoc, deleteDoc, serverTimestamp,
 } from 'firebase/firestore'
-import { ArrowLeft, Plus, Pencil, Eye, Rocket, Copy, Archive as ArchiveIcon, Download, Lock, LockOpen } from 'lucide-react'
+import { ArrowLeft, Plus, Pencil, Eye, Rocket, Copy, Archive as ArchiveIcon, Download, Lock, LockOpen, Trash2 } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
 import type { StorylinePart, StorylinePartNumber, StorylineTemplate, StorylineTest, StorylineVersion } from '@/types'
@@ -208,6 +208,18 @@ export function StorylineVersionsPage() {
     queryClient.invalidateQueries({ queryKey: ['storyline_versions', testId] })
   }
 
+  // Only offered for already-archived versions — deletion is deliberately a
+  // two-step (archive first, then delete) so it can't happen on a stray
+  // click. Removes only the Firestore doc; any zip already exported/uploaded
+  // to WordPress is untouched, and version-level media (rare — most comes
+  // from Parts) under storylines/versions/<testId>/<id>/ in Storage would
+  // need clearing separately.
+  async function handleDelete(version: StorylineVersion) {
+    if (!window.confirm(`Permanently delete "${version.versionLabel}"? This removes it from the database and can't be undone.`)) return
+    await deleteDoc(doc(db, 'storyline_versions', version.id))
+    queryClient.invalidateQueries({ queryKey: ['storyline_versions', testId] })
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
@@ -341,6 +353,11 @@ export function StorylineVersionsPage() {
                               <ArchiveIcon className="size-4 mr-1" /> Archive
                             </Button>
                           </>
+                        )}
+                        {version.status === 'archived' && (
+                          <Button variant="ghost" size="sm" onClick={() => handleDelete(version)}>
+                            <Trash2 className="size-4 mr-1" /> Delete
+                          </Button>
                         )}
                       </div>
                     </TableCell>
