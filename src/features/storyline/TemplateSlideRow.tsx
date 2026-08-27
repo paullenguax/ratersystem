@@ -151,7 +151,7 @@ export function TemplateSlideRow({ slide, index, disabled, canMoveUp, canMoveDow
           value={slide.scriptText}
           onChange={e => set('scriptText', e.target.value)}
           rows={4}
-          placeholder="Fixed wording. {PortalField} = filled at real test-run time. [placeholder] = author-fillable. {questions}/{topic} = where the version's question list / topic title is inserted."
+          placeholder="Fixed wording said aloud (shown royal-blue italic). {PortalField} = filled at real test-run time. [placeholder] = author-fillable. [[do this]] = stage direction, shown upright/black — not spoken. {questions}/{topic} = where the version's question list / topic title is inserted."
           disabled={disabled}
         />
       </div>

@@ -16,11 +16,22 @@ function panelId(candidateState: string): string {
   return `panel-${candidateState.replace(/[^a-zA-Z0-9_-]/g, '_')}`
 }
 
+// Shown on first load and whenever the current slide has no candidate-facing
+// state of its own — the accept/reject, test-data, room-setup and preview
+// slides send no `advance` at all, so without this the candidate window sat
+// blank (just the status dot) until the first real Part slide. The logo
+// straight away is reassuring for the candidate.
+const BRAND_STATE = '__brand__'
+
 function buildInstructions(lines: CandidateInstructionLine[]): HTMLElement {
   const wrap = document.createElement('div')
   wrap.className = 'candidate-instructions'
   let list: HTMLUListElement | null = null
   for (const line of lines) {
+    // A line written wholly in `[ … ]` is a secondary "how to do the task"
+    // note (e.g. "[ Take notes to explain the details. ]") — set it apart
+    // from the prompts it follows with an indent (see .candidate-instruction-note).
+    const isNote = /^\s*\[[\s\S]*\]\s*$/.test(line.text)
     if (line.bullet) {
       if (!list) {
         list = document.createElement('ul')
@@ -28,12 +39,14 @@ function buildInstructions(lines: CandidateInstructionLine[]): HTMLElement {
       }
       const li = document.createElement('li')
       li.innerHTML = renderInlineMarkup(line.text)
+      if (isNote) li.className = 'candidate-instruction-note'
       if (line.color) li.style.color = line.color
       list.appendChild(li)
     } else {
       list = null
       const p = document.createElement('p')
       p.innerHTML = renderInlineMarkup(line.text)
+      if (isNote) p.className = 'candidate-instruction-note'
       if (line.color) p.style.color = line.color
       wrap.appendChild(p)
     }
@@ -109,11 +122,29 @@ function renderPanels(items: StorylineItem[]) {
 
     container.appendChild(panel)
   }
+
+  // Always-present brand panel — the fallback whenever the current slide
+  // has no panel of its own (see showState).
+  const brand = document.createElement('div')
+  brand.className = 'polaroid'
+  brand.id = panelId(BRAND_STATE)
+  const brandLogo = document.createElement('img')
+  brandLogo.src = teacLogo
+  brandLogo.alt = 'Test of English for Aeronautical Communication'
+  brandLogo.className = 'candidate-logo'
+  brand.appendChild(brandLogo)
+  container.appendChild(brand)
+
+  // Show the logo straight away, before the examiner sends any state.
+  showState(BRAND_STATE)
 }
 
 function showState(candidateState: string) {
   const panels = document.querySelectorAll<HTMLElement>('#panels .polaroid')
-  const targetId = panelId(candidateState)
+  let targetId = panelId(candidateState)
+  // A state with no panel of its own (or an empty/unknown state) falls back
+  // to the brand panel rather than leaving the window blank.
+  if (!document.getElementById(targetId)) targetId = panelId(BRAND_STATE)
   panels.forEach(panel => {
     panel.style.visibility = panel.id === targetId ? 'visible' : 'hidden'
   })

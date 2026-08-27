@@ -65,7 +65,7 @@ export function buildSeedTemplateSlides(): TemplateSlide[] {
       label: 'Preview Part 1 & 4 questions',
       previewParts: [1, 4],
       notes: "Please familiarise yourself with the Part 1 and Part 4 questions so they don't take you by surprise.",
-      scriptText: 'Review the Part 1 and Part 4 questions for this version before starting the test.',
+      scriptText: '[[ Review the Part 1 and Part 4 questions for this version before starting the test. ]]',
       slotSpec: {},
     },
     {
@@ -75,9 +75,9 @@ export function buildSeedTemplateSlides(): TemplateSlide[] {
       startsTestTimer: true,
       notes: 'Follow the prompts.',
       scriptText:
-        'Invite the Candidate into the test room.\n' +
-        'Place the recorder on the desk with the microphone directed towards the candidate and press record. ' +
-        "Check that it is recording. Then click NEXT below to confirm you have started the recording.",
+        '[[ Invite the Candidate into the test room. ]]\n' +
+        '[[ Place the recorder on the desk with the microphone directed towards the candidate and press record. ' +
+        "Check that it is recording. Then click NEXT below to confirm you have started the recording. ]]",
       slotSpec: {},
     },
     {

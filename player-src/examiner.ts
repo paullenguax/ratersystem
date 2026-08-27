@@ -3,7 +3,7 @@ import { getParams, channelName } from './shared/session'
 import { loadItems, loadTheme, loadFlags, loadLiveText, applyLiveText } from './shared/dataSource'
 import { applyTheme } from './shared/applyTheme'
 import { initOnlineStatusDot } from './shared/onlineStatus'
-import { renderInlineMarkup } from './shared/markup'
+import { renderInlineMarkup, renderScriptText } from './shared/markup'
 import { preloadAllMedia } from './shared/preloadMedia'
 import { reportStorylineEvent, type StorylineEventContext } from './shared/reportEvent'
 import { callSendStats, callRejectTest } from './shared/wpCallback'
@@ -413,7 +413,7 @@ function renderTextAndAudio(content: HTMLElement, item: StorylineItem, onComplet
     if (!segment.trim()) return
     const div = document.createElement('div')
     div.className = 'slide-text'
-    div.innerHTML = renderInlineMarkup(segment)
+    div.innerHTML = renderScriptText(segment)
     content.appendChild(div)
   }
 
@@ -699,13 +699,19 @@ function renderAcceptReject(card: HTMLElement, item: StorylineItem) {
 let items: StorylineItem[] = []
 let currentIndex = 0
 
+// Slides with no candidateState of their own (accept/reject, test data,
+// room setup, previews) send this so the candidate window falls back to the
+// TEAC logo rather than lingering on the previous slide's panel — see
+// candidate.ts's BRAND_STATE.
+const CANDIDATE_BRAND_STATE = '__brand__'
+
 function sendAdvance(item: StorylineItem) {
-  if (!item.candidateState) return
+  const state = item.candidateState || CANDIDATE_BRAND_STATE
   if (candidateWindow && !candidateWindow.closed) {
-    channel.postMessage({ type: 'advance', candidateState: item.candidateState })
-    logEvent(`Advanced candidate screen to "${item.candidateState}".`)
+    channel.postMessage({ type: 'advance', candidateState: state })
+    logEvent(`Advanced candidate screen to "${state}".`)
   } else {
-    logEvent(`Candidate window is not open — "${item.candidateState}" was not shown.`)
+    logEvent(`Candidate window is not open — "${state}" was not shown.`)
   }
 }
 
@@ -722,9 +728,9 @@ channel.onmessage = event => {
   const data = event.data as { type: string }
   if (data?.type !== 'ready') return
   const item = items[currentIndex]
-  if (!item?.candidateState) return
-  channel.postMessage({ type: 'advance', candidateState: item.candidateState })
-  logEvent(`Candidate window connected — resent "${item.candidateState}".`)
+  const state = item?.candidateState || CANDIDATE_BRAND_STATE
+  channel.postMessage({ type: 'advance', candidateState: state })
+  logEvent(`Candidate window connected — resent "${state}".`)
 }
 
 function updateNavState() {

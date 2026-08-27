@@ -86,15 +86,25 @@ div.polaroid img {
 
 .candidate-instructions {
   padding: 40px 48px;
-  font-size: 1.6rem;
+  font-size: 1.95rem;
   font-style: italic;
-  line-height: 1.5;
+  line-height: 1.55;
   color: #222;
   text-align: left;
 }
 
 .candidate-instructions p {
   margin: 0 0 20px;
+}
+
+/* A `[ bracketed ]` "how to do the task" note — indented and set off from
+   the prompts above it, keeping whatever colour the author gave the line. */
+.candidate-instructions .candidate-instruction-note {
+  margin-top: 28px;
+  margin-left: 1.4em;
+  padding-left: 0.7em;
+  border-left: 3px solid currentColor;
+  list-style: none;
 }
 
 .candidate-instructions ul {
@@ -296,16 +306,49 @@ div.polaroid img {
   color: #dce6ee;
 }
 
+/* The setup screens sit on a solid blue block — keep their scripted line
+   white/upright, not the royal-blue italic used for spoken lines elsewhere. */
+.branded-content .slide-text {
+  color: white;
+  font-style: normal;
+}
+
 .slide-heading {
   font-size: 1.3rem;
   font-weight: 600;
   color: var(--accent-color, #00528c);
 }
 
+/* Practice player's intro disclaimer — plain body text, not a spoken line. */
+.practice-intro-note {
+  white-space: pre-wrap;
+  line-height: 1.6;
+  font-size: 1.05rem;
+}
+
+/* What the interlocutor says aloud — royal blue + italic, distinct from the
+   black "instructions to interlocutor" in the notes drawer. Matches the old
+   Storyline convention (.prompts vs .instructions). */
 .slide-text {
   white-space: pre-wrap;
   line-height: 1.6;
   font-size: 1.05rem;
+  color: #00107a;
+  font-style: italic;
+}
+
+/* A `[ bracketed ]` stage direction inside script text — something to DO,
+   not say. Upright and black so italic blue stays reserved for spoken
+   words. Matches the old Storyline `.instructions` look. */
+.slide-text .stage-direction {
+  color: #000;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.branded-content .slide-text .stage-direction {
+  color: white;
+  font-weight: 400;
 }
 
 .preview-part-heading {
@@ -324,6 +367,7 @@ div.polaroid img {
 .preview-highlight {
   font-weight: 700;
   font-style: italic;
+  color: #00107a;
   white-space: pre-wrap;
 }
 
@@ -614,10 +658,12 @@ div.polaroid img {
   color: #666;
 }
 
+/* Instructions to the interlocutor — black, to contrast with the royal-blue
+   italic spoken lines (.slide-text). */
 #notes-content {
   white-space: pre-wrap;
   line-height: 1.5;
-  color: #444;
+  color: #000;
 }
 
 .audio-controls {

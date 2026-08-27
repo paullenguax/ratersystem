@@ -2,7 +2,7 @@ import type { StorylineItem } from './shared/types'
 import { channelName } from './shared/session'
 import { loadItems, loadTheme } from './shared/dataSource'
 import { applyTheme } from './shared/applyTheme'
-import { renderInlineMarkup } from './shared/markup'
+import { renderInlineMarkup, renderScriptText } from './shared/markup'
 import { preloadAllMedia } from './shared/preloadMedia'
 import teacLogo from './assets/teac-logo.png'
 
@@ -186,7 +186,7 @@ function renderTextAndAudio(content: HTMLElement, item: StorylineItem) {
     if (!segment.trim()) return
     const div = document.createElement('div')
     div.className = 'slide-text'
-    div.innerHTML = renderInlineMarkup(segment)
+    div.innerHTML = renderScriptText(segment)
     content.appendChild(div)
   }
 
@@ -420,7 +420,7 @@ function renderIntro(content: HTMLElement, item: StorylineItem) {
     content.appendChild(name)
   }
   const note = document.createElement('div')
-  note.className = 'slide-text'
+  note.className = 'practice-intro-note'
   note.textContent = "This is a sample test for practice — it isn't scored and nothing about this run is recorded. Click Next when you're ready to begin."
   content.appendChild(note)
 }
