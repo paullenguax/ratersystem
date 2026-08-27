@@ -22,14 +22,15 @@ export function renderInlineMarkup(text: string): string {
 // and rendered upright and black via `.stage-direction` (the brackets
 // themselves are stripped), so italic blue stays reserved for spoken words.
 // Double brackets in the source (not single) so this never clashes with
-// single-bracket `[placeholder]` author-fill tokens in the same field. Must
-// open and close on one line; `**bold**` / `__underline__` still work
-// inside and out.
+// single-bracket `[placeholder]` author-fill tokens in the same field — and
+// a `[placeholder]` may sit *inside* a `[[ … ]]` direction (the match runs
+// non-greedily to the first `]]`, so a lone `]` inside is fine). Must open
+// and close on one line; `**bold**` / `__underline__` still work in and out.
 export function renderScriptText(text: string): string {
   return text
-    .split(/(\[\[[^\]\n]*\]\])/g)
+    .split(/(\[\[[^\n]+?\]\])/g)
     .map(segment =>
-      /^\[\[[^\]\n]*\]\]$/.test(segment)
+      /^\[\[[^\n]+?\]\]$/.test(segment)
         ? `<span class="stage-direction">${renderInlineMarkup(segment.slice(2, -2).trim())}</span>`
         : renderInlineMarkup(segment),
     )
