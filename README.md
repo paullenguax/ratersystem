@@ -410,9 +410,14 @@ phase.
   with single-bracket `[placeholder]` author-fill tokens in the same field);
   `renderScriptText()` strips the brackets and renders it upright/black via
   `.stage-direction` (shared `markup.ts`, used by both `examiner.ts` and
-  `practice.ts`). The Part-preview `Topic:` line keeps `.preview-topic` →
-  black (a category label, not spoken), even though the questions under it
-  stay blue. The blue-chrome setup screens override `.slide-text` back to
+  `practice.ts`). A run of `- ` lines (the shape the resolver emits for
+  every `{questions}` slot) is rendered by `renderScriptText()` as a real
+  `<ul class="script-questions">` with hanging **black** bullets drawn as a
+  `::before` (so the marker colour is independent of the still-blue-italic
+  question text); the compiled Part-preview question lists
+  (`.preview-questions`) get the same black-bullet treatment. The Part-preview
+  `Topic:` line keeps `.preview-topic` → black (a category label, not
+  spoken), even though the questions under it stay blue. The blue-chrome setup screens override `.slide-text` back to
   upright white so it stays legible on the solid blue block. On the
   candidate screen, a `candidateInstructions` line written wholly in
   `[ brackets ]` (e.g. "[ Take notes to explain the details. ]") is treated

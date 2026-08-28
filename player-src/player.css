@@ -349,6 +349,30 @@ div.polaroid img {
   font-weight: 400;
 }
 
+/* Question lists inside the script — a real bulleted list rather than the
+   literal "- " the resolver emits. The question text stays blue italic
+   (it's still read aloud); only the bullet marker is black, drawn as a
+   hanging ::before so its colour is independent of the text. */
+.slide-text .script-questions {
+  margin: 0.2em 0;
+  padding-left: 1.5em;
+  list-style: none;
+}
+
+.slide-text .script-questions li {
+  position: relative;
+  margin: 0.15em 0;
+}
+
+.slide-text .script-questions li::before {
+  content: "•";
+  position: absolute;
+  left: -1.1em;
+  color: #000;
+  font-style: normal;
+  font-weight: 700;
+}
+
 .preview-part-heading {
   margin-top: 24px;
   padding-bottom: 4px;
@@ -377,7 +401,23 @@ div.polaroid img {
 
 .preview-questions {
   margin: 4px 0 0;
-  padding-left: 1.2em;
+  padding-left: 1.5em;
+  list-style: none;
+}
+
+/* Black bullet, blue question text — same treatment as the in-script
+   question lists (.script-questions). */
+.preview-questions li {
+  position: relative;
+}
+
+.preview-questions li::before {
+  content: "•";
+  position: absolute;
+  left: -1.1em;
+  color: #000;
+  font-style: normal;
+  font-weight: 700;
 }
 
 .checklist {
