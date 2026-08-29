@@ -150,7 +150,7 @@ Certificate validation is public at `/validate/:certNumber` (no auth required).
 | `mintBenchmarkAdminToken` | Bridges an admin's identity into the separate `lenguax-benchmark-32392` Firebase project. Checks `people/{uid}.role === 'admin'`, then mints a custom token with an `admin: true` claim via a second `admin.app()` credentialed with the `BENCHMARK_SERVICE_ACCOUNT_KEY` secret — that claim is what the benchmark project's Firestore rules use to distinguish an admin from a training centre's scoped login (see Benchmark Check's README) |
 | `createBenchmarkCentreAccount` / `deleteBenchmarkCentreAccount` | Backs the Benchmark page's Centres tab — creates/removes a centre's Firebase Auth user and matching `centre_accounts/{uid}` doc together in the benchmark project. Rejects a `centreId` already in use by a different account |
 | `invitePerson` | Backs the People page's "Invite" action — creates a Firebase Auth user + matching `people/{uid}` doc (any role) in one step, then emails a password-reset link via Resend (`RESEND_API_KEY`) so the person can set their own password. Rejects a duplicate email. Email-send failure is logged but non-fatal — the account/doc are already valid at that point |
-| `reportStorylineEvent` | HTTP endpoint, no auth (called directly by the exported Storyline player, which has no Firebase SDK/session at all — see Storyline Replacement section). Logs every call to `storyline_events`; `type: 'violation'` calls also email `config/storyline.notificationEmail` via Resend |
+| `reportStorylineEvent` | HTTP endpoint, no auth (called directly by the exported Storyline player, which has no Firebase SDK/session at all — see Storyline Replacement section). Logs every call to `storyline_events`; emails `config/storyline.notificationEmail` (ops, every event) and, for integrity violations, `config/storyline.complianceEmail` too, via Resend |
 
 See the full Canvas integration write-up (WP plugin ↔ Firebase ↔ RaterSystemNew) for the complete enrollment picture — ask Claude to regenerate it from `CanvasCohortEnrollment/canvas-cohort-enrollment.php` and this file if it's gone stale.
 
@@ -979,10 +979,18 @@ phase.
   browser at a random test centre with no way to embed a real secret) to
   a new unauthenticated HTTPS Cloud Function of the same name in
   `functions/index.js`. Every call logs a `storyline_events` doc
-  regardless of type; only `type: 'violation'` also emails
-  `config/storyline.notificationEmail` (a dedicated field, deliberately
-  separate from `config/canvas.notificationEmail` used elsewhere — same
-  Resend pattern as `notifySelfServeSubmission`). Fire-and-forget
+  regardless of type. Email routing (Resend, same pattern as
+  `notifySelfServeSubmission`) is driven by two fields on `config/storyline`
+  (deliberately separate from `config/canvas.notificationEmail` used
+  elsewhere): **`notificationEmail`** is the ops inbox and gets an email for
+  *every* reported event, including a plain `completed` "a test happened"
+  notice; **`complianceEmail`** additionally receives the two
+  test-integrity violations (`audio_replay_limit`, `candidate_window_closed`
+  — `STORYLINE_INTEGRITY_SUBTYPES` in the function). One email is sent per
+  recipient (so ops and compliance don't see each other's address, and one
+  bad address can't block the other). Either field may be unset — an unset
+  address is skipped; with neither set the event is still logged, just not
+  emailed. Fire-and-forget
   throughout — a failed report never blocks or alters the actual test.
   Violation triggers wired up in `examiner.ts`: an audio clip played past
   its `maxPlays` limit (already detected/logged locally, now also
