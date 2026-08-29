@@ -64,7 +64,7 @@ Role is determined by the `people` Firestore collection — the doc ID **must** 
 | `config/canvas` | Canvas API token, Canvas Sync course list, `excludedCourseIds`, `notificationEmail` for self-serve alerts |
 | `canvasEnrollmentLog` | Unified log of Canvas enrollments from both WooCommerce (`CanvasCohortEnrollment` WP plugin) and the manual `/admin/canvas-enroll` wizard |
 | `practice_sessions` / `practice_scores` | Ad-hoc live-course practice player (`/practice`), joined via a 6-character code; login is now optional (Canvas SSO) — see "Practice Sessions" below |
-| `storyline_tests` / `storyline_versions` / `storyline_parts` / `storyline_template` / `storyline_events` | Test Versions (Storyline Replacement) authoring + violation/completion reports — see "Storyline Replacement" section below |
+| `storyline_tests` / `storyline_versions` / `storyline_parts` / `storyline_template` / `storyline_events` | Test Versions (Storyline Replacement) authoring + the exported player's full telemetry stream — see "Storyline Replacement" section below |
 
 ## Local dev
 
@@ -150,7 +150,7 @@ Certificate validation is public at `/validate/:certNumber` (no auth required).
 | `mintBenchmarkAdminToken` | Bridges an admin's identity into the separate `lenguax-benchmark-32392` Firebase project. Checks `people/{uid}.role === 'admin'`, then mints a custom token with an `admin: true` claim via a second `admin.app()` credentialed with the `BENCHMARK_SERVICE_ACCOUNT_KEY` secret — that claim is what the benchmark project's Firestore rules use to distinguish an admin from a training centre's scoped login (see Benchmark Check's README) |
 | `createBenchmarkCentreAccount` / `deleteBenchmarkCentreAccount` | Backs the Benchmark page's Centres tab — creates/removes a centre's Firebase Auth user and matching `centre_accounts/{uid}` doc together in the benchmark project. Rejects a `centreId` already in use by a different account |
 | `invitePerson` | Backs the People page's "Invite" action — creates a Firebase Auth user + matching `people/{uid}` doc (any role) in one step, then emails a password-reset link via Resend (`RESEND_API_KEY`) so the person can set their own password. Rejects a duplicate email. Email-send failure is logged but non-fatal — the account/doc are already valid at that point |
-| `reportStorylineEvent` | HTTP endpoint, no auth (called directly by the exported Storyline player, which has no Firebase SDK/session at all — see Storyline Replacement section). Logs every call to `storyline_events`; emails `config/storyline.notificationEmail` (ops, every event) and, for integrity violations, `config/storyline.complianceEmail` too, via Resend |
+| `reportStorylineEvent` | HTTP endpoint, no auth (called directly by the exported Storyline player, which has no Firebase SDK/session at all — see Storyline Replacement section). Accepts a telemetry batch (`{events:[…]}`) or the legacy `{type,…}` shape; writes every event to `storyline_events`, then emails per `STORYLINE_EMAIL_RULES` → `config/storyline.notificationEmail` (ops) / `.complianceEmail`, via Resend |
 
 See the full Canvas integration write-up (WP plugin ↔ Firebase ↔ RaterSystemNew) for the complete enrollment picture — ask Claude to regenerate it from `CanvasCohortEnrollment/canvas-cohort-enrollment.php` and this file if it's gone stale.
 
@@ -971,52 +971,49 @@ phase.
   an irrelevant 5th slot. Don't build either speculatively; when a real
   5-Part (or otherwise structurally different) test type actually comes
   up, do both together.
-- **Violation/completion reporting** (built 2026-07-25): the exported
-  player otherwise has zero backend connectivity at all (`dataSource.ts`
-  only ever fetches its own `version.json`) — `reportStorylineEvent()`
-  (`player-src/shared/reportEvent.ts`) is its one channel back, a plain
-  fetch (no Firebase SDK, no auth — the player runs in an examiner's
-  browser at a random test centre with no way to embed a real secret) to
-  a new unauthenticated HTTPS Cloud Function of the same name in
-  `functions/index.js`. Every call logs a `storyline_events` doc
-  regardless of type. Email routing (Resend, same pattern as
-  `notifySelfServeSubmission`) is driven by two fields on `config/storyline`
-  (deliberately separate from `config/canvas.notificationEmail` used
-  elsewhere): **`notificationEmail`** is the ops inbox and gets an email for
-  *every* reported event, including a plain `completed` "a test happened"
-  notice; **`complianceEmail`** additionally receives the two
-  test-integrity violations (`audio_replay_limit`, `candidate_window_closed`
-  — `STORYLINE_INTEGRITY_SUBTYPES` in the function). One email is sent per
-  recipient (so ops and compliance don't see each other's address, and one
-  bad address can't block the other). Either field may be unset — an unset
-  address is skipped; with neither set the event is still logged, just not
-  emailed. Fire-and-forget
-  throughout — a failed report never blocks or alters the actual test.
-  Violation triggers wired up in `examiner.ts`: an audio clip played past
-  its `maxPlays` limit (already detected/logged locally, now also
-  reported), the candidate window closing during the session (tracked via
-  the existing `updateCandidateStatus()` poll, open→closed transition),
-  internet connectivity dropping (`window`'s `offline`/`online` events —
-  the drop itself almost certainly fails to send since there's no
-  connectivity to send it over, but the *recovery* report, once back
-  online, usually gets through and carries how long the drop lasted), and
-  the examiner rejecting the test. **A "Finish test" action was also
-  added** — Next becomes "✓ Finish test" on the last slide (previously
-  just permanently disabled once reached, with no completion concept at
-  all) rather than staying gated on `isLast`; still respects the usual
-  audio/checklist/test-data gating up to that point. Both the reject and
-  finish paths also call the *old* system's own, already-working
-  `assets/rejectTest.php`/`sendStats.php` (`player-src/shared/
-  wpCallback.ts`, best-effort, relative fetch, `!isPreview`-only) — so
-  existing WordPress-side completion/rejection emails keep firing
-  unchanged for versions built with this tool too, alongside (not instead
-  of) the new Firestore record. That field mapping is a known
-  approximation, not a confirmed exact match (only each PHP file's header
-  was reviewed, and there's no equivalent in this app's data model for the
-  old system's short test-type codes or a numeric centre code) — verify
-  against a real deployment before relying on it as more than a
-  best-effort duplicate of the old notification. None of this fires in
-  Preview mode.
+- **Telemetry** (broad event stream, built 2026-07-25 as narrow
+  violation/completion reporting, widened to a full stream 2026-08-29):
+  the exported player otherwise has zero backend connectivity
+  (`dataSource.ts` only ever fetches its own `version.json`).
+  `player-src/shared/telemetry.ts` is its one channel back — a plain fetch
+  (no Firebase SDK, no auth: it runs in an examiner's browser at a random
+  test centre with nowhere to hold a secret) to the unauthenticated
+  `reportStorylineEvent` HTTPS Cloud Function. Design split: the *set of
+  events the player emits* is baked into every exported zip and only
+  changes on re-export, so the player over-emits — `track()` reports
+  `session_start` / `slide_view` (every navigation) / `audio_play` /
+  `audio_ended` (every play, with count + over-limit flag) /
+  `audio_replay_limit` / `checklist_item_toggled` / `candidate_window_closed`
+  / `connectivity_offline` / `connectivity_online` (with `downForSeconds`)
+  / `test_accepted` / `test_rejected` / `test_finished` / `session_end`,
+  each carrying a per-run `runId`, a `playerBuild` stamp, and the
+  centre/test/examiner/candidate context. Events are buffered and flushed
+  every 15s, on `visibilitychange`→hidden, and on `pagehide` (via
+  `navigator.sendBeacon`); the URGENT set flushes immediately. *What is
+  stored and what emails* is entirely server-side and changeable with no
+  re-export: the function writes **every** event to `storyline_events`
+  (kept indefinitely — exam-conduct audit data), then consults
+  `STORYLINE_EMAIL_RULES` (event name → `['ops']` / `['ops','compliance']`;
+  everything else store-only). Recipients come from `config/storyline`
+  (separate from `config/canvas.notificationEmail`): **`notificationEmail`**
+  = ops, **`complianceEmail`** = compliance. One email per recipient (so the
+  two addresses never see each other, and one bad address can't block the
+  other); either may be unset. The function also still accepts the **legacy
+  single-event shape** (`{type:'violation'|'completed', subtype, …}`) from
+  players exported before the batch endpoint — normalised to one event
+  (`completed`→`test_finished`, `violation`→its subtype) and handled
+  identically. Fire-and-forget throughout — a failed report never blocks or
+  alters the test. Nothing is emitted in Preview, and the practice player
+  (`practice.ts`) has no telemetry at all. **A "Finish test" action** —
+  Next becomes "✓ Finish test" on the last slide (previously just
+  permanently disabled once reached) — is what fires `test_finished`; both
+  it and reject also call the *old* system's own already-working
+  `assets/rejectTest.php`/`sendStats.php` (`player-src/shared/wpCallback.ts`,
+  best-effort, relative fetch, `!isPreview`-only) so existing WordPress-side
+  completion/rejection emails keep firing unchanged, alongside (not instead
+  of) the Firestore record. That PHP field mapping is a known approximation
+  (only each file's header was reviewed) — verify against a real deployment
+  before relying on it as more than a best-effort duplicate.
 
 ## Notes
 
@@ -1027,4 +1024,4 @@ phase.
 
 ## Last updated
 
-2026-08-27
+2026-08-29

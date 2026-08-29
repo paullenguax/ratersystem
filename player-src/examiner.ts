@@ -5,7 +5,7 @@ import { applyTheme } from './shared/applyTheme'
 import { initOnlineStatusDot } from './shared/onlineStatus'
 import { renderInlineMarkup, renderScriptText } from './shared/markup'
 import { preloadAllMedia } from './shared/preloadMedia'
-import { reportStorylineEvent, type StorylineEventContext } from './shared/reportEvent'
+import { initTelemetry, track } from './shared/telemetry'
 import { callSendStats, callRejectTest } from './shared/wpCallback'
 import teacLogo from './assets/teac-logo.png'
 
@@ -61,11 +61,8 @@ let candidateWasOpen = false
 function updateCandidateStatus() {
   const open = !!candidateWindow && !candidateWindow.closed
   if (candidateWasOpen && !open && !isPreview) {
-    reportStorylineEvent('violation', eventContext(), {
-      subtype: 'candidate_window_closed',
-      details: 'The candidate window closed during the session.',
-    })
-    logEvent('Violation reported: candidate window closed during the session.')
+    track('candidate_window_closed')
+    logEvent('Reported: candidate window closed during the session.')
   }
   candidateWasOpen = open
   const btn = document.getElementById('candidate-status')
@@ -85,9 +82,9 @@ window.setInterval(updateCandidateStatus, 1000)
 updateCandidateStatus()
 
 // Timestamped event log, visible in the examiner window — mirrors the old
-// system's footer log. Purely local/visual — reportStorylineEvent() below
-// is the actual backend write, for the specific subset of events worth a
-// violation/completion record; this log shows every event regardless.
+// system's footer log. Purely local/visual; the actual backend stream is
+// track() from ./shared/telemetry, which reports a much broader set of
+// events than this log happens to mention.
 function logEvent(message: string) {
   const list = document.getElementById('event-log')
   if (!list) return
@@ -95,16 +92,6 @@ function logEvent(message: string) {
   const li = document.createElement('li')
   li.textContent = `[${time}] ${message}`
   list.insertBefore(li, list.firstChild)
-}
-
-function eventContext(): StorylineEventContext {
-  return {
-    testDisplayName,
-    centreName: liveFields.centreName,
-    testNumber: liveFields.testNumber,
-    examinerName: liveFields.examinerName,
-    candidateName: liveFields.candidateName,
-  }
 }
 
 // The first ('offline') report almost certainly fails to reach our Cloud
@@ -118,21 +105,15 @@ let offlineSince: number | null = null
 window.addEventListener('offline', () => {
   offlineSince = Date.now()
   if (isPreview) return
-  reportStorylineEvent('violation', eventContext(), {
-    subtype: 'connectivity_dropped',
-    details: 'Internet connectivity was lost during the session.',
-  })
-  logEvent('Violation reported: internet connectivity lost.')
+  track('connectivity_offline')
+  logEvent('Reported: internet connectivity lost.')
 })
 window.addEventListener('online', () => {
   if (offlineSince === null) return
   const downForSeconds = Math.round((Date.now() - offlineSince) / 1000)
   offlineSince = null
   if (isPreview) return
-  reportStorylineEvent('violation', eventContext(), {
-    subtype: 'connectivity_dropped',
-    details: `Internet connectivity was restored after approximately ${downForSeconds}s offline.`,
-  })
+  track('connectivity_online', { downForSeconds })
   logEvent(`Internet connectivity restored after ~${downForSeconds}s offline.`)
 })
 
@@ -285,6 +266,12 @@ function createAudioControls(clip: { label: string; url: string; maxPlays?: numb
     audio.play()
     activeAudio = audio
     logEvent(`Started "${clip.label}".`)
+    track('audio_play', {
+      clip: clip.label,
+      attempt: (playCounts.get(clip.url) ?? 0) + 1,
+      maxPlays: clip.maxPlays,
+      slideIndex: currentIndex,
+    })
     refreshClipButtons()
   })
 
@@ -311,12 +298,16 @@ function createAudioControls(clip: { label: string; url: string; maxPlays?: numb
     const count = (playCounts.get(clip.url) ?? 0) + 1
     playCounts.set(clip.url, count)
     updateCount()
-    if (clip.maxPlays && count > clip.maxPlays) {
+    const overLimit = !!(clip.maxPlays && count > clip.maxPlays)
+    track('audio_ended', { clip: clip.label, count, maxPlays: clip.maxPlays, overLimit, slideIndex: currentIndex })
+    if (overLimit) {
       window.alert(`"${clip.label}" has now been played ${count} times (limit: ${clip.maxPlays}). This has been logged.`)
       logEvent(`Played "${clip.label}" beyond its limit (${count}/${clip.maxPlays}).`)
       if (!isPreview) {
-        reportStorylineEvent('violation', eventContext(), {
-          subtype: 'audio_replay_limit',
+        track('audio_replay_limit', {
+          clip: clip.label,
+          count,
+          maxPlays: clip.maxPlays,
           details: `"${clip.label}" was played ${count} times (limit: ${clip.maxPlays}).`,
         })
       }
@@ -535,6 +526,7 @@ function renderChecklist(container: HTMLElement, rawItems: (string | ChecklistIt
     box.addEventListener('change', () => {
       if (box.checked) checkedItems.add(i)
       else checkedItems.delete(i)
+      track('checklist_item_toggled', { index: i, text: item.text, checked: box.checked })
       updateNavState()
     })
     const span = document.createElement('span')
@@ -664,6 +656,7 @@ function renderAcceptReject(card: HTMLElement, item: StorylineItem) {
   acceptBtn.textContent = '✓ Accept this Test'
   acceptBtn.addEventListener('click', () => {
     if (currentIndex >= items.length - 1) return
+    if (!isPreview) track('test_accepted')
     currentIndex++
     renderCurrentSlide()
   })
@@ -678,10 +671,7 @@ function renderAcceptReject(card: HTMLElement, item: StorylineItem) {
       logEvent('Test rejected (Preview mode — session not locked).')
       return
     }
-    reportStorylineEvent('violation', eventContext(), {
-      subtype: 'test_rejected',
-      details: 'The examiner rejected this test before completion.',
-    })
+    track('test_rejected', { slideIndex: currentIndex, details: 'The examiner rejected this test before completion.' })
     callRejectTest({
       tt: '', tv: testDisplayName ?? '',
       ce: liveFields.centreName ?? '', tn: liveFields.testNumber ?? '', in: liveFields.examinerName ?? '',
@@ -772,6 +762,8 @@ function renderCurrentSlide() {
   checkedItems = new Set()
 
   const item = items[currentIndex]
+
+  track('slide_view', { index: currentIndex, label: item.label, kind: item.kind })
 
   if (progressLabel) progressLabel.textContent = `Slide ${currentIndex + 1}/${items.length}`
   if (progressFill) progressFill.style.width = `${((currentIndex + 1) / items.length) * 100}%`
@@ -869,7 +861,7 @@ function finishTest() {
     logEvent('Test finished (Preview mode — no report sent, session not locked).')
     return
   }
-  reportStorylineEvent('completed', eventContext())
+  track('test_finished', { slideCount: items.length })
   callSendStats({
     tt: '', tv: testDisplayName ?? '',
     ce: liveFields.centreName ?? '', tn: liveFields.testNumber ?? '',
@@ -923,6 +915,18 @@ Promise.all([loadFlags(), loadItems()]).then(async ([flags, loaded]) => {
   const liveText = await loadLiveText(flags.liveContentId)
   items = applyLiveText(loaded, liveText)
   testDisplayName = items.find(i => i.kind === 'accept_reject_test')?.testDisplayName
+  if (!isPreview) {
+    initTelemetry({
+      testDisplayName,
+      centreName: liveFields.centreName,
+      testNumber: liveFields.testNumber,
+      examinerName: liveFields.examinerName,
+      candidateName: liveFields.candidateName,
+      ungated: isUngated,
+      hasLiveContent: !!flags.liveContentId,
+    })
+    track('session_start', { slideCount: items.length })
+  }
   preloadAllMedia(items)
   renderCurrentSlide()
 }).catch(err => {

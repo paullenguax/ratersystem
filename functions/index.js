@@ -1083,24 +1083,77 @@ exports.enrollmentWebhook = onRequest(
 )
 
 // ── reportStorylineEvent ────────────────────────────────────────────────────
-// Called directly via plain fetch (no Firebase SDK, no auth) by the
-// exported Storyline player — player-src/ is a fully standalone bundle
-// with zero Firebase connectivity otherwise (see dataSource.ts, which only
-// ever fetches its own version.json), so this is its only way to report
-// anything back once uploaded to a WordPress test centre. No auth check:
-// this necessarily runs in an examiner's browser at a random test centre
-// with no way to embed a real secret, so it's shaped-input-only, matching
-// the already-public nature of the exported player itself. Every event is
-// logged to storyline_events regardless of type. Email routing is driven by
-// two fields on config/storyline (kept separate from config/canvas's own
-// notificationEmail — different concern, different recipients):
-//   • notificationEmail — the "ops" inbox: gets an email for EVERY reported
-//     event, including a plain 'completed' ("a test happened") notice.
-//   • complianceEmail   — gets only the two test-integrity violations
-//     (INTEGRITY_SUBTYPES below), in addition to the ops inbox.
-// Either field may be unset; an unset address is simply skipped, and with
-// neither set (or no API key) the event is still logged, just not emailed.
-const STORYLINE_INTEGRITY_SUBTYPES = new Set(['audio_replay_limit', 'candidate_window_closed'])
+// The exported Storyline player's only channel back to us — player-src/ is a
+// standalone bundle with no Firebase SDK/session (see dataSource.ts), so this
+// is a plain unauthenticated fetch straight from an examiner's browser at a
+// random test centre. No auth check is possible (nowhere to hold a secret);
+// it's shaped-input-only, matching the already-public nature of the exported
+// player.
+//
+// Two request shapes are accepted:
+//   • { events: [ { event, runId, playerBuild, clientTs, ...context, data } ] }
+//     — the current telemetry batch from player-src/shared/telemetry.ts. The
+//     player emits a broad stream (session_start, slide_view, audio_play/
+//     ended, checklist toggles, connectivity, accept/reject/finish, …); we
+//     store all of it in storyline_events and let the rules below decide what,
+//     if anything, is worth an email. Adding a new event name never needs a
+//     player change on our side — only re-export of the tests that emit it.
+//   • { type: 'violation' | 'completed', subtype, ...context, details }
+//     — the legacy single-event shape from players exported before the batch
+//     endpoint. Normalised to one event ('completed' → test_finished,
+//     'violation' → its subtype) and handled identically from there.
+//
+// Email routing: config/storyline (separate from config/canvas's own
+// notificationEmail) carries `notificationEmail` (ops) and `complianceEmail`.
+// STORYLINE_EMAIL_RULES maps an event name to which of those inboxes it
+// reaches; anything not in the map is stored only. Either address may be
+// unset (skipped); with neither set, or no API key, events are still logged.
+const STORYLINE_EMAIL_RULES = {
+  test_finished:           ['ops'],
+  test_rejected:           ['ops'],
+  audio_replay_limit:      ['ops', 'compliance'],
+  candidate_window_closed: ['ops', 'compliance'],
+  connectivity_online:     ['ops'],
+  connectivity_dropped:    ['ops'], // legacy name for the same concern
+}
+
+function normalizeStorylineEvents(body) {
+  const ctx = (e) => ({
+    testDisplayName: e.testDisplayName || null,
+    centreName: e.centreName || null,
+    testNumber: e.testNumber || null,
+    examinerName: e.examinerName || null,
+    candidateName: e.candidateName || null,
+    ungated: typeof e.ungated === 'boolean' ? e.ungated : null,
+    hasLiveContent: typeof e.hasLiveContent === 'boolean' ? e.hasLiveContent : null,
+  })
+  if (Array.isArray(body.events)) {
+    return body.events
+      .filter((e) => e && typeof e.event === 'string')
+      .slice(0, 300)
+      .map((e) => ({
+        event: e.event,
+        runId: e.runId || null,
+        playerBuild: e.playerBuild || null,
+        clientTs: e.clientTs || null,
+        ...ctx(e),
+        data: e.data && typeof e.data === 'object' ? e.data : null,
+      }))
+  }
+  const { type, subtype } = body
+  if (type === 'violation' || type === 'completed') {
+    return [{
+      event: type === 'completed' ? 'test_finished' : (subtype || 'violation'),
+      runId: null,
+      playerBuild: 'legacy',
+      clientTs: null,
+      ...ctx(body),
+      data: body.details ? { details: body.details } : null,
+    }]
+  }
+  return null
+}
+
 exports.reportStorylineEvent = onRequest(
   { secrets: [RESEND_API_KEY], cors: true },
   async (req, res) => {
@@ -1109,68 +1162,62 @@ exports.reportStorylineEvent = onRequest(
       return
     }
 
-    const { type, subtype, testDisplayName, centreName, testNumber, examinerName, candidateName, details } = req.body || {}
-    if (type !== 'violation' && type !== 'completed') {
-      res.status(400).send('Invalid type')
+    const events = normalizeStorylineEvents(req.body || {})
+    if (!events || events.length === 0) {
+      res.status(400).send('No valid events')
       return
     }
 
     const db = admin.firestore()
     try {
-      await db.collection('storyline_events').add({
-        type,
-        subtype: subtype || null,
-        testDisplayName: testDisplayName || null,
-        centreName: centreName || null,
-        testNumber: testNumber || null,
-        examinerName: examinerName || null,
-        candidateName: candidateName || null,
-        details: details || null,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      })
+      const writer = db.batch()
+      for (const e of events) {
+        writer.set(db.collection('storyline_events').doc(), {
+          ...e,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        })
+      }
+      await writer.commit()
     } catch (err) {
-      console.error('reportStorylineEvent: failed to log event', err)
+      console.error('reportStorylineEvent: failed to log events', err)
       res.status(500).send('Internal error')
       return
     }
 
     try {
-      const cfg = (await db.doc('config/storyline').get()).data() || {}
-      const apiKey = RESEND_API_KEY.value()
-
-      const recipients = new Set()
-      if (cfg.notificationEmail) recipients.add(cfg.notificationEmail)
-      if (
-        type === 'violation' &&
-        STORYLINE_INTEGRITY_SUBTYPES.has(subtype) &&
-        cfg.complianceEmail
-      ) {
-        recipients.add(cfg.complianceEmail)
-      }
-
-      if (apiKey && recipients.size > 0) {
-        const testLabel = testDisplayName || 'Unknown test'
-        const subject = type === 'completed'
-          ? `Test completed — ${testLabel}`
-          : `Test violation — ${testLabel} (${subtype || 'unspecified'})`
-        const intro = type === 'completed'
-          ? 'A test was completed.'
-          : 'A test violation was reported.'
-        const body = `${intro}\n\nTest: ${testDisplayName || '—'}\nCentre: ${centreName || '—'}\nTest number: ${testNumber || '—'}\nExaminer: ${examinerName || '—'}\nCandidate: ${candidateName || '—'}\n\n${details || ''}`
-        // One email per recipient so ops and compliance don't see each
-        // other's address and a single bad address can't block the other.
-        await Promise.all([...recipients].map(to =>
-          fetch('https://api.resend.com/emails', {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ from: 'RaterSystem <notifications@lenguax.com>', to, subject, text: body }),
-          }).catch(err => console.error(`reportStorylineEvent: email to ${to} failed`, err))
-        ))
+      const emailable = events.filter((e) => STORYLINE_EMAIL_RULES[e.event])
+      if (emailable.length > 0) {
+        const cfg = (await db.doc('config/storyline').get()).data() || {}
+        const apiKey = RESEND_API_KEY.value()
+        const addr = { ops: cfg.notificationEmail, compliance: cfg.complianceEmail }
+        if (apiKey) {
+          // One email per recipient so ops and compliance never see each
+          // other's address and one bad address can't block the other.
+          await Promise.all(emailable.flatMap((e) => {
+            const tos = [...new Set(STORYLINE_EMAIL_RULES[e.event].map((r) => addr[r]).filter(Boolean))]
+            const testLabel = e.testDisplayName || 'Unknown test'
+            const isCompletion = e.event === 'test_finished'
+            const subject = isCompletion
+              ? `Test completed — ${testLabel}`
+              : `Test event — ${testLabel} (${e.event})`
+            const extra = e.data && e.data.details ? `\n\n${e.data.details}` : ''
+            const text = `${isCompletion ? 'A test was completed.' : `Reported: ${e.event}.`}\n\n`
+              + `Test: ${e.testDisplayName || '—'}\nCentre: ${e.centreName || '—'}\n`
+              + `Test number: ${e.testNumber || '—'}\nExaminer: ${e.examinerName || '—'}\n`
+              + `Candidate: ${e.candidateName || '—'}${extra}`
+            return tos.map((to) =>
+              fetch('https://api.resend.com/emails', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ from: 'RaterSystem <notifications@lenguax.com>', to, subject, text }),
+              }).catch((err) => console.error(`reportStorylineEvent: email to ${to} failed`, err)),
+            )
+          }))
+        }
       }
     } catch (err) {
-      // Don't fail the request over a failed email — the event is already
-      // logged in Firestore regardless.
-      console.error('reportStorylineEvent: failed to send email', err)
+      // Never fail the request over email — events are already logged.
+      console.error('reportStorylineEvent: email pass failed', err)
     }
 
     res.status(200).json({ ok: true })
