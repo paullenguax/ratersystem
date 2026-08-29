@@ -189,6 +189,15 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // ── storyline_events ──────────────────────────────────────────────────────
+    // The exported player's telemetry stream. Written only by the
+    // reportStorylineEvent Cloud Function (Admin SDK, bypasses rules); the
+    // client just reads it on the Test activity admin page.
+    match /storyline_events/{eventId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
     // ── canvasEnrollmentLog ───────────────────────────────────────────────────
     // Written only by Firebase Functions (admin SDK bypasses rules).
     // Readable by admins only.

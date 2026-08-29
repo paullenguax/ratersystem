@@ -301,6 +301,13 @@ phase.
   expanded) — transient per-visit UI state, not filters. `StorylineThemeRulesPage`
   (`/test-versions/themes`) manages the shared theme vocabulary and
   unmixable Part-1/4 pairs (see "Dynamic Part-pooling" below).
+  `StorylineActivityPage` (`/test-versions/activity`, "Test activity" from the
+  Test Types header, admin-only) reads the `storyline_events` telemetry
+  stream — a filterable table (event name / free text) with a "group by test
+  run" view (collapsible per `runId`, flags integrity events), plus the two
+  `config/storyline` notification-email fields (ops / compliance) editable
+  inline. Most-recent 500 events; tolerant of both current `{event,…}` docs
+  and legacy `{type,subtype,…}` ones. See "Telemetry" below.
   `StorylineTestContentEditorPage` (`/test-versions/:testId/content`, "Content"
   from the Test Types list) is the whole-test-slide equivalent of
   `StorylinePartEditorPage`, also part of the dynamic Part-pooling work

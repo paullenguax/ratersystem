@@ -19,6 +19,7 @@ import { StorylinePartEditorPage } from '@/features/storyline/StorylinePartEdito
 import { StorylineThemeRulesPage } from '@/features/storyline/StorylineThemeRulesPage'
 import { StorylineTestContentEditorPage } from '@/features/storyline/StorylineTestContentEditorPage'
 import { SampleCollectionPage } from '@/features/storyline/SampleCollectionPage'
+import { StorylineActivityPage } from '@/features/storyline/StorylineActivityPage'
 import { SessionsPage } from '@/features/sessions/SessionsPage'
 import { AssignmentsPage } from '@/features/assignments/AssignmentsPage'
 import { AssignmentReviewPage } from '@/features/assignments/AssignmentReviewPage'
@@ -79,6 +80,7 @@ export default function App() {
                 <Route path="test-versions/parts" element={<ProtectedRoute allowedRoles={['admin']}><StorylinePartsPage /></ProtectedRoute>} />
                 <Route path="test-versions/parts/:partId/edit" element={<ProtectedRoute allowedRoles={['admin']}><StorylinePartEditorPage /></ProtectedRoute>} />
                 <Route path="test-versions/themes" element={<ProtectedRoute allowedRoles={['admin']}><StorylineThemeRulesPage /></ProtectedRoute>} />
+                <Route path="test-versions/activity" element={<ProtectedRoute allowedRoles={['admin']}><StorylineActivityPage /></ProtectedRoute>} />
                 <Route path="test-versions/:testId/content" element={<ProtectedRoute allowedRoles={['admin']}><StorylineTestContentEditorPage /></ProtectedRoute>} />
                 <Route path="test-versions/:testId" element={<ProtectedRoute allowedRoles={['admin']}><StorylineVersionsPage /></ProtectedRoute>} />
                 <Route path="test-versions/:testId/versions/:versionId/edit" element={<ProtectedRoute allowedRoles={['admin']}><StorylineVersionEditorPage /></ProtectedRoute>} />

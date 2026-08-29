@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { collection, getDocs } from 'firebase/firestore'
 import { useReactTable, getCoreRowModel, getSortedRowModel, flexRender, type ColumnDef, type SortingState } from '@tanstack/react-table'
-import { Plus, ListVideo, FileText, Blocks, Shuffle, FileEdit, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
+import { Plus, ListVideo, FileText, Blocks, Shuffle, FileEdit, Activity, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import type { StorylineTest } from '@/types'
 import { StorylineTestDrawer } from './StorylineTestDrawer'
@@ -100,6 +100,9 @@ export function StorylineTestsPage() {
           </Button>
           <Button variant="outline" nativeButton={false} render={<Link to="/test-versions/themes" />}>
             <Shuffle className="size-4 mr-2" /> Unmixable Themes
+          </Button>
+          <Button variant="outline" nativeButton={false} render={<Link to="/test-versions/activity" />}>
+            <Activity className="size-4 mr-2" /> Test activity
           </Button>
           <Button onClick={() => { setSelectedTest(undefined); setDrawerOpen(true) }}>
             <Plus className="size-4 mr-2" /> Add test type
