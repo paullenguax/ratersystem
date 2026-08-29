@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, FileAudio, CalendarDays,
   ClipboardList, SlidersHorizontal, Star, BarChart2,
   FileText, Award, Settings, LogOut, MessageSquare, FileCheck, Activity,
-  MonitorPlay, Gauge, Headphones,
+  MonitorPlay, Gauge, Headphones, BookOpen,
 } from 'lucide-react'
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup,
@@ -35,6 +35,7 @@ const ALL_NAV = [
   { label: 'Admin',        path: '/admin',        icon: Settings,            roles: ['admin'] },
   { label: 'Test Versions', path: '/test-versions', icon: MonitorPlay,       roles: ['admin'] },
   { label: 'Sample Collection', path: '/sample-collection', icon: Headphones, roles: ['admin', 'senior_rater', 'trainee'] },
+  { label: 'User Manual',   path: '/manual',      icon: BookOpen,            roles: ['admin', 'senior_rater', 'trainee', 'examiner'] },
 ] as const
 
 export function AppShell() {

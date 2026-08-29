@@ -1022,6 +1022,18 @@ phase.
   (only each file's header was reviewed) — verify against a real deployment
   before relying on it as more than a best-effort duplicate.
 
+## User manual (`ManualPage.tsx`, `/manual`, all roles)
+
+Plain-language, in-app manual — one section per sidebar area. Content is
+Markdown in `docs/manual/*.md` (editable in a PR, readable on GitHub);
+`ManualPage` pulls it in with `import.meta.glob('/docs/manual/*.md', { query:
+'?raw', eager: true })` and renders it with `react-markdown` + `remark-gfm`
+(styled by `.manual-prose` in `index.css` — no Tailwind typography plugin).
+The `SECTIONS` array in `ManualPage.tsx` is the sidebar order + per-section
+role visibility (a trainee doesn't see the Certificates chapter); to add a
+section, drop a `.md` file in the folder and add a row. Linked from the
+sidebar as "User Manual".
+
 ## Notes
 
 - `shadcn/ui` here uses the Base UI variant — always `render` prop, never `asChild`

@@ -128,3 +128,45 @@
     @apply font-sans;
     }
 }
+/* Plain-language user manual (ManualPage) — lightweight prose styling for
+   the react-markdown output, since the Tailwind typography plugin isn't
+   installed. Scoped to .manual-prose so it can't leak into app chrome. */
+.manual-prose {
+  line-height: 1.65;
+  font-size: 0.95rem;
+}
+.manual-prose h1 { font-size: 1.6rem; font-weight: 700; margin: 0 0 .6em; }
+.manual-prose h2 { font-size: 1.25rem; font-weight: 700; margin: 1.6em 0 .5em; }
+.manual-prose h3 { font-size: 1.05rem; font-weight: 600; margin: 1.3em 0 .4em; }
+.manual-prose p { margin: 0 0 1em; }
+.manual-prose ul,
+.manual-prose ol { margin: 0 0 1em; padding-left: 1.4em; }
+.manual-prose li { margin: .25em 0; }
+.manual-prose ul { list-style: disc; }
+.manual-prose ol { list-style: decimal; }
+.manual-prose a { color: var(--primary); text-decoration: underline; }
+.manual-prose code {
+  font-size: .85em;
+  background: var(--muted);
+  padding: .1em .35em;
+  border-radius: .25rem;
+}
+.manual-prose pre {
+  background: var(--muted);
+  padding: .8em 1em;
+  border-radius: .4rem;
+  overflow-x: auto;
+  margin: 0 0 1em;
+}
+.manual-prose pre code { background: none; padding: 0; }
+.manual-prose blockquote {
+  border-left: 3px solid var(--border);
+  padding-left: 1em;
+  margin: 0 0 1em;
+  color: var(--muted-foreground);
+}
+.manual-prose table { border-collapse: collapse; margin: 0 0 1em; display: block; overflow-x: auto; }
+.manual-prose th,
+.manual-prose td { border: 1px solid var(--border); padding: .4em .6em; text-align: left; }
+.manual-prose th { background: var(--muted); font-weight: 600; }
+.manual-prose hr { border: 0; border-top: 1px solid var(--border); margin: 1.6em 0; }
