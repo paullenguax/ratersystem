@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -20,7 +21,11 @@ import { StorylineThemeRulesPage } from '@/features/storyline/StorylineThemeRule
 import { StorylineTestContentEditorPage } from '@/features/storyline/StorylineTestContentEditorPage'
 import { SampleCollectionPage } from '@/features/storyline/SampleCollectionPage'
 import { StorylineActivityPage } from '@/features/storyline/StorylineActivityPage'
-import { ManualPage } from '@/features/manual/ManualPage'
+// Lazy — react-markdown + remark-gfm + the bundled manual content is a
+// chunk of weight nobody needs until they open /manual.
+const ManualPage = lazy(() =>
+  import('@/features/manual/ManualPage').then(m => ({ default: m.ManualPage })),
+)
 import { SessionsPage } from '@/features/sessions/SessionsPage'
 import { AssignmentsPage } from '@/features/assignments/AssignmentsPage'
 import { AssignmentReviewPage } from '@/features/assignments/AssignmentReviewPage'
@@ -73,8 +78,8 @@ export default function App() {
                 }
               >
                 <Route index element={<DashboardPage />} />
-                <Route path="manual" element={<ManualPage />} />
-                <Route path="manual/:slug" element={<ManualPage />} />
+                <Route path="manual" element={<Suspense fallback={null}><ManualPage /></Suspense>} />
+                <Route path="manual/:slug" element={<Suspense fallback={null}><ManualPage /></Suspense>} />
                 <Route path="people"      element={<ProtectedRoute allowedRoles={['admin']}><PeoplePage /></ProtectedRoute>} />
                 <Route path="test-bank"   element={<ProtectedRoute allowedRoles={['admin']}><TestBankPage /></ProtectedRoute>} />
                 <Route path="sample-collection" element={<ProtectedRoute allowedRoles={['admin', 'senior_rater', 'trainee']}><SampleCollectionPage /></ProtectedRoute>} />
