@@ -17,8 +17,8 @@ Aerodrome ATC, FISO/AFISO, …). Along the top:
 - **Parts Library** — the pooled content for Parts 1–4 (topics, question
   lists, recordings, images). Parts are shared across test types, not tied
   to one.
-- **Unmixable Themes** — tag Part 1 and Part 4 content with a theme and mark
-  theme pairs that must not appear together for one candidate.
+- **Unmixable Themes** — a topic-clash safeguard for Part 1 vs Part 4. See
+  its own section below.
 - **Test activity** — see below.
 
 A **Version** (e.g. "Airline 020") is one assembled test: the template +
@@ -75,6 +75,48 @@ Set on each Version (metadata — changeable any time):
 
 Live and Backup always ship fully gated (the examiner can't skip the
 audio/checklist confirmations). Practice defaults to ungated.
+
+## Unmixable Themes
+
+A safeguard so a candidate doesn't end up discussing basically the same
+subject in **Part 1** and again in **Part 4**. It has two halves, both on the
+**Unmixable Themes** page:
+
+1. **Themes** — a plain list of subject labels you type in
+   (`Weather`, `Radio Communications`, `Ground Operations`, …). One shared
+   list, used for both Part 1 and Part 4.
+2. **Unmixable pairs** — rows that say "if a candidate's Part 1 has theme X,
+   their Part 4 must not have theme Y". To forbid the same subject twice, add
+   a pair with the same theme on both sides (X ≠ X).
+
+You then tag each Part 1 and Part 4 with a theme using the dropdown on each
+row in the **Parts Library**.
+
+### It is *not* the same as the Part 4 topic
+
+The **`{topic}`** you set on a Version (the words the interlocutor actually
+says — "…some questions about *Effective Radio Communications*") and a Part's
+**theme** are separate fields. The theme is a coarse category for the
+clash-check; the topic is the exact wording the candidate hears. You set both
+by hand — nothing reads the topic text and works out a theme from it. In
+practice you'd give a radio-comms Part 4 the topic
+"Effective Radio Communications" *and* tag it with the theme
+"Radio Communications".
+
+### What it does today
+
+Right now this is **setup for a mechanism that isn't switched on yet**:
+
+- The themes and rules are saved, and they sync to the WordPress side, but
+  the part that actually *acts* on them — refusing to hand a candidate a
+  clashing Part 1 + Part 4 — is the automatic per-candidate Part selection
+  that's still to be built.
+- It only ever applies to that automatic selection. **Hand-assembled
+  Versions get no theme checking** — the Part picker filters by test type
+  only and won't warn you if you pick a clashing pair yourself.
+
+So it's worth populating the vocabulary and tagging Parts if you're heading
+towards automatic Part pooling, but it changes nothing a candidate sees today.
 
 ## Test activity
 
