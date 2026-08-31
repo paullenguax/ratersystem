@@ -401,10 +401,15 @@ function renderTextAndAudio(content: HTMLElement, item: StorylineItem, onComplet
   const mainClips = clips.filter(c => c.label !== 'Volume check')
 
   function appendText(segment: string) {
-    if (!segment.trim()) return
+    // Trim per-segment: the {audio}/{volumeCheck} split leaves a trailing or
+    // leading blank line on the pieces either side of a marker, which would
+    // stack on top of the CSS gap around .audio-controls. Blank lines the
+    // author put *inside* a segment are still preserved.
+    const trimmed = segment.trim()
+    if (!trimmed) return
     const div = document.createElement('div')
     div.className = 'slide-text'
-    div.innerHTML = renderScriptText(segment)
+    div.innerHTML = renderScriptText(trimmed)
     content.appendChild(div)
   }
 

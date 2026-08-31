@@ -367,7 +367,7 @@ div.polaroid img {
    (it's still read aloud); only the bullet marker is black, drawn as a
    hanging ::before so its colour is independent of the text. */
 .slide-text .script-questions {
-  margin: 0.2em 0;
+  margin: 1em 0 0.2em;
   padding-left: 1.5em;
   list-style: none;
 }

@@ -684,7 +684,16 @@ phase.
   transitions in `player.css` now get `margin-top: 1.4em` so consecutive
   scripted blocks (and the audio console between them) are clearly
   separated — shared CSS, so it lands in the examiner and candidate players
-  too. Heading/preview rhythm is untouched.
+  too. Heading/preview rhythm is untouched. Follow-ups same day: `appendText()`
+  in `examiner.ts`/`practice.ts` now `.trim()`s each `{audio}`/`{volumeCheck}`
+  split segment so a marker no longer injects an extra leading/trailing blank
+  line on top of that 1.4em gap (authored blank lines *inside* a segment are
+  kept); `.slide-text .script-questions` margin-top went `0.2em`→`1em` for a
+  clear line's gap before in-script `{questions}` bullet lists; and
+  `templateSeed.ts` gained blank lines at a handful of spots in the Part 2
+  intro / Section 1 / Section 2 and Part 4 Picture ALPHA scripts (a template
+  **reload** in the editor is needed to pull these into the live
+  `storyline_template/current` — label-matched so slot content is preserved).
   **Finish button (added 2026-08-18)**: `endSession()` now appends a
   "← Back to sample tests" link (`.session-ended-back`) to
   `BACK_TO_INDEX_URL = '../index.html'` — every Practice export unpacks

@@ -157,8 +157,8 @@ export function buildSeedTemplateSlides(): TemplateSlide[] {
       ],
       scriptText:
         'You will hear the first section of an RT communication between a pilot and a tower controller. ' +
-        'I will play the recording once and cannot repeat it.\n' +
-        'After listening, you will respond to the 2 prompts here on the screen:\n' +
+        'I will play the recording once and cannot repeat it.\n\n' +
+        'After listening, you will respond to the 2 prompts here on the screen:\n\n' +
         'Describe the communications between the pilot and the ATC\n' +
         'and...\n' +
         'What unexpected information is reported?',
@@ -178,10 +178,10 @@ export function buildSeedTemplateSlides(): TemplateSlide[] {
         'If they make brief, vague or generic references, prompt them further by asking "Could you tell me any ' +
         'more about ____?"',
       scriptText:
-        'Here is some paper and a pen. As you listen, take notes to explain the communications fully.\n' +
+        'Here is some paper and a pen. As you listen, take notes to explain the communications fully.\n\n' +
         'Do you have any questions?\n' +
         'We will first check the volume:\n' +
-        '{volumeCheck}\n\n' +
+        '{volumeCheck}\n' +
         'How is the volume?\n\n' +
         'OK, I will now play the first section of the communication.\n' +
         '{audio}',
@@ -204,11 +204,11 @@ export function buildSeedTemplateSlides(): TemplateSlide[] {
         "Before I play the next section of the communication, I'd like to discuss what might happen next ... " +
         'What do you think could happen?\n' +
         'What might the pilot do and need?\n' +
-        'How might the controller support him, and what questions might the controller ask?\n' +
+        'How might the controller support him, and what questions might the controller ask?\n\n' +
         "OK, thank you. So, let's listen to the last section of the communication. As you listen, make notes " +
         'to help you explain the exchanges to me in as much detail as possible.\n' +
-        '{audio}\n\n' +
-        'OK, please now explain those communications in as much detail as you can.\n' +
+        '{audio}\n' +
+        'OK, please now explain those communications in as much detail as you can.\n\n' +
         'OK thank you. That completes Part 2, we will now move on to Part 3.',
       slotSpec: { audio: 'single', maxPlays: 1 },
     },
@@ -283,7 +283,7 @@ export function buildSeedTemplateSlides(): TemplateSlide[] {
         'ALLOW UP TO 40 SECONDS FOR HIGHER-LEVEL CANDIDATES AND UP TO 60 SECONDS FOR LOWER-LEVEL CANDIDATES.',
       scriptText:
         'OK, thank you. Can I take the paper and pen back please? ... That completes Part 3, we will now move ' +
-        'on to Part 4.\n' +
+        'on to Part 4.\n\n' +
         "I'm going to show you a picture - this is picture ALPHA. You have 30 seconds to describe it fully, " +
         'starting now.',
       timing: { responseSeconds: 30 },
