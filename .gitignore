@@ -27,3 +27,6 @@ public/player-shell
 *.njsproj
 *.sln
 *.sw?
+
+# working spreadsheets shared for analysis — not repo content
+docs/*.xlsx
