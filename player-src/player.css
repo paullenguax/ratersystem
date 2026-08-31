@@ -335,6 +335,19 @@ div.polaroid img {
   font-style: italic;
 }
 
+/* Breathing room between one scripted block and the next (and around the
+   audio console that sits between them) so the interlocutor can see at a
+   glance where "say this now" ends and "say this next" begins. Each
+   segment is rendered as its own .slide-text / .audio-controls element, so
+   spacing the transitions is enough — no need to touch the heading or
+   preview rhythm above. */
+.slide-text + .slide-text,
+.slide-text + .audio-controls,
+.audio-controls + .slide-text,
+.audio-controls + .audio-controls {
+  margin-top: 1.4em;
+}
+
 /* A `[ bracketed ]` stage direction inside script text — something to DO,
    not say. Upright and black so italic blue stays reserved for spoken
    words. Matches the old Storyline `.instructions` look. */

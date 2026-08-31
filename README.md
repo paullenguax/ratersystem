@@ -669,6 +669,22 @@ phase.
   entry. All the "complex stuff" (violation tracking, exposure/part-
   counting, the WP booking gate) stays scoped to Live/Backup exports only,
   per explicit design intent.
+  **Play-count cue + practice event log (added 2026-08-31)**: the practice
+  console now tallies completed plays per clip and shows the same green ✓
+  ticks + "N plays" (or "N/M plays" when the slide sets `slotSpec.maxPlays`,
+  with a red `❗` past the limit) that the examiner console shows, plus a
+  collapsed "Event log — practice only, nothing here is recorded" panel
+  (`<details class="log-panel">` / `#event-log`, reusing examiner.html's
+  markup and CSS) fed by a local `logEvent()`. Purely a training aid so a
+  practising interlocutor learns to watch replay counts — there is **no**
+  `track()`/telemetry counterpart in practice.ts, nothing is sent or
+  persisted, and nothing gates Next or pops a modal (past a limit the log
+  just notes "in a real test this would be flagged").
+  **Script spacing (2026-08-31)**: `.slide-text`/`.audio-controls` sibling
+  transitions in `player.css` now get `margin-top: 1.4em` so consecutive
+  scripted blocks (and the audio console between them) are clearly
+  separated — shared CSS, so it lands in the examiner and candidate players
+  too. Heading/preview rhythm is untouched.
   **Finish button (added 2026-08-18)**: `endSession()` now appends a
   "← Back to sample tests" link (`.session-ended-back`) to
   `BACK_TO_INDEX_URL = '../index.html'` — every Practice export unpacks
@@ -1043,4 +1059,4 @@ sidebar as "User Manual".
 
 ## Last updated
 
-2026-08-29
+2026-08-31

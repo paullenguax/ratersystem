@@ -96,9 +96,25 @@ channel.onmessage = event => {
   if (item?.candidateState) channel.postMessage({ type: 'advance', candidateState: item.candidateState })
 }
 
-// --- Audio playback — same one-clip-at-a-time console as the real player,
-// minus play-count limits/warnings/logging: no reporting or gating here,
-// so nothing needs to track how many times a clip was played.
+// Screen-only echo of what a real test's examiner log would show, so an
+// interlocutor practising can learn to keep half an eye on replay counts.
+// Unlike examiner.ts this is the whole story — there is no track()/telemetry
+// counterpart. Nothing written here is sent anywhere or persisted.
+function logEvent(message: string) {
+  const list = document.getElementById('event-log')
+  if (!list) return
+  const time = new Date().toLocaleTimeString()
+  const li = document.createElement('li')
+  li.textContent = `[${time}] ${message}`
+  list.insertBefore(li, list.firstChild)
+}
+
+// --- Audio playback — same one-clip-at-a-time console as the real player.
+// Play counts are tallied and shown (tick marks + an "N plays" label, plus
+// the local event log above), same visual cue the examiner console gives —
+// but here it is purely a training aid: nothing gates Next, nothing warns
+// with a modal, nothing is reported.
+const playCounts = new Map<string, number>()
 let masterVolume = 1
 const allAudios: HTMLAudioElement[] = []
 let activeAudio: HTMLAudioElement | null = null
@@ -122,7 +138,7 @@ volumeSlider?.addEventListener('input', () => {
   allAudios.forEach(a => { a.volume = masterVolume })
 })
 
-function createAudioControls(clip: { label: string; url: string }): HTMLElement {
+function createAudioControls(clip: { label: string; url: string; maxPlays?: number }): HTMLElement {
   const audio = new Audio(clip.url)
   audio.volume = masterVolume
   allAudios.push(audio)
@@ -137,6 +153,20 @@ function createAudioControls(clip: { label: string; url: string }): HTMLElement 
   label.className = 'audio-label'
   label.textContent = clip.label
 
+  const ticksLabel = document.createElement('span')
+  ticksLabel.className = 'audio-ticks'
+
+  const countLabel = document.createElement('span')
+  countLabel.className = 'audio-count'
+
+  function updateCount() {
+    const count = playCounts.get(clip.url) ?? 0
+    countLabel.textContent = clip.maxPlays ? `${count}/${clip.maxPlays} plays` : `${count} plays`
+    const ticks = '✓'.repeat(Math.min(count, 2))
+    ticksLabel.textContent = count > 2 ? `${ticks} ❗` : ticks
+    ticksLabel.classList.toggle('audio-exclaim', count > 2)
+  }
+
   const playBtn = document.createElement('button')
   playBtn.textContent = '▶ Play'
   playBtn.addEventListener('click', () => {
@@ -144,6 +174,7 @@ function createAudioControls(clip: { label: string; url: string }): HTMLElement 
     audio.currentTime = 0
     audio.play()
     activeAudio = audio
+    logEvent(`Started "${clip.label}".`)
     refreshClipButtons()
   })
 
@@ -167,12 +198,21 @@ function createAudioControls(clip: { label: string; url: string }): HTMLElement 
   })
 
   audio.addEventListener('ended', () => {
+    const count = (playCounts.get(clip.url) ?? 0) + 1
+    playCounts.set(clip.url, count)
+    updateCount()
+    if (clip.maxPlays && count > clip.maxPlays) {
+      logEvent(`Played "${clip.label}" beyond its limit (${count}/${clip.maxPlays}) — in a real test this would be flagged.`)
+    } else {
+      logEvent(`Played "${clip.label}" to completion (${count}${clip.maxPlays ? '/' + clip.maxPlays : ''}).`)
+    }
     if (activeAudio === audio) activeAudio = null
     refreshClipButtons()
   })
 
+  updateCount()
   clipRegistry.push({ audio, playBtn, pauseBtn, stopBtn, indicator })
-  wrap.append(indicator, label, playBtn, pauseBtn, stopBtn)
+  wrap.append(indicator, label, playBtn, pauseBtn, stopBtn, ticksLabel, countLabel)
   return wrap
 }
 
