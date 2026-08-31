@@ -389,7 +389,7 @@ export function StorylinePartsPage() {
                       <TableCell>
                         {part.partNumber === 1 || part.partNumber === 4 ? (
                           <Select value={part.themeId ?? 'none'} onValueChange={v => handleSetTheme(part, v)}>
-                            <SelectTrigger className="w-36">
+                            <SelectTrigger className="w-72">
                               <SelectValue placeholder="No theme">
                                 {(v: string) => v === 'none' ? 'No theme' : (themes.find(t => t.id === v)?.label ?? v)}
                               </SelectValue>
