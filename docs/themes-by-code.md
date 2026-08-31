@@ -84,7 +84,7 @@ theme list. Format: `code → Theme  (spreadsheet topic)`. Codes ending
 - `001-F-1-001` → **ATC Communication**  (Communicating with Pilots)
 - `005-F-1-005` → **Separation & Traffic Safety**  (Aircraft Separation)
 - `010-F-1-004` → **Weather**  (Effect of Bad Weather)
-- `013-F-1-002` → **Airport Signs & Taxiing**  (That role's procedures)
+- `013-F-1-002` → **Separation & Traffic Safety**  (That role's procedures — APP ATC: this instance is about safe *approaches* / descent, not taxiing)
 - `014-F-1-003` → **Clearances**  (Clearance procedures)
 - `026-F-1-006` → **Separation & Traffic Safety**  (Safety Monitoring procedures)
 - `028-F-1-008` → **Flight Routes & Deviations**  (Flight Routes (and Deviations))
@@ -97,7 +97,7 @@ theme list. Format: `code → Theme  (spreadsheet topic)`. Codes ending
 
 - `001-G-1-001` → **ATC Communication**  (Communicating with Pilots)
 - `010-G-1-004` → **Weather**  (Effect of Bad Weather)
-- `015-G-1-002` → **Airport Signs & Taxiing**  (That role's procedures)
+- `015-G-1-002` → **Separation & Traffic Safety**  (That role's procedures — AREA ATC: this instance is about *en-route* safety / flight levels, not taxiing)
 - `016-G-1-003` → **Clearances**  (Clearance procedures)
 - `025-G-1-005` → **Separation & Traffic Safety**  (Aircraft Separation)
 - `026-G-1-006` → **Separation & Traffic Safety**  (Safety Monitoring procedures)

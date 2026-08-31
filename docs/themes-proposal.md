@@ -93,12 +93,20 @@ or both — only **both**-themes can ever produce an unmixable clash.
 
 ## Label vs content — things to know
 
-1. **`"That role's procedures"` (Part 1) is not what it says.** Every
-   instance is built on a taxiway-signage image and its Q2–Q5 are all about
-   reading airport signs and safe taxiing (*"rely on signs like this"*,
-   *"procedures … to ensure safe taxiing"*, *"signs for taxiing were not
-   clear"*, *"read airport signs accurately"*). Theme it as **Airport Signs
-   & Taxiing**, not something generic.
+1. **`"That role's procedures"` (Part 1) is a positional label — content
+   varies by role.** For **9 of the 11 roles** (`002-*-1-002`) it's built on
+   a taxiway-signage image and Q2–Q5 are all reading signs / safe taxiing
+   (*"rely on signs like this"*, *"ensure safe taxiing"*, *"read airport
+   signs accurately"*) → **Airport Signs & Taxiing**. But the same slot for
+   the two en-route/approach controller roles is a different subject
+   entirely:
+   - **APP ATC `013-F-1-002`** — safe *approaches*, being too high on
+     descent, aircraft performance → **Separation & Traffic Safety**.
+   - **AREA ATC `015-G-1-002`** — *en-route* safety, wrong flight level,
+     cruise phase, managing traffic → **Separation & Traffic Safety**.
+   (Alternative for those two: **Flight Routes & Deviations**.)
+   Every other Part 1 topic was checked and only varies in *wording* across
+   roles, not subject — this is the only one that splits.
 
 2. **`"Communicating with ATC"` and `"Communicating with Pilots"` are one
    theme.** They're the pilot-facing and controller-facing wording of the
