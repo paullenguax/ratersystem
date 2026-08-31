@@ -514,11 +514,22 @@ export async function exportStorylineVersion(test: StorylineTest, version: Story
 // versions keep going through exportStorylineVersion()'s full gated path,
 // since that's real proctored-exam machinery this export intentionally
 // doesn't carry.
-export async function exportStorylinePractice(test: StorylineTest, version: StorylineVersion, theme?: StorylineTheme) {
+export async function exportStorylinePractice(
+  test: StorylineTest,
+  version: StorylineVersion,
+  theme?: StorylineTheme,
+  liveItems?: StorylineItem[],
+) {
   const zip = new JSZip()
   await bundlePracticeShellFiles(zip)
 
-  const bundledItems = await bundleMedia(zip, version.items)
+  // exportStorylineVersion() must ship the frozen version.items snapshot —
+  // Live/Backup are audited, immutable-once-published exam content. Practice
+  // is neither: it's ungated, unscored sample content, so when the caller
+  // hands us a freshly-resolved item list we use that, letting a Script
+  // Template edit reach a re-export without a Duplicate → Publish first.
+  // Falls back to version.items when no live resolve was possible.
+  const bundledItems = await bundleMedia(zip, liveItems ?? version.items)
   zip.file('version.json', JSON.stringify(bundledItems, null, 2))
   zip.file('theme.json', JSON.stringify(theme ?? {}, null, 2))
   zip.file('HOW-TO-PUBLISH.txt', buildPracticeInstructions(test, version))

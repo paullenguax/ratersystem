@@ -163,7 +163,12 @@ export function StorylineVersionsPage() {
   }
 
   function handlePreview(version: StorylineVersion) {
-    if (version.status === 'draft') {
+    // Drafts, and published Practice versions, preview against the *live*
+    // template so what you see matches what handleExport now ships. Only
+    // published Live/Backup versions preview their frozen version.items
+    // snapshot (immutable audited exam content).
+    const liveResolve = version.status === 'draft' || (version.versionType ?? 'live') === 'practice'
+    if (liveResolve) {
       if (!template) {
         window.alert('No Script Template found — set one up first.')
         return
@@ -182,7 +187,21 @@ export function StorylineVersionsPage() {
     if (!test) return
     try {
       if ((version.versionType ?? 'live') === 'practice') {
-        await exportStorylinePractice(test, version, template?.theme)
+        // Re-resolve against the current Script Template so template edits
+        // land in a re-export without duplicating/re-publishing the version
+        // (practice content is ungated and non-audited — see
+        // exportStorylinePractice). Live/Backup deliberately keep the frozen
+        // version.items snapshot below.
+        const liveItems = template
+          ? resolveItems(
+              template.slides,
+              test.variables,
+              version.slotContent ?? {},
+              selectedParts(version),
+              `${test.name}: ${version.versionLabel}`,
+            )
+          : undefined
+        await exportStorylinePractice(test, version, template?.theme, liveItems)
       } else {
         await exportStorylineVersion(test, version, template?.theme)
       }

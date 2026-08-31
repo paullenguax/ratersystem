@@ -694,6 +694,14 @@ phase.
   intro / Section 1 / Section 2 and Part 4 Picture ALPHA scripts (a template
   **reload** in the editor is needed to pull these into the live
   `storyline_template/current` — label-matched so slot content is preserved).
+  **Practice export re-resolves live (2026-08-31)**: `handleExport` in
+  `StorylineVersionsPage` now passes a freshly `resolveItems()`-d list into
+  `exportStorylinePractice(test, version, theme, liveItems)` instead of
+  relying on the frozen `version.items` snapshot, so a Script Template edit
+  reaches a re-exported Practice zip **without** the Duplicate → Publish →
+  Export round-trip. `handlePreview` matches (published Practice versions now
+  preview live too). Live/Backup are unchanged — they still ship the
+  immutable published `version.items`, since that's audited exam content.
   **Finish button (added 2026-08-18)**: `endSession()` now appends a
   "← Back to sample tests" link (`.session-ended-back`) to
   `BACK_TO_INDEX_URL = '../index.html'` — every Practice export unpacks
