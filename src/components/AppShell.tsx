@@ -96,6 +96,15 @@ export function AppShell() {
             <div className="px-2 py-1 text-xs text-muted-foreground truncate">
               {user?.email}
             </div>
+            {/* Deploy marker — same value as the login screen; lets you
+               confirm a push has cleared the SiteGround cache from anywhere
+               in the app, not just the logged-out state. */}
+            <div
+              className="px-2 pb-1 font-mono text-[10px] text-muted-foreground/60 truncate"
+              title={`build ${__BUILD_TIME__}`}
+            >
+              build {__BUILD_ID__}
+            </div>
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton onClick={handleSignOut}>

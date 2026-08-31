@@ -1053,12 +1053,17 @@ sidebar as "User Manual".
 ## Notes
 
 - `shadcn/ui` here uses the Base UI variant — always `render` prop, never `asChild`
-- SiteGround caches aggressively — hard refresh (Ctrl+Shift+R) after deploys. The
-  login screen shows a build stamp (`YYYY-MM-DD HH:mm UTC · <short-sha>`) under the
-  branding so you can tell at a glance whether a deploy has landed past the cache —
-  `__BUILD_TIME__` / `__BUILD_ID__` are injected by `vite.config.ts` (`git rev-parse`,
-  falling back to `GITHUB_SHA`, then `dev`), declared in `src/vite-env.d.ts`, also
-  logged to the console from `src/main.tsx`
+- SiteGround caches aggressively. `public/.htaccess` now sets `Cache-Control:
+  no-cache, must-revalidate` on `index.html` (and every SPA route rewritten to it)
+  and `immutable, max-age=1y` on the fingerprinted `/assets/*` — so a deploy is
+  visible on the next load without a manual SuperCacher flush. Still hard-refresh
+  (Ctrl+Shift+R) if in doubt.
+- Build stamp: `__BUILD_TIME__` / `__BUILD_ID__` are injected by `vite.config.ts`
+  (`git rev-parse --short HEAD`, falling back to `GITHUB_SHA`, then `dev`), declared
+  in `src/vite-env.d.ts`. Shown as `YYYY-MM-DD HH:mm UTC · <short-sha>` under the
+  branding on the login screen, as `build <short-sha>` in the authed sidebar footer
+  (`AppShell.tsx`, full timestamp on hover), and logged to the console from
+  `src/main.tsx`. Match the SHA against `git log` on `main` to confirm what's live.
 - Canvas SSO requires Redis on the Canvas server and Firebase Functions with public (unauthenticated) access
 - Old GRaterSystem source is at `/home/paul/Programs/GRaterSystem/` for reference
 
