@@ -7,6 +7,16 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import logo from '@/assets/lenguax-logo.png'
 
+// Deploy marker — lets you confirm at a glance whether a push has cleared
+// the SiteGround cache yet. e.g. "2026-08-31 14:22 UTC · c8a5cc9"
+const BUILD_STAMP = (() => {
+  const d = new Date(__BUILD_TIME__)
+  const iso = Number.isNaN(d.getTime())
+    ? __BUILD_TIME__
+    : `${d.toISOString().slice(0, 10)} ${d.toISOString().slice(11, 16)} UTC`
+  return `${iso} · ${__BUILD_ID__}`
+})()
+
 export function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -57,6 +67,9 @@ export function LoginPage() {
               <p className="text-lg font-semibold text-[#00528C] leading-tight">Aviation English</p>
               <p className="text-sm text-muted-foreground leading-tight">Rater Management System</p>
             </div>
+            {/* Deploy marker — lets you confirm at a glance whether a push
+               has cleared the SiteGround cache yet (see BUILD_STAMP note). */}
+            <p className="text-[11px] font-mono text-muted-foreground/70">{BUILD_STAMP}</p>
           </div>
 
           {/* Form */}

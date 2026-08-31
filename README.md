@@ -1053,7 +1053,12 @@ sidebar as "User Manual".
 ## Notes
 
 - `shadcn/ui` here uses the Base UI variant — always `render` prop, never `asChild`
-- SiteGround caches aggressively — hard refresh (Ctrl+Shift+R) after deploys
+- SiteGround caches aggressively — hard refresh (Ctrl+Shift+R) after deploys. The
+  login screen shows a build stamp (`YYYY-MM-DD HH:mm UTC · <short-sha>`) under the
+  branding so you can tell at a glance whether a deploy has landed past the cache —
+  `__BUILD_TIME__` / `__BUILD_ID__` are injected by `vite.config.ts` (`git rev-parse`,
+  falling back to `GITHUB_SHA`, then `dev`), declared in `src/vite-env.d.ts`, also
+  logged to the console from `src/main.tsx`
 - Canvas SSO requires Redis on the Canvas server and Firebase Functions with public (unauthenticated) access
 - Old GRaterSystem source is at `/home/paul/Programs/GRaterSystem/` for reference
 
