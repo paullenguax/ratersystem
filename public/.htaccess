@@ -5,17 +5,22 @@ RewriteCond %{REQUEST_FILENAME} !-f
 RewriteRule ^ index.html [QSA,L]
 
 <IfModule mod_headers.c>
-  # Vite fingerprints every build asset (index-<hash>.js etc.), so a given
-  # filename's contents never change — cache it hard and skip revalidation.
+  # Vite fingerprints every build asset (index-<hash>.js, practice-<hash>.js,
+  # <name>-<hash>.css, images) so a given filename's contents never change —
+  # cache hard, no revalidation.
   <FilesMatch "\.(js|css|woff2?|ttf|png|jpe?g|gif|svg|webp|ico)$">
     Header always set Cache-Control "public, max-age=31536000, immutable"
   </FilesMatch>
 
-  # index.html is the one unfingerprinted file and points at the current
-  # hashed bundle. It MUST be revalidated every load, otherwise a deploy
-  # stays invisible behind the browser/SiteGround cache until it happens to
-  # expire on its own. This also covers every SPA route rewritten to it above.
-  <FilesMatch "^index\.html$">
+  # The unfingerprinted files MUST be revalidated every load:
+  #  - index.html / SPA routes: point at the current hashed admin bundle.
+  #  - player-shell/*.html + .vite/manifest.json: the Test Versions exporter
+  #    fetch()es these from the browser at export time, so a stale copy here
+  #    means a freshly re-exported sample test silently ships the OLD player.
+  <FilesMatch "\.html$">
+    Header always set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+  <FilesMatch "manifest\.json$">
     Header always set Cache-Control "no-cache, must-revalidate"
   </FilesMatch>
 </IfModule>
