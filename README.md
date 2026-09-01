@@ -400,11 +400,12 @@ phase.
   only, never a `volumeCheck` clip, a Part 3 example, or an `audio: 'set'`
   intro, so those render with no ticks/count and replay freely. A limited
   clip shows `N/M plays` + ✓ ticks (red ❗ if it somehow goes over), and at
-  the limit the Play button greys out (`.audio-locked`) — a deliberate "↻
-  Play again" button (`.audio-again`) re-arms exactly one more play and
-  records it (`logEvent` + `track('audio_replay_limit', … override …)` in
-  the real player, `audio_replay_limit` log line in practice). Replaces the
-  old fire-after-the-fact `window.alert`. `slotSpec.maxPlays` is editable
+  the limit the Play button greys out (`.audio-locked`). A bare **`↻` glyph**
+  (`.audio-again` — no label, no border/fill, tooltip only, deliberately
+  un-advertised) re-arms exactly one more play and records it (`logEvent` +
+  `track('audio_replay_limit', … override …)` in the real player,
+  `audio_replay_limit` log line in practice). Replaces the old
+  fire-after-the-fact `window.alert`. `slotSpec.maxPlays` is editable
   per slide in the Template editor (blank = unlimited); Part 3 Example's
   default `maxPlays: 2` was removed from `templateSeed.ts` (needs a template
   reload to reach live). Next
@@ -461,14 +462,17 @@ phase.
   header — the continuous session clock (unchanged), a green **per-Part
   elapsed clock** (`#part-timer`, "Part N · MM:SS") that (re)starts whenever
   `item.partNumber` changes and hides on non-Part slides, for pacing Part 1
-  / Part 4 against their "~N minutes" budgets; and the prep/response
-  countdown, which **no longer auto-starts** — a `▶ Start` / `↻ Reset`
-  button (`#slide-timer-btn`) next to it lets the interlocutor start it at
-  the scripted "...starting now", so a 30s response clock isn't already at
-  00:00 by the time they've read the instruction. `partNumber` is now
-  carried onto `StorylineItem` by both `resolveItems` copies (was dropped
-  before); the ready-but-unstarted countdown shows dimmed
-  (`.exam-timer-ready`). `nextButtonLabel` overrides the Next button's
+  / Part 4 against their "~N minutes" budgets (`TIMED_PARTS = {1, 4}` — Parts
+  2/3 run on fixed recordings, no paced budget); and the per-slide
+  prep/response timer, which **no longer auto-starts** — a `▶ Start` /
+  `↻ Reset` button (`#slide-timer-btn`) lets the interlocutor start it at
+  the scripted "...starting now". **Prep** counts *down* from `prepSeconds`
+  (red at 00:00); **Response** counts *up* from 0 and goes red once it
+  passes `responseSeconds` but keeps running — a soft guideline (e.g. "up to
+  40s for higher-level candidates"), not a hard stop. `runPrepCountdown()` /
+  `runResponseCountUp()` in both players. `partNumber` is now carried onto
+  `StorylineItem` by both `resolveItems` copies (was dropped before); the
+  ready-but-unstarted timer shows dimmed (`.exam-timer-ready`). `nextButtonLabel` overrides the Next button's
   text/prominence for one slide only (e.g. "START TEST" on the last
   pre-test slide, styled bigger via `.next-btn-prominent`), reverting to
   the default "Next ▶" on the following slide.

@@ -880,16 +880,22 @@ div.polaroid img {
   text-decoration: line-through;
 }
 
-/* The deliberate "I know, play it anyway" affordance shown at the limit.
-   Small and unstyled-looking so it reads as an override, not a primary
-   action. */
+/* The "play it anyway" override shown at the limit — just a small ↻ glyph,
+   no border or fill, so it's available but never looks like a call to
+   action (playing past the limit is a flagged event). */
 .audio-again {
-  font-size: 0.8rem;
-  padding: 2px 8px;
-  border: 1px solid #b00020;
-  border-radius: 4px;
-  background: #fff;
+  border: none;
+  background: none;
+  padding: 2px 4px;
+  font-size: 1.05rem;
+  line-height: 1;
+  color: #999;
+  opacity: 0.7;
+}
+
+.audio-again:hover {
   color: #b00020;
+  opacity: 1;
 }
 
 .audio-again[hidden] {

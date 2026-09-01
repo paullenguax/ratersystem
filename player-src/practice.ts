@@ -199,10 +199,12 @@ function createAudioControls(clip: { label: string; url: string; maxPlays?: numb
   const stopBtn = document.createElement('button')
   stopBtn.textContent = 'Stop'
 
+  // Just the ↻ glyph, no label — the override isn't something to advertise.
   const againBtn = document.createElement('button')
   againBtn.className = 'audio-again'
-  againBtn.textContent = '↻ Play again'
+  againBtn.textContent = '↻'
   againBtn.title = 'This recording has reached its play limit. In a real test, playing it again is recorded.'
+  againBtn.setAttribute('aria-label', 'Play this recording again (recorded)')
 
   const atLimit = () => limit !== undefined && (playCounts.get(clip.url) ?? 0) >= limit
 
@@ -489,36 +491,54 @@ function clearSlideTimer() {
     btn.dataset.state = 'ready'
   }
 }
-function runSlideTimerPhase(phase: 'Prep' | 'Response', seconds: number, then?: () => void) {
+// Prep = fixed countdown (candidate preparing); red at 00:00.
+function runPrepCountdown(seconds: number, then?: () => void) {
   slideTimerRemaining = seconds
   const el = document.getElementById('slide-timer')
   if (!el) return
   el.hidden = false
   el.classList.remove('exam-timer-done', 'exam-timer-ready')
-  el.textContent = `${phase} ${formatTime(slideTimerRemaining)}`
-  logEvent('timer_started', `${phase.toLowerCase()} — ${seconds}s`)
+  el.textContent = `Prep ${formatTime(slideTimerRemaining)}`
+  logEvent('timer_started', `prep — ${seconds}s`)
   slideTimerHandle = window.setInterval(() => {
     slideTimerRemaining--
     if (slideTimerRemaining < 0) {
       window.clearInterval(slideTimerHandle)
-      logEvent('timer_expired', phase.toLowerCase())
+      logEvent('timer_expired', 'prep')
       if (then) {
         then()
       } else {
-        el.textContent = `${phase} 00:00`
+        el.textContent = 'Prep 00:00'
         el.classList.add('exam-timer-done')
       }
       return
     }
-    el.textContent = `${phase} ${formatTime(slideTimerRemaining)}`
+    el.textContent = `Prep ${formatTime(slideTimerRemaining)}`
+  }, 1000)
+}
+// Response = counts UP (elapsed speaking time), keeps running past the
+// limit; goes red once it passes `limitSeconds`.
+function runResponseCountUp(limitSeconds: number) {
+  let elapsed = 0
+  const el = document.getElementById('slide-timer')
+  if (!el) return
+  el.hidden = false
+  el.classList.remove('exam-timer-done', 'exam-timer-ready')
+  el.textContent = `Response ${formatTime(0)}`
+  logEvent('timer_started', `response — soft limit ${limitSeconds}s, counting up`)
+  slideTimerHandle = window.setInterval(() => {
+    elapsed++
+    el.textContent = `Response ${formatTime(elapsed)}`
+    if (elapsed === limitSeconds) logEvent('timer_limit_reached', `response passed ${limitSeconds}s`)
+    if (elapsed >= limitSeconds) el.classList.add('exam-timer-done')
   }, 1000)
 }
 function startPendingSlideTimer() {
   const { prepSeconds, responseSeconds } = pendingTiming ?? {}
   if (prepSeconds) {
-    runSlideTimerPhase('Prep', prepSeconds, responseSeconds ? () => runSlideTimerPhase('Response', responseSeconds) : undefined)
+    runPrepCountdown(prepSeconds, responseSeconds ? () => runResponseCountUp(responseSeconds) : undefined)
   } else if (responseSeconds) {
-    runSlideTimerPhase('Response', responseSeconds)
+    runResponseCountUp(responseSeconds)
   }
 }
 function prepareSlideTimer(item: StorylineItem) {
@@ -526,12 +546,11 @@ function prepareSlideTimer(item: StorylineItem) {
   const { prepSeconds, responseSeconds } = item.timing ?? {}
   if (!prepSeconds && !responseSeconds) return
   pendingTiming = item.timing ?? null
-  const phase = prepSeconds ? 'Prep' : 'Response'
   const el = document.getElementById('slide-timer')
   if (el) {
     el.hidden = false
     el.classList.add('exam-timer-ready')
-    el.textContent = `${phase} ${formatTime(prepSeconds || responseSeconds || 0)}`
+    el.textContent = prepSeconds ? `Prep ${formatTime(prepSeconds)}` : `Response ${formatTime(0)}`
   }
   const btn = document.getElementById('slide-timer-btn') as HTMLButtonElement | null
   if (btn) {

@@ -289,7 +289,10 @@ export function buildSeedTemplateSlides(): TemplateSlide[] {
         'on to Part 4.\n\n' +
         "I'm going to show you a picture - this is picture ALPHA. You have 30 seconds to describe it fully, " +
         'starting now.',
-      timing: { responseSeconds: 30 },
+      // Response timer counts UP; goes red once it passes this many
+      // seconds — the "up to 40s for higher-level candidates" guideline in
+      // the notes (a lower-level candidate may be allowed to run on).
+      timing: { responseSeconds: 40 },
       slotSpec: { images: 1 },
     },
     {
