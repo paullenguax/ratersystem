@@ -71,11 +71,16 @@ function resolveMedia(slide: TemplateSlide, slot?: StorylineSlotContent): Storyl
     audioClips.push({ label: slide.label, url: slot.audio.recordings[0], ...maxPlaysField })
   }
   if (slide.slotSpec.audio === 'set') {
-    if (slot?.audio?.intro) audioClips.push({ label: 'Introduction', url: slot.audio.intro, ...maxPlaysField })
+    // The set's intro clip is a "here's what a recording sounds like"
+    // primer — free to replay, so it never carries the per-recording
+    // maxPlays. Only the numbered recordings below are play-limited.
+    if (slot?.audio?.intro) audioClips.push({ label: 'Introduction', url: slot.audio.intro })
     slot?.audio?.recordings?.forEach((url, i) => {
       if (url) audioClips.push({ label: `Recording ${i + 1}`, url, ...maxPlaysField })
     })
   }
+  // Volume check and (above) the set intro are reference audio — no
+  // maxPlays, so the player shows them with no counter and no lock.
   if (slide.slotSpec.volumeCheck && slot?.audio?.volumeCheck) {
     audioClips.push({ label: 'Volume check', url: slot.audio.volumeCheck })
   }

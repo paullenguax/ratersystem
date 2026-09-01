@@ -140,27 +140,20 @@ window.addEventListener('offline', () =>
 window.addEventListener('online', () =>
   logEvent('connectivity_online', 'network restored'))
 
-// --- Audio playback — same one-clip-at-a-time console as the real player.
-// Play counts are tallied and shown (tick marks + an "N plays" label, plus
-// the local event log above), same visual cue the examiner console gives —
-// but here it is purely a training aid: nothing gates Next, nothing warns
-// with a modal, nothing is reported.
+// --- Audio playback — same one-clip-at-a-time console as the real player,
+// including the identical play counter + soft lock: a clip only shows a
+// counter when it carries a maxPlays (resolveItems sets it on the real
+// response recordings only — never a volume check, Part 3 example, or set
+// intro), and at the limit Play greys out until "↻ Play again" re-arms one
+// more play. Here it's purely a training aid — nothing is reported.
 const playCounts = new Map<string, number>()
 let masterVolume = 1
 const allAudios: HTMLAudioElement[] = []
 let activeAudio: HTMLAudioElement | null = null
-let clipRegistry: { audio: HTMLAudioElement; playBtn: HTMLButtonElement; pauseBtn: HTMLButtonElement; stopBtn: HTMLButtonElement; indicator: HTMLElement }[] = []
+let clipRegistry: { sync: () => void }[] = []
 
 function refreshClipButtons() {
-  for (const c of clipRegistry) {
-    const isActive = c.audio === activeAudio
-    c.playBtn.disabled = activeAudio !== null
-    c.pauseBtn.disabled = !isActive
-    c.stopBtn.disabled = !isActive
-    c.pauseBtn.textContent = isActive && c.audio.paused ? 'Resume' : 'Pause'
-    c.indicator.classList.toggle('playing', isActive && !c.audio.paused)
-    c.indicator.classList.toggle('paused', isActive && c.audio.paused)
-  }
+  for (const c of clipRegistry) c.sync()
 }
 
 const volumeSlider = document.getElementById('volume-slider') as HTMLInputElement | null
@@ -178,6 +171,9 @@ function createAudioControls(clip: { label: string; url: string; maxPlays?: numb
   audio.volume = masterVolume
   allAudios.push(audio)
 
+  const limit = clip.maxPlays                       // undefined => free replay, no counter
+  let overrideArmed = false
+
   const wrap = document.createElement('div')
   wrap.className = 'audio-controls'
 
@@ -194,28 +190,51 @@ function createAudioControls(clip: { label: string; url: string; maxPlays?: numb
   const countLabel = document.createElement('span')
   countLabel.className = 'audio-count'
 
-  function updateCount() {
-    const count = playCounts.get(clip.url) ?? 0
-    countLabel.textContent = clip.maxPlays ? `${count}/${clip.maxPlays} plays` : `${count} plays`
-    const ticks = '✓'.repeat(Math.min(count, 2))
-    ticksLabel.textContent = count > 2 ? `${ticks} ❗` : ticks
-    ticksLabel.classList.toggle('audio-exclaim', count > 2)
-  }
-
   const playBtn = document.createElement('button')
   playBtn.textContent = '▶ Play'
+  const pauseBtn = document.createElement('button')
+  pauseBtn.textContent = 'Pause'
+  const stopBtn = document.createElement('button')
+  stopBtn.textContent = 'Stop'
+
+  const againBtn = document.createElement('button')
+  againBtn.className = 'audio-again'
+  againBtn.textContent = '↻ Play again'
+  againBtn.title = 'This recording has reached its play limit. In a real test, playing it again is recorded.'
+
+  const atLimit = () => limit !== undefined && (playCounts.get(clip.url) ?? 0) >= limit
+
+  function sync() {
+    const isActive = audio === activeAudio
+    playBtn.disabled = activeAudio !== null || (atLimit() && !overrideArmed)
+    pauseBtn.disabled = !isActive
+    stopBtn.disabled = !isActive
+    pauseBtn.textContent = isActive && audio.paused ? 'Resume' : 'Pause'
+    indicator.classList.toggle('playing', isActive && !audio.paused)
+    indicator.classList.toggle('paused', isActive && audio.paused)
+    if (limit !== undefined) {
+      const count = playCounts.get(clip.url) ?? 0
+      countLabel.textContent = `${count}/${limit} plays`
+      const over = count > limit
+      ticksLabel.textContent = `${'✓'.repeat(Math.min(count, limit))}${over ? ' ❗' : ''}`
+      ticksLabel.classList.toggle('audio-exclaim', over)
+      playBtn.classList.toggle('audio-locked', atLimit() && !overrideArmed && activeAudio === null)
+      againBtn.hidden = !atLimit() || overrideArmed || activeAudio !== null
+    }
+  }
+
   playBtn.addEventListener('click', () => {
     if (activeAudio !== null) return
+    if (atLimit() && !overrideArmed) return
+    overrideArmed = false
     audio.currentTime = 0
     audio.play()
     activeAudio = audio
     const attempt = (playCounts.get(clip.url) ?? 0) + 1
-    logEvent('audio_play', `"${clip.label}" — attempt ${attempt}${clip.maxPlays ? ` of ${clip.maxPlays} allowed` : ''}`)
+    logEvent('audio_play', `"${clip.label}" — attempt ${attempt}${limit !== undefined ? ` of ${limit} allowed` : ''}`)
     refreshClipButtons()
   })
 
-  const pauseBtn = document.createElement('button')
-  pauseBtn.textContent = 'Pause'
   pauseBtn.addEventListener('click', () => {
     if (activeAudio !== audio) return
     if (audio.paused) { audio.play(); logEvent('audio_resumed', `"${clip.label}" at ${formatTime(audio.currentTime)}`) }
@@ -223,8 +242,6 @@ function createAudioControls(clip: { label: string; url: string; maxPlays?: numb
     refreshClipButtons()
   })
 
-  const stopBtn = document.createElement('button')
-  stopBtn.textContent = 'Stop'
   stopBtn.addEventListener('click', () => {
     if (activeAudio !== audio) return
     logEvent('audio_stopped', `"${clip.label}" at ${formatTime(audio.currentTime)} — reset to start, does not count as a play`)
@@ -234,21 +251,26 @@ function createAudioControls(clip: { label: string; url: string; maxPlays?: numb
     refreshClipButtons()
   })
 
+  againBtn.addEventListener('click', () => {
+    if (!atLimit()) return
+    overrideArmed = true
+    const count = playCounts.get(clip.url) ?? 0
+    logEvent('audio_replay_limit', `"${clip.label}" re-enabled past its ${limit}-play limit (was ${count}/${limit}) — a real test records this as a violation`)
+    refreshClipButtons()
+  })
+
   audio.addEventListener('ended', () => {
     const count = (playCounts.get(clip.url) ?? 0) + 1
     playCounts.set(clip.url, count)
-    updateCount()
-    logEvent('audio_ended', `"${clip.label}" played in full — ${count}${clip.maxPlays ? `/${clip.maxPlays}` : ''} play${count === 1 ? '' : 's'}`)
-    if (clip.maxPlays && count > clip.maxPlays) {
-      logEvent('audio_replay_limit', `"${clip.label}" played ${count} times (limit ${clip.maxPlays}) — a real test records this as a violation`)
-    }
+    logEvent('audio_ended', `"${clip.label}" played in full — ${count}${limit !== undefined ? `/${limit}` : ''} play${count === 1 ? '' : 's'}`)
     if (activeAudio === audio) activeAudio = null
     refreshClipButtons()
   })
 
-  updateCount()
-  clipRegistry.push({ audio, playBtn, pauseBtn, stopBtn, indicator })
-  wrap.append(indicator, label, playBtn, pauseBtn, stopBtn, ticksLabel, countLabel)
+  clipRegistry.push({ sync })
+  wrap.append(indicator, label, playBtn, pauseBtn, stopBtn)
+  if (limit !== undefined) wrap.append(ticksLabel, countLabel, againBtn)
+  sync()
   return wrap
 }
 

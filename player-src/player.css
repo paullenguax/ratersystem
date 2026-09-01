@@ -781,6 +781,29 @@ div.polaroid img {
   font-weight: bold;
 }
 
+/* Play button once its clip has hit the play limit — visibly spent, not
+   just the default greyed-disabled look. */
+.audio-controls .audio-locked {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+/* The deliberate "I know, play it anyway" affordance shown at the limit.
+   Small and unstyled-looking so it reads as an override, not a primary
+   action. */
+.audio-again {
+  font-size: 0.8rem;
+  padding: 2px 8px;
+  border: 1px solid #b00020;
+  border-radius: 4px;
+  background: #fff;
+  color: #b00020;
+}
+
+.audio-again[hidden] {
+  display: none;
+}
+
 button {
   font: inherit;
   cursor: pointer;

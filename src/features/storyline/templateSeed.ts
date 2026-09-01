@@ -236,7 +236,10 @@ export function buildSeedTemplateSlides(): TemplateSlide[] {
         'You will hear each recording once. If you want to hear the message again, just ask and I will play it ' +
         'once more only.\n' +
         "Before we start, let's listen to an example so you know what to expect.",
-      slotSpec: { audio: 'single', maxPlays: 2 },
+      // No maxPlays — the example is just to show the candidate what a
+      // recording sounds like; only the 9 real Part 3 recordings (the three
+      // Sets below) are play-limited.
+      slotSpec: { audio: 'single' },
     },
     {
       kind: 'audio_set',

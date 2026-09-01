@@ -394,13 +394,20 @@ phase.
   starting one disables every other clip's Play button until it's
   explicitly Stopped or finishes on its own (pausing does not free the
   slot up; Pause toggles pause/resume in place on the active clip, with a
-  pulsing indicator dot while playing). Each clip has a soft play-count
-  limit (warns and logs past `maxPlays`, never blocks) tracked on actual
-  completion (the `ended` event, not the click) — shown as green ✓ ticks,
-  turning into a red ❗ past two completions — plus a visible in-session
-  Event Log. A slide can also declare `slotSpec.volumeCheck` for a separate,
-  unlimited-replay clip (e.g. Part 2's pre-recording volume check),
-  rendered as an ordinary extra clip alongside the slide's main audio. Next
+  pulsing indicator dot while playing). **Play counter + soft lock
+  (reworked 2026-09-01)**: a clip shows a counter *only* when it carries a
+  `maxPlays` — `resolveItems` attaches that to the real response recordings
+  only, never a `volumeCheck` clip, a Part 3 example, or an `audio: 'set'`
+  intro, so those render with no ticks/count and replay freely. A limited
+  clip shows `N/M plays` + ✓ ticks (red ❗ if it somehow goes over), and at
+  the limit the Play button greys out (`.audio-locked`) — a deliberate "↻
+  Play again" button (`.audio-again`) re-arms exactly one more play and
+  records it (`logEvent` + `track('audio_replay_limit', … override …)` in
+  the real player, `audio_replay_limit` log line in practice). Replaces the
+  old fire-after-the-fact `window.alert`. `slotSpec.maxPlays` is editable
+  per slide in the Template editor (blank = unlimited); Part 3 Example's
+  default `maxPlays: 2` was removed from `templateSeed.ts` (needs a template
+  reload to reach live). Next
   is disabled until every audio clip on the current slide has actually
   completed at least once, except in Preview mode, which bypasses this so
   an admin can click through freely while the candidate window still tracks
