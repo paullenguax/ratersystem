@@ -436,6 +436,9 @@ function startGlobalTimer() {
 }
 
 // --- Per-Part elapsed timer (count-up, restarts when the Part changes) ---
+// Only Parts 1 and 4 — the open-ended conversational Parts. Parts 2 and 3
+// run on fixed recordings with their own play limits, no paced budget.
+const TIMED_PARTS = new Set([1, 4])
 let partTimerStart: number | null = null
 let partTimerNumber: number | null = null
 let partTimerTicking = false
@@ -447,7 +450,7 @@ function tickPartTimer() {
 function updatePartTimer(partNumber: number | undefined) {
   const el = document.getElementById('part-timer')
   if (!el) return
-  if (!partNumber) {
+  if (!partNumber || !TIMED_PARTS.has(partNumber)) {
     partTimerStart = null
     partTimerNumber = null
     el.hidden = true

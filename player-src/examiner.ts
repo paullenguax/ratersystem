@@ -151,6 +151,10 @@ function startGlobalTimer() {
 // Part 1 / Part 4 inside their "~N minutes" budgets (the actual targets
 // live in the now always-visible Notes). Restarts whenever the Part
 // number changes; hidden on pre-test screens, the preamble and the close.
+// Only Parts 1 and 4 (the open-ended conversational Parts) get one —
+// Parts 2 and 3 run on fixed recordings with their own play limits, so
+// there's no interlocutor-paced budget to watch.
+const TIMED_PARTS = new Set([1, 4])
 
 let partTimerStart: number | null = null
 let partTimerNumber: number | null = null
@@ -165,7 +169,7 @@ function tickPartTimer() {
 function updatePartTimer(partNumber: number | undefined) {
   const el = document.getElementById('part-timer')
   if (!el) return
-  if (!partNumber) {
+  if (!partNumber || !TIMED_PARTS.has(partNumber)) {
     partTimerStart = null
     partTimerNumber = null
     el.hidden = true
