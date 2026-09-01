@@ -28,7 +28,14 @@
     </header>
 
     <div class="exam-body">
-      <main class="slide-card" id="slide-card"></main>
+      <div class="exam-main">
+        <main class="slide-card" id="slide-card"></main>
+        <nav class="slide-nav">
+          <button id="prev-btn" type="button">◀ Back</button>
+          <button id="open-candidate" type="button">Open candidate window</button>
+          <button id="next-btn" type="button">Next ▶</button>
+        </nav>
+      </div>
 
       <aside class="notes-panel" id="notes-drawer">
         <div class="notes-panel-header">
@@ -38,12 +45,6 @@
         <div id="notes-content"></div>
       </aside>
     </div>
-
-    <nav class="slide-nav">
-      <button id="prev-btn" type="button">◀ Back</button>
-      <button id="open-candidate" type="button">Open candidate window</button>
-      <button id="next-btn" type="button">Next ▶</button>
-    </nav>
 
     <details class="log-panel">
       <summary>Event log — what a real test records (this practice run stores nothing)</summary>

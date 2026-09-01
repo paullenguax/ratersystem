@@ -85,13 +85,21 @@ div.polaroid img {
 }
 
 /* Logo-only candidate screens (between Parts, preamble, closing) — big and
-   bold so it reads across the room, not a small mark floating in white. */
-.candidate-logo {
-  width: auto !important;
-  max-width: min(80vw, 860px);
-  max-height: 70vh;
+   bold so it reads across the room. Source art is 1416×344, so it fills the
+   width instead of sitting at natural size in a sea of white. The card
+   itself widens for a logo (it's otherwise sized for portrait pictures),
+   and the selector is scoped under .polaroid to outweigh the generic
+   `div.polaroid img` rule above. */
+.polaroid:has(.candidate-logo) {
+  width: 90%;
+}
+
+.polaroid img.candidate-logo {
+  width: min(84vw, 1150px);
+  height: auto;
+  max-height: 72vh;
   display: block;
-  margin: 6vh auto;
+  margin: 8vh auto;
 }
 
 .candidate-instructions {
@@ -138,25 +146,29 @@ div.polaroid img {
 /* Examiner control view only */
 
 .examiner-shell {
-  max-width: var(--slide-max-width, 1440px);
+  max-width: var(--slide-max-width, 1560px);
   margin: 0 auto;
   padding: 24px;
 }
 
-/* Interlocutor script + docked Notes, side by side, filling the width. */
+/* The main player column (slide + its nav buttons) on the left, docked
+   Notes as a full-height rail on the right. The Back / Open candidate /
+   Next buttons sit under the slide card only — not spanning the notes. */
 .exam-body {
   display: flex;
   align-items: flex-start;
   gap: 20px;
 }
 
-.exam-body .slide-card {
+.exam-main {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .notes-panel {
-  flex: 0 0 340px;
+  flex: 0 0 316px;
   position: sticky;
   top: 16px;
   max-height: calc(100vh - 32px);
@@ -204,7 +216,7 @@ div.polaroid img {
   display: inline-block;
 }
 
-@media (max-width: 1000px) {
+@media (max-width: 1040px) {
   .exam-body {
     flex-direction: column;
   }
@@ -369,7 +381,7 @@ div.polaroid img {
 }
 
 .slide-card {
-  min-height: var(--slide-min-height, 640px);
+  min-height: var(--slide-min-height, 700px);
   border: 1px solid #ddd;
   border-radius: 10px;
   background: white;
