@@ -412,8 +412,13 @@ phase.
   completed at least once, except in Preview mode, which bypasses this so
   an admin can click through freely while the candidate window still tracks
   the current slide. A header volume slider scales every clip's playback
-  volume live. A collapsible notes drawer (collapsed by default) shows each
-  slide's `notes`. Script styling follows the old Storyline convention so the
+  volume live. The interlocutor `notes` sit in a **docked side panel
+  (`.notes-panel`), shown by default** next to the script (the two fill the
+  widened shell) — a "Hide Notes" button collapses it and brings back the
+  header "Notes" button (toggle = `.notes-hidden` on `.examiner-shell`);
+  below 1000px they stack. Changed 2026-09-01 from a collapsed slide-in
+  drawer, on interlocutor feedback that the Part 2/3 prompt questions and
+  prompting guidance were too easy to miss when hidden. Script styling follows the old Storyline convention so the
   two kinds of text are visually distinct: **what the interlocutor says
   aloud** (`.slide-text`/`examinerText`, and the compiled Part-preview
   questions in `.preview-highlight`) renders royal-blue (`#00107a`) italic,
@@ -451,7 +456,19 @@ phase.
   slides opt out of appearing in any such compilation (e.g. Part 4's
   picture-interview slides are excluded — those questions depend on seeing
   the images live, so only the closing discussion questions are worth
-  previewing in advance). `nextButtonLabel` overrides the Next button's
+  previewing in advance).
+  **Timers reworked 2026-09-01** (interlocutor feedback): three chips in the
+  header — the continuous session clock (unchanged), a green **per-Part
+  elapsed clock** (`#part-timer`, "Part N · MM:SS") that (re)starts whenever
+  `item.partNumber` changes and hides on non-Part slides, for pacing Part 1
+  / Part 4 against their "~N minutes" budgets; and the prep/response
+  countdown, which **no longer auto-starts** — a `▶ Start` / `↻ Reset`
+  button (`#slide-timer-btn`) next to it lets the interlocutor start it at
+  the scripted "...starting now", so a 30s response clock isn't already at
+  00:00 by the time they've read the instruction. `partNumber` is now
+  carried onto `StorylineItem` by both `resolveItems` copies (was dropped
+  before); the ready-but-unstarted countdown shows dimmed
+  (`.exam-timer-ready`). `nextButtonLabel` overrides the Next button's
   text/prominence for one slide only (e.g. "START TEST" on the last
   pre-test slide, styled bigger via `.next-btn-prominent`), reverting to
   the default "Next ▶" on the following slide.
@@ -728,11 +745,20 @@ phase.
   which folder a given export ends up named. examiner.ts's real-exam
   `endSession()` deliberately doesn't get this link — a real exam ends with
   an examiner already there, not a solo visitor who needs somewhere to go.
-  **Notes drawer (added 2026-08-19)**: the slide-in `#notes-drawer`
-  showing `item.notes` (the "Notes" header button) was missing from the
-  original build — ported back in verbatim from examiner.html/examiner.ts
-  (same markup/CSS/toggle logic, no changes needed). Shows on every slide
-  including the intro, same as the real exam.
+  **Notes panel**: `item.notes` shows in the docked `.notes-panel` (shown by
+  default, "Hide Notes" to collapse) — same as the examiner player after the
+  2026-09-01 rework described above; practice.ts logs `notes_opened`/
+  `notes_closed`.
+  **Batch of interlocutor fixes (2026-09-01)**: audio counter/lock now
+  render only for clips with a `maxPlays` (volume check, Part 3 example and
+  set intro replay bare); at the limit Play greys out with a "↻ Play again"
+  override. Candidate window: `div.polaroid img` gets `max-height: 86vh` +
+  `object-fit: contain` so a portrait picture (Part 4 ALPHA) no longer
+  overflows the second monitor, and `.candidate-logo` is much larger
+  (`min(80vw, 860px)`) on logo-only screens. `.preview-highlight` questions
+  dropped to normal weight to match the in-script `{questions}` style.
+  `templateSeed.ts` gained further blank lines in the Part 2 Intro /
+  Section 1 scripts (needs a template reload to reach live).
 - **"Flight Strip" sample-tests landing page** (built 2026-08-06,
   `buildHomeTemplate()`/`HOME_SHELL_HEAD`/`HOME_SHELL_FOOT`/
   `HOME_LOGO_BASE64` in `exportStoryline.ts`, standalone starter copy at

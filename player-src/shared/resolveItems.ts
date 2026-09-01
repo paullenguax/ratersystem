@@ -147,6 +147,7 @@ export function resolveItems(
     }
     const checklistItems = normalizeChecklistItems(slide.checklistItems)
     if (checklistItems?.length) item.checklistItems = checklistItems
+    if (slide.partNumber) item.partNumber = slide.partNumber
     if (slide.kind === 'accept_reject_test' && testDisplayName) item.testDisplayName = testDisplayName
     if (slide.startsTestTimer) item.startsTestTimer = slide.startsTestTimer
     if (slide.nextButtonLabel) item.nextButtonLabel = slide.nextButtonLabel

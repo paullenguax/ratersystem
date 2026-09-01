@@ -113,6 +113,9 @@ export interface StorylineItem {
   order: number
   kind: TemplateSlideKind
   label: string
+  // 1–4 for slides that belong to a Part; undefined for pre-test screens,
+  // the preamble and the closing. Drives the per-Part elapsed timer.
+  partNumber?: 1 | 2 | 3 | 4
   examinerText?: string
   candidateState: string
   notes?: string

@@ -146,21 +146,66 @@ function startGlobalTimer() {
   window.setInterval(tickGlobalTimer, 1000)
 }
 
-// --- Per-slide timer ------------------------------------------------------
-// Auto-starts the moment a slide with timing.prepSeconds/responseSeconds
-// becomes current. Prep counts down first, then response, if both are set.
-// Purely informational — never gates navigation.
+// --- Per-Part elapsed timer --------------------------------------------
+// Count-up clock scoped to the current Part so the interlocutor can keep
+// Part 1 / Part 4 inside their "~N minutes" budgets (the actual targets
+// live in the now always-visible Notes). Restarts whenever the Part
+// number changes; hidden on pre-test screens, the preamble and the close.
+
+let partTimerStart: number | null = null
+let partTimerNumber: number | null = null
+let partTimerTicking = false
+
+function tickPartTimer() {
+  const el = document.getElementById('part-timer')
+  if (!el || partTimerStart === null) return
+  el.textContent = `Part ${partTimerNumber} · ${formatTime((Date.now() - partTimerStart) / 1000)}`
+}
+
+function updatePartTimer(partNumber: number | undefined) {
+  const el = document.getElementById('part-timer')
+  if (!el) return
+  if (!partNumber) {
+    partTimerStart = null
+    partTimerNumber = null
+    el.hidden = true
+    return
+  }
+  if (partNumber !== partTimerNumber) {
+    partTimerNumber = partNumber
+    partTimerStart = Date.now()
+  }
+  el.hidden = false
+  tickPartTimer()
+  if (!partTimerTicking) {
+    partTimerTicking = true
+    window.setInterval(tickPartTimer, 1000)
+  }
+}
+
+// --- Per-slide prep/response countdown --------------------------------
+// Does NOT auto-run: the interlocutor presses ▶ Start at the scripted
+// "...starting now", so a 30s response clock isn't already at 00:00 by
+// the time they've finished reading the instruction. ↻ Reset returns it
+// to the ready value. Purely informational — never gates navigation.
 
 let slideTimerHandle: number | undefined
 let slideTimerRemaining = 0
+let pendingTiming: StorylineItem['timing'] | null = null
 
 function clearSlideTimer() {
   if (slideTimerHandle !== undefined) window.clearInterval(slideTimerHandle)
   slideTimerHandle = undefined
+  pendingTiming = null
   const el = document.getElementById('slide-timer')
   if (el) {
     el.hidden = true
-    el.classList.remove('exam-timer-done')
+    el.classList.remove('exam-timer-done', 'exam-timer-ready')
+  }
+  const btn = document.getElementById('slide-timer-btn') as HTMLButtonElement | null
+  if (btn) {
+    btn.hidden = true
+    btn.dataset.state = 'ready'
   }
 }
 
@@ -169,7 +214,7 @@ function runSlideTimerPhase(phase: 'Prep' | 'Response', seconds: number, then?: 
   const el = document.getElementById('slide-timer')
   if (!el) return
   el.hidden = false
-  el.classList.remove('exam-timer-done')
+  el.classList.remove('exam-timer-done', 'exam-timer-ready')
   el.textContent = `${phase} ${formatTime(slideTimerRemaining)}`
   slideTimerHandle = window.setInterval(() => {
     slideTimerRemaining--
@@ -187,15 +232,46 @@ function runSlideTimerPhase(phase: 'Prep' | 'Response', seconds: number, then?: 
   }, 1000)
 }
 
-function startSlideTimer(item: StorylineItem) {
-  clearSlideTimer()
-  const { prepSeconds, responseSeconds } = item.timing ?? {}
+function startPendingSlideTimer() {
+  const { prepSeconds, responseSeconds } = pendingTiming ?? {}
   if (prepSeconds) {
     runSlideTimerPhase('Prep', prepSeconds, responseSeconds ? () => runSlideTimerPhase('Response', responseSeconds) : undefined)
   } else if (responseSeconds) {
     runSlideTimerPhase('Response', responseSeconds)
   }
 }
+
+function prepareSlideTimer(item: StorylineItem) {
+  clearSlideTimer()
+  const { prepSeconds, responseSeconds } = item.timing ?? {}
+  if (!prepSeconds && !responseSeconds) return
+  pendingTiming = item.timing ?? null
+  const phase = prepSeconds ? 'Prep' : 'Response'
+  const el = document.getElementById('slide-timer')
+  if (el) {
+    el.hidden = false
+    el.classList.add('exam-timer-ready')
+    el.textContent = `${phase} ${formatTime(prepSeconds || responseSeconds || 0)}`
+  }
+  const btn = document.getElementById('slide-timer-btn') as HTMLButtonElement | null
+  if (btn) {
+    btn.hidden = false
+    btn.dataset.state = 'ready'
+    btn.textContent = '▶ Start'
+  }
+}
+
+document.getElementById('slide-timer-btn')?.addEventListener('click', () => {
+  const btn = document.getElementById('slide-timer-btn') as HTMLButtonElement | null
+  if (!btn) return
+  if (btn.dataset.state === 'ready') {
+    startPendingSlideTimer()
+    btn.dataset.state = 'running'
+    btn.textContent = '↻ Reset'
+  } else {
+    prepareSlideTimer(items[currentIndex])
+  }
+})
 
 // --- Audio playback (from the examiner's own console — everyone in the ---
 // room hears it via the examiner's speakers, matching the in-person,
@@ -870,7 +946,8 @@ function renderCurrentSlide() {
   if (notesContent) notesContent.innerHTML = renderInlineMarkup(item.notes || 'No notes for this slide.')
 
   if (item.startsTestTimer) startGlobalTimer()
-  startSlideTimer(item)
+  updatePartTimer(item.partNumber)
+  prepareSlideTimer(item)
   sendAdvance(item)
   updateNavState()
 }
@@ -911,11 +988,15 @@ document.getElementById('next-btn')?.addEventListener('click', () => {
   renderCurrentSlide()
 })
 
+// Notes are docked and shown by default (see examiner.html / .notes-panel).
+// "Hide Notes" collapses the panel and brings back the header "Notes"
+// button; that button re-shows it.
+const examShell = document.querySelector('.examiner-shell')
 document.getElementById('notes-toggle')?.addEventListener('click', () => {
-  document.getElementById('notes-drawer')?.classList.toggle('open')
+  examShell?.classList.remove('notes-hidden')
 })
 document.getElementById('notes-close')?.addEventListener('click', () => {
-  document.getElementById('notes-drawer')?.classList.remove('open')
+  examShell?.classList.add('notes-hidden')
 })
 
 loadTheme().then(applyTheme)

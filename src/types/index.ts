@@ -297,6 +297,9 @@ export interface StorylineItem {
   // candidateState, which is an internal state key for the candidate
   // screen, not human-facing text.
   label: string
+  // 1–4 for slides that belong to a Part; undefined for pre-test screens,
+  // the preamble and the closing. Drives the player's per-Part elapsed timer.
+  partNumber?: StorylinePartNumber
   examinerText?: string
   candidateState: string
   notes?: string

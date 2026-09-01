@@ -61,14 +61,16 @@ function openOrFocusCandidateWindow() {
 document.getElementById('open-candidate')?.addEventListener('click', openOrFocusCandidateWindow)
 document.getElementById('candidate-status')?.addEventListener('click', openOrFocusCandidateWindow)
 
+// Notes are docked and shown by default (see practice.html / .notes-panel).
+// "Hide Notes" collapses the panel and restores the header "Notes" button.
+const examShell = document.querySelector('.examiner-shell')
 document.getElementById('notes-toggle')?.addEventListener('click', () => {
-  const drawer = document.getElementById('notes-drawer')
-  drawer?.classList.toggle('open')
-  logEvent(drawer?.classList.contains('open') ? 'notes_opened' : 'notes_closed', 'examiner notes drawer')
+  examShell?.classList.remove('notes-hidden')
+  logEvent('notes_opened', 'interlocutor notes panel')
 })
 document.getElementById('notes-close')?.addEventListener('click', () => {
-  document.getElementById('notes-drawer')?.classList.remove('open')
-  logEvent('notes_closed', 'examiner notes drawer')
+  examShell?.classList.add('notes-hidden')
+  logEvent('notes_closed', 'interlocutor notes panel')
 })
 
 // Polled rather than event-driven (no reliable "closed" event across
@@ -433,15 +435,55 @@ function startGlobalTimer() {
   window.setInterval(tickGlobalTimer, 1000)
 }
 
+// --- Per-Part elapsed timer (count-up, restarts when the Part changes) ---
+let partTimerStart: number | null = null
+let partTimerNumber: number | null = null
+let partTimerTicking = false
+function tickPartTimer() {
+  const el = document.getElementById('part-timer')
+  if (!el || partTimerStart === null) return
+  el.textContent = `Part ${partTimerNumber} · ${formatTime((Date.now() - partTimerStart) / 1000)}`
+}
+function updatePartTimer(partNumber: number | undefined) {
+  const el = document.getElementById('part-timer')
+  if (!el) return
+  if (!partNumber) {
+    partTimerStart = null
+    partTimerNumber = null
+    el.hidden = true
+    return
+  }
+  if (partNumber !== partTimerNumber) {
+    partTimerNumber = partNumber
+    partTimerStart = Date.now()
+    logEvent('part_timer_started', `Part ${partNumber} elapsed clock running`)
+  }
+  el.hidden = false
+  tickPartTimer()
+  if (!partTimerTicking) {
+    partTimerTicking = true
+    window.setInterval(tickPartTimer, 1000)
+  }
+}
+
+// --- Per-slide prep/response countdown — manual ▶ Start / ↻ Reset -------
 let slideTimerHandle: number | undefined
 let slideTimerRemaining = 0
+let pendingTiming: StorylineItem['timing'] | null = null
+
 function clearSlideTimer() {
   if (slideTimerHandle !== undefined) window.clearInterval(slideTimerHandle)
   slideTimerHandle = undefined
+  pendingTiming = null
   const el = document.getElementById('slide-timer')
   if (el) {
     el.hidden = true
-    el.classList.remove('exam-timer-done')
+    el.classList.remove('exam-timer-done', 'exam-timer-ready')
+  }
+  const btn = document.getElementById('slide-timer-btn') as HTMLButtonElement | null
+  if (btn) {
+    btn.hidden = true
+    btn.dataset.state = 'ready'
   }
 }
 function runSlideTimerPhase(phase: 'Prep' | 'Response', seconds: number, then?: () => void) {
@@ -449,7 +491,7 @@ function runSlideTimerPhase(phase: 'Prep' | 'Response', seconds: number, then?: 
   const el = document.getElementById('slide-timer')
   if (!el) return
   el.hidden = false
-  el.classList.remove('exam-timer-done')
+  el.classList.remove('exam-timer-done', 'exam-timer-ready')
   el.textContent = `${phase} ${formatTime(slideTimerRemaining)}`
   logEvent('timer_started', `${phase.toLowerCase()} — ${seconds}s`)
   slideTimerHandle = window.setInterval(() => {
@@ -468,15 +510,44 @@ function runSlideTimerPhase(phase: 'Prep' | 'Response', seconds: number, then?: 
     el.textContent = `${phase} ${formatTime(slideTimerRemaining)}`
   }, 1000)
 }
-function startSlideTimer(item: StorylineItem) {
-  clearSlideTimer()
-  const { prepSeconds, responseSeconds } = item.timing ?? {}
+function startPendingSlideTimer() {
+  const { prepSeconds, responseSeconds } = pendingTiming ?? {}
   if (prepSeconds) {
     runSlideTimerPhase('Prep', prepSeconds, responseSeconds ? () => runSlideTimerPhase('Response', responseSeconds) : undefined)
   } else if (responseSeconds) {
     runSlideTimerPhase('Response', responseSeconds)
   }
 }
+function prepareSlideTimer(item: StorylineItem) {
+  clearSlideTimer()
+  const { prepSeconds, responseSeconds } = item.timing ?? {}
+  if (!prepSeconds && !responseSeconds) return
+  pendingTiming = item.timing ?? null
+  const phase = prepSeconds ? 'Prep' : 'Response'
+  const el = document.getElementById('slide-timer')
+  if (el) {
+    el.hidden = false
+    el.classList.add('exam-timer-ready')
+    el.textContent = `${phase} ${formatTime(prepSeconds || responseSeconds || 0)}`
+  }
+  const btn = document.getElementById('slide-timer-btn') as HTMLButtonElement | null
+  if (btn) {
+    btn.hidden = false
+    btn.dataset.state = 'ready'
+    btn.textContent = '▶ Start'
+  }
+}
+document.getElementById('slide-timer-btn')?.addEventListener('click', () => {
+  const btn = document.getElementById('slide-timer-btn') as HTMLButtonElement | null
+  if (!btn) return
+  if (btn.dataset.state === 'ready') {
+    startPendingSlideTimer()
+    btn.dataset.state = 'running'
+    btn.textContent = '↻ Reset'
+  } else {
+    prepareSlideTimer(items[currentIndex])
+  }
+})
 
 // --- Slide navigator ---
 let sessionEnded = false
@@ -631,7 +702,8 @@ function renderCurrentSlide() {
   if (notesContent) notesContent.innerHTML = renderInlineMarkup(item.notes || 'No notes for this slide.')
 
   if (item.startsTestTimer) startGlobalTimer()
-  startSlideTimer(item)
+  updatePartTimer(item.partNumber)
+  prepareSlideTimer(item)
   sendAdvance(item)
 }
 

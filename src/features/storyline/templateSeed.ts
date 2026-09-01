@@ -159,8 +159,8 @@ export function buildSeedTemplateSlides(): TemplateSlide[] {
         'You will hear the first section of an RT communication between a pilot and a tower controller. ' +
         'I will play the recording once and cannot repeat it.\n\n' +
         'After listening, you will respond to the 2 prompts here on the screen:\n\n' +
-        'Describe the communications between the pilot and the ATC\n' +
-        'and...\n' +
+        'Describe the communications between the pilot and the ATC\n\n' +
+        'and...\n\n' +
         'What unexpected information is reported?',
       slotSpec: {},
     },
@@ -179,7 +179,7 @@ export function buildSeedTemplateSlides(): TemplateSlide[] {
         'more about ____?"',
       scriptText:
         'Here is some paper and a pen. As you listen, take notes to explain the communications fully.\n\n' +
-        'Do you have any questions?\n' +
+        'Do you have any questions?\n\n' +
         'We will first check the volume:\n' +
         '{volumeCheck}\n' +
         'How is the volume?\n\n' +

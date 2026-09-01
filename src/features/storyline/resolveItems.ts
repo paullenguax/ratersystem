@@ -76,7 +76,9 @@ function resolveMedia(slide: TemplateSlide, slot?: StorylineSlotContent): Storyl
     audioClips.push({ label: slide.label, url: slot.audio.recordings[0], ...maxPlaysField })
   }
   if (slide.slotSpec.audio === 'set') {
-    if (slot?.audio?.intro) audioClips.push({ label: 'Introduction', url: slot.audio.intro, ...maxPlaysField })
+    // The set's intro primer replays freely — never inherits the
+    // per-recording maxPlays (mirrors player-src/shared/resolveItems.ts).
+    if (slot?.audio?.intro) audioClips.push({ label: 'Introduction', url: slot.audio.intro })
     slot?.audio?.recordings?.forEach((url, i) => {
       if (url) audioClips.push({ label: `Recording ${i + 1}`, url, ...maxPlaysField })
     })
@@ -171,6 +173,7 @@ export function resolveItems(
     }
     const checklistItems = normalizeChecklistItems(slide.checklistItems)
     if (checklistItems?.length) item.checklistItems = checklistItems
+    if (slide.partNumber) item.partNumber = slide.partNumber
     if (slide.kind === 'accept_reject_test' && testDisplayName) item.testDisplayName = testDisplayName
     if (slide.startsTestTimer) item.startsTestTimer = slide.startsTestTimer
     if (slide.nextButtonLabel) item.nextButtonLabel = slide.nextButtonLabel

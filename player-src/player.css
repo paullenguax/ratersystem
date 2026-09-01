@@ -30,8 +30,15 @@ div.polaroid {
 }
 
 div.polaroid img {
-  width: 100%;
   display: block;
+  width: 100%;
+  height: auto;
+  /* Never taller than the window — a portrait picture (e.g. Part 4 ALPHA)
+     used to overflow the candidate screen so the examiner couldn't see all
+     of it. `contain` keeps the whole image visible, letterboxed on the
+     white card if its aspect doesn't match. */
+  max-height: 86vh;
+  object-fit: contain;
 }
 
 .image-row {
@@ -77,11 +84,14 @@ div.polaroid img {
   }
 }
 
+/* Logo-only candidate screens (between Parts, preamble, closing) — big and
+   bold so it reads across the room, not a small mark floating in white. */
 .candidate-logo {
   width: auto !important;
-  max-width: 420px;
+  max-width: min(80vw, 860px);
+  max-height: 70vh;
   display: block;
-  margin: 48px auto;
+  margin: 6vh auto;
 }
 
 .candidate-instructions {
@@ -128,9 +138,82 @@ div.polaroid img {
 /* Examiner control view only */
 
 .examiner-shell {
-  max-width: var(--slide-max-width, 1100px);
+  max-width: var(--slide-max-width, 1440px);
   margin: 0 auto;
   padding: 24px;
+}
+
+/* Interlocutor script + docked Notes, side by side, filling the width. */
+.exam-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.exam-body .slide-card {
+  flex: 1;
+  min-width: 0;
+}
+
+.notes-panel {
+  flex: 0 0 340px;
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  background: #fbfbfc;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 16px 18px;
+}
+
+.notes-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.notes-panel-header h2 {
+  font-size: 0.95rem;
+  margin: 0;
+  color: #444;
+}
+
+.notes-panel-header button {
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  background: white;
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  color: #555;
+}
+
+/* Notes hidden — the panel collapses and the header "Notes" button
+   (normally hidden) comes back to reopen it. */
+.examiner-shell.notes-hidden .notes-panel {
+  display: none;
+}
+
+.notes-toggle {
+  display: none;
+}
+
+.examiner-shell.notes-hidden .notes-toggle {
+  display: inline-block;
+}
+
+@media (max-width: 1000px) {
+  .exam-body {
+    flex-direction: column;
+  }
+  .notes-panel {
+    flex-basis: auto;
+    width: 100%;
+    position: static;
+    max-height: none;
+  }
 }
 
 .exam-header {
@@ -188,6 +271,8 @@ div.polaroid img {
 
 .exam-timers {
   display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -200,14 +285,43 @@ div.polaroid img {
   color: var(--accent-color, #00528c);
 }
 
+/* Elapsed time in the current Part (Part 1 / Part 4 especially) — a
+   distinct green so it doesn't read as the whole-test clock or the
+   per-slide prep/response countdown. */
+.exam-timer-part {
+  background: #e8f3ec;
+  color: #1f6b3a;
+}
+
 .exam-timer-slide {
   background: #fdf3e2;
   color: #8a5a00;
 }
 
+/* Prep/response countdown shown but not yet started — dimmed so it reads
+   as "ready", waiting on the ▶ Start button. */
+.exam-timer-ready {
+  opacity: 0.55;
+}
+
 .exam-timer-done {
   background: #fbe4e4;
   color: #b00020;
+}
+
+/* Start / Reset control for the per-slide prep/response countdown — the
+   interlocutor triggers it at the scripted "...starting now", so it never
+   runs out before they've finished the instruction. */
+.exam-timer-btn {
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid #8a5a00;
+  background: #fff;
+  color: #8a5a00;
+  cursor: pointer;
 }
 
 .notes-toggle {
@@ -399,17 +513,22 @@ div.polaroid img {
   margin-top: 16px;
 }
 
+/* Preview questions read like the questions on every other slide — blue
+   italic, normal weight (not bold), so the interlocutor sees one
+   consistent "spoken question" style throughout. */
 .preview-highlight {
-  font-weight: 700;
+  font-weight: 400;
   font-style: italic;
   color: #00107a;
   white-space: pre-wrap;
 }
 
-/* The topic is a category label, not something read aloud — keep it black
-   even though the questions beneath it (also .preview-highlight) stay blue. */
+/* The topic is a category label, not something read aloud — keep it black,
+   and give it a little weight so it still reads as a heading over its
+   questions. */
 .preview-highlight.preview-topic {
   color: #000;
+  font-weight: 600;
 }
 
 .preview-questions {
@@ -675,52 +794,13 @@ div.polaroid img {
   letter-spacing: 0.05em;
 }
 
-.notes-drawer {
-  position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: 320px;
-  max-width: 85vw;
-  background: white;
-  box-shadow: -2px 0 12px rgba(0, 0, 0, 0.15);
-  padding: 20px;
-  transform: translateX(100%);
-  transition: transform 0.25s ease;
-  z-index: 9000;
-  overflow-y: auto;
-}
-
-.notes-drawer.open {
-  transform: translateX(0);
-}
-
-.notes-drawer-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-
-.notes-drawer-header h2 {
-  font-size: 1rem;
-  margin: 0;
-}
-
-.notes-drawer-header button {
-  border: none;
-  background: none;
-  font-size: 1rem;
-  cursor: pointer;
-  color: #666;
-}
-
 /* Instructions to the interlocutor — black, to contrast with the royal-blue
-   italic spoken lines (.slide-text). */
+   italic spoken lines (.slide-text). Lives in the docked .notes-panel. */
 #notes-content {
   white-space: pre-wrap;
-  line-height: 1.5;
+  line-height: 1.6;
   color: #000;
+  font-size: 0.95rem;
 }
 
 .audio-controls {

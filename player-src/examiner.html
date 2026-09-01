@@ -16,7 +16,9 @@
       </div>
       <div class="exam-timers">
         <span class="exam-timer" id="global-timer" hidden>00:00</span>
+        <span class="exam-timer exam-timer-part" id="part-timer" hidden>Part 00:00</span>
         <span class="exam-timer exam-timer-slide" id="slide-timer" hidden>00:00</span>
+        <button class="exam-timer-btn" id="slide-timer-btn" type="button" hidden>▶ Start</button>
       </div>
       <label class="volume-control">
         <span>🔊</span>
@@ -26,7 +28,17 @@
       <button id="notes-toggle" class="notes-toggle" type="button">Notes</button>
     </header>
 
-    <main class="slide-card" id="slide-card"></main>
+    <div class="exam-body">
+      <main class="slide-card" id="slide-card"></main>
+
+      <aside class="notes-panel" id="notes-drawer">
+        <div class="notes-panel-header">
+          <h2>Notes</h2>
+          <button id="notes-close" type="button">Hide Notes</button>
+        </div>
+        <div id="notes-content"></div>
+      </aside>
+    </div>
 
     <nav class="slide-nav">
       <button id="prev-btn" type="button">◀ Back</button>
@@ -39,14 +51,6 @@
       <ul id="event-log"></ul>
     </details>
   </div>
-
-  <aside class="notes-drawer" id="notes-drawer">
-    <div class="notes-drawer-header">
-      <h2>Notes</h2>
-      <button id="notes-close" type="button" aria-label="Close notes">✕</button>
-    </div>
-    <div id="notes-content"></div>
-  </aside>
 
   <script type="module" src="./examiner.ts"></script>
 </body>
