@@ -670,16 +670,27 @@ phase.
   counting, the WP booking gate) stays scoped to Live/Backup exports only,
   per explicit design intent.
   **Play-count cue + practice event log (added 2026-08-31)**: the practice
-  console now tallies completed plays per clip and shows the same green ✓
+  console tallies completed plays per clip and shows the same green ✓
   ticks + "N plays" (or "N/M plays" when the slide sets `slotSpec.maxPlays`,
   with a red `❗` past the limit) that the examiner console shows, plus a
-  collapsed "Event log — practice only, nothing here is recorded" panel
-  (`<details class="log-panel">` / `#event-log`, reusing examiner.html's
-  markup and CSS) fed by a local `logEvent()`. Purely a training aid so a
-  practising interlocutor learns to watch replay counts — there is **no**
-  `track()`/telemetry counterpart in practice.ts, nothing is sent or
-  persisted, and nothing gates Next or pops a modal (past a limit the log
-  just notes "in a real test this would be flagged").
+  collapsed "Event log" panel (`<details class="log-panel">` / `#event-log`,
+  reusing examiner.html's markup and CSS) fed by a local `logEvent()`. There
+  is **no** `track()`/telemetry counterpart in practice.ts — nothing is sent
+  or persisted, and nothing gates Next or pops a modal.
+  **Verbose telemetry mirror (2026-09-01)**: `logEvent(event, detail)` was
+  widened so the panel now reproduces the *full* event stream a real (Live)
+  test sends to `storyline_events` — `session_start`/`session_end`,
+  `slide_view` on every navigation, `navigate`, `audio_play`/`audio_paused`/
+  `audio_resumed`/`audio_stopped`/`audio_ended`/`audio_replay_limit` with
+  attempt & running counts, `candidate_window_opened`/`connected`/`closed`,
+  `notes_opened`/`closed`, `volume_changed`, `timer_started`/`timer_expired`,
+  `test_timer_started`, `image_zoomed`/`image_zoom_closed`,
+  `connectivity_offline`/`online`, `test_finished`. Each line leads with the
+  canonical telemetry name (`.log-event`, blue monospace); a `.log-note`
+  header in the panel spells out that a real sitting streams every line to
+  the server stamped with run id / centre / test / examiner / candidate,
+  while the practice run stores nothing. Built for showing an evaluator what
+  a live test captures.
   **Script spacing (2026-08-31)**: `.slide-text`/`.audio-controls` sibling
   transitions in `player.css` now get `margin-top: 1.4em` so consecutive
   scripted blocks (and the audio console between them) are clearly
@@ -1086,4 +1097,4 @@ sidebar as "User Manual".
 
 ## Last updated
 
-2026-08-31
+2026-09-01

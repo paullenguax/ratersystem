@@ -49,6 +49,7 @@ function candidateUrl(): string {
 function openCandidateWindow() {
   candidateWindow = window.open(candidateUrl(), `candidateWindow_${sessionId}`, 'width=1024,height=768')
   candidateWindow?.focus()
+  logEvent('candidate_window_opened', 'second (candidate) screen launched')
   updateCandidateStatus()
 }
 
@@ -61,18 +62,28 @@ document.getElementById('open-candidate')?.addEventListener('click', openOrFocus
 document.getElementById('candidate-status')?.addEventListener('click', openOrFocusCandidateWindow)
 
 document.getElementById('notes-toggle')?.addEventListener('click', () => {
-  document.getElementById('notes-drawer')?.classList.toggle('open')
+  const drawer = document.getElementById('notes-drawer')
+  drawer?.classList.toggle('open')
+  logEvent(drawer?.classList.contains('open') ? 'notes_opened' : 'notes_closed', 'examiner notes drawer')
 })
 document.getElementById('notes-close')?.addEventListener('click', () => {
   document.getElementById('notes-drawer')?.classList.remove('open')
+  logEvent('notes_closed', 'examiner notes drawer')
 })
 
 // Polled rather than event-driven (no reliable "closed" event across
-// browsers) — same approach as examiner.ts, minus the violation report:
-// nobody's proctoring a practice run, so a closed candidate window here is
-// just a status dot, never something worth logging anywhere.
+// browsers) — same approach as examiner.ts. Transitions are logged so the
+// event stream shows the candidate screen being opened/closed mid-session,
+// exactly as a real test records it (there, a mid-session close is flagged
+// as a possible violation).
+let candidateWasOpen = false
 function updateCandidateStatus() {
   const open = !!candidateWindow && !candidateWindow.closed
+  if (open !== candidateWasOpen) {
+    if (open) logEvent('candidate_window_connected', 'candidate screen ready')
+    else logEvent('candidate_window_closed', 'candidate screen closed mid-session — a real test flags this as a possible violation')
+    candidateWasOpen = open
+  }
   const btn = document.getElementById('candidate-status')
   if (!btn) return
   btn.classList.toggle('open', open)
@@ -96,18 +107,38 @@ channel.onmessage = event => {
   if (item?.candidateState) channel.postMessage({ type: 'advance', candidateState: item.candidateState })
 }
 
-// Screen-only echo of what a real test's examiner log would show, so an
-// interlocutor practising can learn to keep half an eye on replay counts.
-// Unlike examiner.ts this is the whole story — there is no track()/telemetry
-// counterpart. Nothing written here is sent anywhere or persisted.
-function logEvent(message: string) {
+// Verbose, screen-only mirror of the telemetry a real (Live) test streams
+// to the server as it happens. Every line here lines up with a track() call
+// in examiner.ts and a row in the `storyline_events` Firestore collection —
+// session start/end, every slide view, every audio play/pause/stop/finish
+// and its replay count, candidate-window focus, timers, connectivity, the
+// lot. This is Practice, so NONE of it is sent or stored; it is shown only
+// to make visible exactly what a real sitting captures. `event` is the
+// canonical telemetry name; `detail` is the human-readable context.
+function logEvent(event: string, detail = '') {
   const list = document.getElementById('event-log')
   if (!list) return
   const time = new Date().toLocaleTimeString()
   const li = document.createElement('li')
-  li.textContent = `[${time}] ${message}`
+  const name = document.createElement('code')
+  name.className = 'log-event'
+  name.textContent = event
+  li.append(`[${time}] `, name)
+  if (detail) li.append(` ${detail}`)
   list.insertBefore(li, list.firstChild)
 }
+
+// Fired once, plus a 'session_end' when the test is finished. In a real
+// test session_start also carries the run id, player build, centre, test
+// number, examiner and candidate — stamped onto every subsequent event.
+function logSessionStart() {
+  logEvent('session_start', `sample run ${sessionId.slice(0, 8)} — a real test also records player build, centre, test number, examiner and candidate on every line below`)
+}
+
+window.addEventListener('offline', () =>
+  logEvent('connectivity_offline', 'network lost — a real test reports this and the later recovery'))
+window.addEventListener('online', () =>
+  logEvent('connectivity_online', 'network restored'))
 
 // --- Audio playback — same one-clip-at-a-time console as the real player.
 // Play counts are tallied and shown (tick marks + an "N plays" label, plus
@@ -137,6 +168,10 @@ volumeSlider?.addEventListener('input', () => {
   masterVolume = Number(volumeSlider.value) / 100
   allAudios.forEach(a => { a.volume = masterVolume })
 })
+// Log on 'change' (pointer released), not every 'input' tick, so one
+// adjustment is one line.
+volumeSlider?.addEventListener('change', () =>
+  logEvent('volume_changed', `master volume ${Math.round(masterVolume * 100)}%`))
 
 function createAudioControls(clip: { label: string; url: string; maxPlays?: number }): HTMLElement {
   const audio = new Audio(clip.url)
@@ -174,7 +209,8 @@ function createAudioControls(clip: { label: string; url: string; maxPlays?: numb
     audio.currentTime = 0
     audio.play()
     activeAudio = audio
-    logEvent(`Started "${clip.label}".`)
+    const attempt = (playCounts.get(clip.url) ?? 0) + 1
+    logEvent('audio_play', `"${clip.label}" — attempt ${attempt}${clip.maxPlays ? ` of ${clip.maxPlays} allowed` : ''}`)
     refreshClipButtons()
   })
 
@@ -182,8 +218,8 @@ function createAudioControls(clip: { label: string; url: string; maxPlays?: numb
   pauseBtn.textContent = 'Pause'
   pauseBtn.addEventListener('click', () => {
     if (activeAudio !== audio) return
-    if (audio.paused) audio.play()
-    else audio.pause()
+    if (audio.paused) { audio.play(); logEvent('audio_resumed', `"${clip.label}" at ${formatTime(audio.currentTime)}`) }
+    else { audio.pause(); logEvent('audio_paused', `"${clip.label}" at ${formatTime(audio.currentTime)}`) }
     refreshClipButtons()
   })
 
@@ -191,6 +227,7 @@ function createAudioControls(clip: { label: string; url: string; maxPlays?: numb
   stopBtn.textContent = 'Stop'
   stopBtn.addEventListener('click', () => {
     if (activeAudio !== audio) return
+    logEvent('audio_stopped', `"${clip.label}" at ${formatTime(audio.currentTime)} — reset to start, does not count as a play`)
     audio.pause()
     audio.currentTime = 0
     activeAudio = null
@@ -201,10 +238,9 @@ function createAudioControls(clip: { label: string; url: string; maxPlays?: numb
     const count = (playCounts.get(clip.url) ?? 0) + 1
     playCounts.set(clip.url, count)
     updateCount()
+    logEvent('audio_ended', `"${clip.label}" played in full — ${count}${clip.maxPlays ? `/${clip.maxPlays}` : ''} play${count === 1 ? '' : 's'}`)
     if (clip.maxPlays && count > clip.maxPlays) {
-      logEvent(`Played "${clip.label}" beyond its limit (${count}/${clip.maxPlays}) — in a real test this would be flagged.`)
-    } else {
-      logEvent(`Played "${clip.label}" to completion (${count}${clip.maxPlays ? '/' + clip.maxPlays : ''}).`)
+      logEvent('audio_replay_limit', `"${clip.label}" played ${count} times (limit ${clip.maxPlays}) — a real test records this as a violation`)
     }
     if (activeAudio === audio) activeAudio = null
     refreshClipButtons()
@@ -264,6 +300,7 @@ let zoomEl: HTMLElement | null = null
 
 function closeZoom() {
   if (!zoomEl) return
+  logEvent('image_zoom_closed', 'reference image returned to thumbnail')
   const el = zoomEl
   el.style.top = `${el.dataset.originTop}px`
   el.style.left = `${el.dataset.originLeft}px`
@@ -276,6 +313,7 @@ function closeZoom() {
 
 function openZoom(source: HTMLImageElement) {
   if (zoomEl) return
+  logEvent('image_zoomed', 'reference image enlarged')
   const rect = source.getBoundingClientRect()
   const clone = source.cloneNode(true) as HTMLImageElement
   clone.className = 'exam-zoom-clone'
@@ -368,6 +406,7 @@ function startGlobalTimer() {
   globalTimerStart = Date.now()
   const el = document.getElementById('global-timer')
   if (el) el.hidden = false
+  logEvent('test_timer_started', 'overall session timer running')
   tickGlobalTimer()
   window.setInterval(tickGlobalTimer, 1000)
 }
@@ -390,10 +429,12 @@ function runSlideTimerPhase(phase: 'Prep' | 'Response', seconds: number, then?: 
   el.hidden = false
   el.classList.remove('exam-timer-done')
   el.textContent = `${phase} ${formatTime(slideTimerRemaining)}`
+  logEvent('timer_started', `${phase.toLowerCase()} — ${seconds}s`)
   slideTimerHandle = window.setInterval(() => {
     slideTimerRemaining--
     if (slideTimerRemaining < 0) {
       window.clearInterval(slideTimerHandle)
+      logEvent('timer_expired', phase.toLowerCase())
       if (then) {
         then()
       } else {
@@ -451,6 +492,7 @@ function endSession(message: string) {
     card.appendChild(backLink)
   }
   setNavVisible(false)
+  logEvent('session_end', 'a real test would now flush any buffered events and close the session record')
 }
 
 // The intro screen — branded blue/white, same treatment the real exam gives
@@ -488,6 +530,7 @@ function renderCurrentSlide() {
   closeZoom()
 
   const item = items[currentIndex]
+  logEvent('slide_view', `${currentIndex + 1}/${items.length} — "${item.label || item.kind}" (${item.kind})`)
 
   if (progressLabel) progressLabel.textContent = `Slide ${currentIndex + 1}/${items.length}`
   if (progressFill) progressFill.style.width = `${((currentIndex + 1) / items.length) * 100}%`
@@ -572,6 +615,7 @@ function renderCurrentSlide() {
 
 document.getElementById('prev-btn')?.addEventListener('click', () => {
   if (sessionEnded || currentIndex === 0) return
+  logEvent('navigate', 'back to previous slide')
   currentIndex--
   renderCurrentSlide()
 })
@@ -579,9 +623,11 @@ document.getElementById('prev-btn')?.addEventListener('click', () => {
 document.getElementById('next-btn')?.addEventListener('click', () => {
   if (sessionEnded) return
   if (currentIndex >= items.length - 1) {
+    logEvent('test_finished', 'reached the end of the test')
     endSession('Sample test complete — thanks for trying it out.')
     return
   }
+  logEvent('navigate', 'forward to next slide')
   currentIndex++
   renderCurrentSlide()
 })
@@ -591,6 +637,7 @@ loadTheme().then(applyTheme)
 loadItems().then(loaded => {
   items = loaded.filter(item => !SKIPPED_KINDS.has(item.kind)).sort((a, b) => a.order - b.order)
   preloadAllMedia(items)
+  logSessionStart()
   renderCurrentSlide()
 }).catch(err => {
   const card = document.getElementById('slide-card')

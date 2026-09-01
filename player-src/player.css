@@ -798,11 +798,25 @@ button {
   cursor: pointer;
 }
 
+.log-note {
+  margin: 8px 0 0;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: #666;
+}
+
+.log-note code {
+  font-size: 0.95em;
+  background: #eee;
+  padding: 0 3px;
+  border-radius: 3px;
+}
+
 #event-log {
   list-style: none;
   margin: 8px 0 0;
   padding: 0;
-  max-height: 220px;
+  max-height: 260px;
   overflow-y: auto;
   font-size: 0.8rem;
   color: #555;
@@ -811,4 +825,12 @@ button {
 #event-log li {
   padding: 3px 0;
   border-bottom: 1px solid #eee;
+}
+
+/* Canonical telemetry event name at the head of each log line. */
+#event-log .log-event {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.92em;
+  font-weight: 600;
+  color: #00528c;
 }
