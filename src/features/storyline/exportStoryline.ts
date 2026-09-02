@@ -97,12 +97,26 @@ interface ManifestChunk {
 }
 type Manifest = Record<string, ManifestChunk>
 
+// Every player-shell fetch gets a one-shot cache-buster query. The shell
+// files change on every deploy, and SiteGround's proxy cache has been seen
+// to serve a bare `304` (empty body) for an unchanged hashed asset on an
+// unconditioned request — which `fetch()` reports as `!res.ok`, breaking
+// the export even though the file is fine. A unique URL sidesteps both that
+// and any stale browser copy.
+async function fetchShell(path: string): Promise<Response> {
+  const url = `${import.meta.env.BASE_URL}player-shell/${path}?_cb=${Date.now()}`
+  const res = await fetch(url, { cache: 'no-store' })
+  if (!res.ok) throw new Error(`Failed to fetch player-shell file: ${path} (HTTP ${res.status})`)
+  return res
+}
+
 async function fetchManifest(): Promise<Manifest> {
-  const res = await fetch(`${import.meta.env.BASE_URL}player-shell/.vite/manifest.json`)
-  if (!res.ok) {
+  try {
+    const res = await fetchShell('.vite/manifest.json')
+    return await res.json()
+  } catch {
     throw new Error('player-shell manifest not found — run `npm run build:player` (or `npm run build`) at least once.')
   }
-  return res.json()
 }
 
 // Walks the manifest's entry -> imports/css graph to discover every built
@@ -137,8 +151,7 @@ async function bundlePlayerShellFiles(zip: JSZip): Promise<void> {
   const filesToFetch = ['examiner.html', 'candidate.html', ...assetFiles]
 
   for (const name of filesToFetch) {
-    const res = await fetch(`${import.meta.env.BASE_URL}player-shell/${name}`)
-    if (!res.ok) throw new Error(`Failed to fetch player-shell asset: ${name}`)
+    const res = await fetchShell(name)
     if (name === 'examiner.html') {
       zip.file('examiner.php', PHP_GATE_HEADER + (await res.text()) + PHP_GATE_FOOTER)
     } else {
@@ -163,8 +176,7 @@ async function bundlePracticeShellFiles(zip: JSZip): Promise<void> {
   const filesToFetch = ['practice.html', 'candidate.html', ...assetFiles]
 
   for (const name of filesToFetch) {
-    const res = await fetch(`${import.meta.env.BASE_URL}player-shell/${name}`)
-    if (!res.ok) throw new Error(`Failed to fetch player-shell asset: ${name}`)
+    const res = await fetchShell(name)
     if (name === 'practice.html') {
       zip.file('story.html', await res.text())
     } else {
