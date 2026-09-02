@@ -552,15 +552,25 @@ phase.
   multi-round debugging saga (a "fix isn't showing up" report that was
   actually just a stale-cache issue, not a code bug — see
   `vite.config.player.ts`'s comment for the full history).
-  Both examiner.ts and candidate.ts also call `preloadAllMedia()`
-  (`player-src/shared/preloadMedia.ts`) as soon as items load — a
-  fire-and-forget `fetch()` of every image/audio URL the version
-  references, warming the browser's HTTP cache ahead of when each slide is
-  actually reached, rather than only fetching lazily per-slide. Not a
-  guarantee of true offline playback (that would need a service worker
-  explicitly caching responses regardless of server headers — not built),
-  just meaningfully reduces the odds a brief connectivity hiccup mid-test
-  lands on a slide whose media hasn't loaded yet.
+  **Offline media guarantee (2026-09-02)** — `player-src/shared/preloadMedia.ts`:
+  `preloadMediaToBlobs(items, onProgress)` fetches every recording/picture
+  into an in-memory **Blob** (4 tries each, `cache: 'force-cache'`),
+  `applyMediaBlobs()` rewrites the item URLs to `URL.createObjectURL()`
+  copies (kept for the page's life, never revoked). examiner.ts/practice.ts
+  run this on boot while the examiner works through the pre-test screens;
+  the **"START TEST" button (the `startsTestTimer` slide's Next) stays
+  disabled** — via `mediaState !== 'ready'` in `updateNavState()` /
+  `mediaGateBlocks()` — until every asset is cached (`#media-preload`
+  progress strip). If some asset can't be fetched after retries
+  (`mediaState === 'partial'`) the gate holds with a **Retry** and an
+  explicit **"Start without them"** (logged `media_preload_waived` /
+  best-effort). The whole `Map<url, Blob>` is pushed to the candidate window
+  over the BroadcastChannel (`{type: 'media'}`), re-sent on every `ready`
+  handshake, so Part 4 pictures are covered there too — even if the
+  candidate window is reopened after the network is gone. Preview isn't
+  gated. This supersedes the old fire-and-forget `preloadAllMedia()` cache
+  warming; it's a real guarantee once START TEST unlocks, short of the
+  first load itself and the browser being told to keep the Blobs.
 - **Preview**: `useStorylinePreview.ts` writes the resolved items to
   `localStorage` under a random per-launch session ID and opens `player-
   shell/examiner.html?preview=1&session=…` — the *exact* same built artifact

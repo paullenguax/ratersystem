@@ -3,7 +3,7 @@ import { getParams, channelName } from './shared/session'
 import { loadItems } from './shared/dataSource'
 import { initOnlineStatusDot } from './shared/onlineStatus'
 import { renderInlineMarkup } from './shared/markup'
-import { preloadAllMedia } from './shared/preloadMedia'
+import { applyMediaBlobs } from './shared/preloadMedia'
 import teacLogo from './assets/teac-logo.png'
 
 const { sessionId } = getParams()
@@ -150,18 +150,31 @@ function showState(candidateState: string) {
   })
 }
 
+let loadedItems: StorylineItem[] = []
+let lastState = BRAND_STATE
+
 channel.onmessage = event => {
-  const data = event.data as { type: string; candidateState: string }
-  if (data?.type === 'advance') showState(data.candidateState)
+  const data = event.data as { type: string; candidateState?: string; blobs?: Map<string, Blob> }
+  if (data?.type === 'advance' && data.candidateState) {
+    lastState = data.candidateState
+    showState(data.candidateState)
+  } else if (data?.type === 'media' && data.blobs) {
+    // The examiner has cached every recording/picture and pushed the whole
+    // set here — swap the panels over to those local copies so this window
+    // needs no network for the rest of the test either.
+    applyMediaBlobs(loadedItems, data.blobs)
+    renderPanels(loadedItems)
+    showState(lastState)
+  }
 }
 
 loadItems().then(items => {
+  loadedItems = items
   renderPanels(items)
-  preloadAllMedia(items)
   // Announces readiness on first load and on every reopen (a fresh
   // page load either way) — examiner.ts replies with whatever state the
-  // current slide should be showing, so a (re)opened window never sits
-  // blank waiting for the next slide transition to populate it.
+  // current slide should be showing, plus the cached media set, so a
+  // (re)opened window never sits blank and never needs to fetch.
   channel.postMessage({ type: 'ready' })
 }).catch(err => {
   const container = document.getElementById('panels')

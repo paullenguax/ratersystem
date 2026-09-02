@@ -167,6 +167,38 @@ div.polaroid img {
   flex-direction: column;
 }
 
+/* Progress / warning strip while every recording + picture is being
+   fetched into memory ahead of "START TEST". */
+.media-preload {
+  margin-bottom: 14px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  background: #eef3f7;
+  color: var(--accent-color, #00528c);
+  border: 1px solid #cfe0ec;
+}
+
+.media-preload[hidden] {
+  display: none;
+}
+
+.media-preload-warn {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #fcd34d;
+}
+
+.media-preload button {
+  margin-left: 6px;
+  padding: 2px 10px;
+  font-size: 0.8rem;
+  border: 1px solid currentColor;
+  border-radius: 5px;
+  background: #fff;
+  color: inherit;
+}
+
 .notes-panel {
   flex: 0 0 316px;
   position: sticky;

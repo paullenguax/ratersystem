@@ -3,7 +3,7 @@ import { channelName } from './shared/session'
 import { loadItems, loadTheme } from './shared/dataSource'
 import { applyTheme } from './shared/applyTheme'
 import { renderInlineMarkup, renderScriptText } from './shared/markup'
-import { preloadAllMedia } from './shared/preloadMedia'
+import { preloadMediaToBlobs, applyMediaBlobs } from './shared/preloadMedia'
 import teacLogo from './assets/teac-logo.png'
 
 // Self-service practice/sample player — the third and simplest of the three
@@ -99,12 +99,82 @@ function sendAdvance(item: StorylineItem) {
   channel.postMessage({ type: 'advance', candidateState: item.candidateState })
 }
 
+// --- Offline media guarantee (same as the real player) ----------------
+// Every recording/picture is fetched into memory before the test can
+// start, and the whole set is pushed to the candidate window — so once
+// "START TEST" unlocks, losing the connection can't stop a Part 3
+// recording or Part 4 picture appearing.
+let mediaState: 'loading' | 'partial' | 'ready' = 'loading'
+let mediaBlobs = new Map<string, Blob>()
+let mediaFailed: string[] = []
+let startWaived = false
+let mediaOriginals: (StorylineItem['media'] | undefined)[] = []
+
+function renderMediaPreloadBanner(done: number, total: number) {
+  const el = document.getElementById('media-preload')
+  if (!el) return
+  if (mediaState === 'ready') { el.hidden = true; return }
+  el.hidden = false
+  el.className = mediaState === 'partial' ? 'media-preload media-preload-warn' : 'media-preload'
+  el.replaceChildren()
+  if (mediaState === 'loading') {
+    el.textContent = `Caching test media so it can't be lost mid-test… ${done}/${total}`
+    return
+  }
+  const msg = document.createElement('span')
+  msg.textContent = `⚠ ${mediaFailed.length} media file(s) could not be cached. If the connection drops mid-test those slides may not load. `
+  const retry = document.createElement('button')
+  retry.textContent = 'Retry'
+  retry.addEventListener('click', () => { void runMediaPreload() })
+  const waive = document.createElement('button')
+  waive.textContent = 'Start without them'
+  waive.addEventListener('click', () => {
+    startWaived = true
+    logEvent('media_preload_waived', `${mediaFailed.length} file(s) not cached`)
+    el.hidden = true
+    renderCurrentSlide()
+  })
+  el.append(msg, retry, document.createTextNode(' '), waive)
+}
+
+async function runMediaPreload() {
+  if (!mediaOriginals.length) {
+    mediaOriginals = items.map(it => (it.media ? structuredClone(it.media) : undefined))
+  } else {
+    items.forEach((it, i) => {
+      if (mediaOriginals[i]) it.media = structuredClone(mediaOriginals[i]!)
+    })
+  }
+  mediaState = 'loading'
+  renderMediaPreloadBanner(0, 0)
+  renderCurrentSlide()
+  const res = await preloadMediaToBlobs(items, (d, t) => renderMediaPreloadBanner(d, t))
+  mediaBlobs = res.blobs
+  mediaFailed = res.failed
+  mediaState = res.failed.length ? 'partial' : 'ready'
+  applyMediaBlobs(items, mediaBlobs)
+  logEvent(mediaState === 'ready' ? 'media_cached' : 'media_cached_partial', `${mediaBlobs.size} file(s) in memory${mediaFailed.length ? `, ${mediaFailed.length} failed` : ''}`)
+  renderMediaPreloadBanner(0, 0)
+  pushMediaToCandidate()
+  renderCurrentSlide()
+}
+
+function pushMediaToCandidate() {
+  if (mediaBlobs.size) channel.postMessage({ type: 'media', blobs: mediaBlobs })
+}
+
+function mediaGateBlocks(item: StorylineItem): boolean {
+  return !!item.startsTestTimer && mediaState !== 'ready' && !startWaived
+}
+
 // candidate.ts posts `ready` on first load and on every reopen — reply with
 // whatever state the current slide should be showing so a (re)opened
-// window never sits blank. Same pattern as examiner.ts.
+// window never sits blank, plus the cached media set. Same pattern as
+// examiner.ts.
 channel.onmessage = event => {
   const data = event.data as { type: string }
   if (data?.type !== 'ready') return
+  pushMediaToCandidate()
   const item = items[currentIndex]
   if (item?.candidateState) channel.postMessage({ type: 'advance', candidateState: item.candidateState })
 }
@@ -714,7 +784,7 @@ function renderCurrentSlide() {
   const isLast = currentIndex >= items.length - 1
   const nextBtn = document.getElementById('next-btn') as HTMLButtonElement | null
   if (nextBtn) {
-    nextBtn.disabled = false
+    nextBtn.disabled = mediaGateBlocks(item)
     nextBtn.textContent = isLast ? '✓ Finish' : (item.nextButtonLabel || 'Next ▶')
     nextBtn.classList.toggle('next-btn-prominent', isLast || !!item.nextButtonLabel)
   }
@@ -752,9 +822,9 @@ loadTheme().then(applyTheme)
 
 loadItems().then(loaded => {
   items = loaded.filter(item => !SKIPPED_KINDS.has(item.kind)).sort((a, b) => a.order - b.order)
-  preloadAllMedia(items)
   logSessionStart()
   renderCurrentSlide()
+  void runMediaPreload()
 }).catch(err => {
   const card = document.getElementById('slide-card')
   if (card) card.textContent = `Failed to load items: ${String(err)}`

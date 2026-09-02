@@ -4,7 +4,7 @@ import { loadItems, loadTheme, loadFlags, loadLiveText, applyLiveText } from './
 import { applyTheme } from './shared/applyTheme'
 import { initOnlineStatusDot } from './shared/onlineStatus'
 import { renderInlineMarkup, renderScriptText } from './shared/markup'
-import { preloadAllMedia } from './shared/preloadMedia'
+import { preloadMediaToBlobs, applyMediaBlobs } from './shared/preloadMedia'
 import { initTelemetry, track } from './shared/telemetry'
 import { callSendStats, callRejectTest } from './shared/wpCallback'
 import teacLogo from './assets/teac-logo.png'
@@ -820,6 +820,87 @@ function renderAcceptReject(card: HTMLElement, item: StorylineItem) {
 let items: StorylineItem[] = []
 let currentIndex = 0
 
+// --- Offline media guarantee ------------------------------------------
+// Every audio/image is fetched into an in-memory Blob before the test can
+// start, so a connectivity loss after "START TEST" can't stop a Part 3
+// recording or Part 4 picture appearing. The whole blob set is also pushed
+// to the candidate window, so its pictures are covered too (even across a
+// reopen with the network down). 'loading' blocks START TEST; 'partial'
+// (some assets unreachable) also blocks until the examiner clicks "Start
+// without them"; 'ready' clears the gate.
+let mediaState: 'loading' | 'partial' | 'ready' = 'loading'
+let mediaBlobs = new Map<string, Blob>()
+let mediaFailedLabels: string[] = []
+let startWaived = false
+// Original (server) media URLs per item, snapshotted before the first
+// blob rewrite so a Retry can re-run cleanly rather than fetching the
+// blob: URLs a previous pass already installed.
+let mediaOriginals: (StorylineItem['media'] | undefined)[] = []
+
+function labelForUrl(url: string): string {
+  for (const item of items) {
+    if (item.media?.images?.includes(url)) return item.label
+    const clip = item.media?.audioClips?.find(c => c.url === url)
+    if (clip) return `${item.label} — ${clip.label}`
+  }
+  return url
+}
+
+function renderMediaPreloadBanner(done: number, total: number) {
+  const el = document.getElementById('media-preload')
+  if (!el) return
+  if (mediaState === 'ready') { el.hidden = true; return }
+  el.hidden = false
+  el.className = mediaState === 'partial' ? 'media-preload media-preload-warn' : 'media-preload'
+  el.replaceChildren()
+  if (mediaState === 'loading') {
+    el.textContent = `Caching test media so it can't be lost mid-test… ${done}/${total}`
+    return
+  }
+  const msg = document.createElement('span')
+  msg.textContent = `⚠ ${mediaFailedLabels.length} media file(s) could not be cached (${mediaFailedLabels.join('; ')}). If the connection drops mid-test those slides may not load. `
+  const retry = document.createElement('button')
+  retry.textContent = 'Retry'
+  retry.addEventListener('click', () => { void runMediaPreload() })
+  const waive = document.createElement('button')
+  waive.textContent = 'Start without them'
+  waive.addEventListener('click', () => {
+    startWaived = true
+    track('media_preload_waived', { failed: mediaFailedLabels })
+    logEvent(`Started with ${mediaFailedLabels.length} media file(s) not cached.`)
+    el.hidden = true
+    updateNavState()
+  })
+  el.append(msg, retry, document.createTextNode(' '), waive)
+}
+
+async function runMediaPreload() {
+  if (!mediaOriginals.length) {
+    mediaOriginals = items.map(it => (it.media ? structuredClone(it.media) : undefined))
+  } else {
+    // Retry: put the server URLs back before re-fetching.
+    items.forEach((it, i) => {
+      if (mediaOriginals[i]) it.media = structuredClone(mediaOriginals[i]!)
+    })
+  }
+  mediaState = 'loading'
+  renderMediaPreloadBanner(0, 0)
+  updateNavState()
+  const res = await preloadMediaToBlobs(items, (d, t) => renderMediaPreloadBanner(d, t))
+  mediaBlobs = res.blobs
+  mediaFailedLabels = res.failed.map(labelForUrl)
+  mediaState = res.failed.length ? 'partial' : 'ready'
+  applyMediaBlobs(items, mediaBlobs)
+  renderMediaPreloadBanner(0, 0)
+  pushMediaToCandidate()
+  renderCurrentSlide()
+  updateNavState()
+}
+
+function pushMediaToCandidate() {
+  if (mediaBlobs.size) channel.postMessage({ type: 'media', blobs: mediaBlobs })
+}
+
 // Slides with no candidateState of their own (accept/reject, test data,
 // room setup, previews) send this so the candidate window falls back to the
 // TEAC logo rather than lingering on the previous slide's panel — see
@@ -851,6 +932,9 @@ channel.onmessage = event => {
   const item = items[currentIndex]
   const state = item?.candidateState || CANDIDATE_BRAND_STATE
   channel.postMessage({ type: 'advance', candidateState: state })
+  // Re-send the cached media too, so a candidate window opened (or
+  // reopened) after preload finished gets the full set with no fetch.
+  pushMediaToCandidate()
   logEvent(`Candidate window connected — resent "${state}".`)
 }
 
@@ -870,7 +954,12 @@ function updateNavState() {
   // playing) but is no longer unconditionally disabled — Next becomes
   // "Finish test" there instead of stopping dead, see
   // renderCurrentSlide()/finishTest().
-  nextBtn.disabled = !bypassesGating() && (!allPlayed || !checklistDone || !testDataDone)
+  // The media gate is separate: "START TEST" (the slide that starts the
+  // session timer) stays disabled until every recording/picture is cached
+  // in memory — or the examiner has explicitly waived it. Preview clicks
+  // through freely.
+  const mediaGate = !isPreview && !!item?.startsTestTimer && mediaState !== 'ready' && !startWaived
+  nextBtn.disabled = mediaGate || (!bypassesGating() && (!allPlayed || !checklistDone || !testDataDone))
 }
 
 function renderCurrentSlide() {
@@ -1063,8 +1152,11 @@ Promise.all([loadFlags(), loadItems()]).then(async ([flags, loaded]) => {
     })
     track('session_start', { slideCount: items.length })
   }
-  preloadAllMedia(items)
   renderCurrentSlide()
+  // Fetch every recording/picture into memory before "START TEST" unlocks
+  // (see runMediaPreload / the media gate in updateNavState). Runs while
+  // the examiner works through the pre-test screens.
+  void runMediaPreload()
 }).catch(err => {
   const card = document.getElementById('slide-card')
   if (card) card.textContent = `Failed to load items: ${String(err)}`
