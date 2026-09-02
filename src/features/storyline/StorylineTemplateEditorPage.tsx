@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
+import { doc, getDoc, setDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore'
 import { ArrowLeft, Plus, Save, Sparkles, Download } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
 import type { TemplateSlide, TemplateSlideKind, StorylineTemplate, StorylineTheme, ChecklistItem } from '@/types'
 import { TemplateSlideRow, SLIDE_KINDS } from './TemplateSlideRow'
+import { TemplateHistoryPanel } from './TemplateHistoryPanel'
 import { buildSeedTemplateSlides } from './templateSeed'
 import { exportStorylineTemplate, exportPlayerShell } from './exportStoryline'
 import { Button } from '@/components/ui/button'
@@ -130,6 +131,24 @@ export function StorylineTemplateEditorPage() {
         updatedBy: user?.uid ?? null,
         updatedAt: serverTimestamp(),
       })
+      // Snapshot every saved state so any edit (or a "Load example script"
+      // reload) can be undone from the Version history panel. Best-effort:
+      // the template itself is already saved above, so a failed snapshot
+      // just means one fewer restore point, not a lost edit.
+      try {
+        await addDoc(collection(db, 'storyline_template', TEMPLATE_DOC_ID, 'history'), {
+          slides,
+          theme,
+          savedAt: serverTimestamp(),
+          savedByUid: user?.uid ?? null,
+          savedByName: user?.displayName ?? user?.email ?? null,
+          label: null,
+          pinned: false,
+        })
+        queryClient.invalidateQueries({ queryKey: ['storyline_template_history'] })
+      } catch (err) {
+        console.warn('template snapshot failed', err)
+      }
       queryClient.invalidateQueries({ queryKey: ['storyline_template'] })
       setDirty(false)
     } finally {
@@ -202,6 +221,14 @@ export function StorylineTemplateEditorPage() {
           Unsaved changes — click <strong>Save template</strong> below before leaving this page, or they'll be lost. Refreshing now will discard them.
         </div>
       )}
+
+      <TemplateHistoryPanel
+        onRestore={(restoredSlides, restoredTheme) => {
+          setSlides(restoredSlides.map(normalizeSlide))
+          setTheme(restoredTheme ?? {})
+          setDirty(true)
+        }}
+      />
 
       <div className="rounded-md border p-4 space-y-3">
         <div>

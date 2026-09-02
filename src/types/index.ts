@@ -265,6 +265,20 @@ export interface StorylineTemplate {
   updatedBy?: string
 }
 
+// One point-in-time copy of the whole template, written to
+// storyline_template/current/history/{id} on every Save so an edit (or a
+// "Load example script" reload) can always be undone.
+export interface StorylineTemplateSnapshot {
+  id: string
+  slides: TemplateSlide[]
+  theme?: StorylineTheme
+  savedAt?: Timestamp
+  savedByUid?: string | null
+  savedByName?: string | null
+  label?: string | null
+  pinned?: boolean
+}
+
 // Draft-editable raw fills for one template slide — content only.
 // [placeholder] variable values live on StorylineTest.variables instead
 // (a role type is fixed per Test, not per slide/version/part).

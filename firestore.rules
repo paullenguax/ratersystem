@@ -165,6 +165,12 @@ service cloud.firestore {
 
     match /storyline_template/{docId} {
       allow read, write: if isAdmin();
+
+      // Point-in-time snapshots written on every Save (see
+      // StorylineTemplateEditorPage / TemplateHistoryPanel).
+      match /history/{snapshotId} {
+        allow read, write: if isAdmin();
+      }
     }
 
     // ── storyline_parts ───────────────────────────────────────────────────────

@@ -498,6 +498,18 @@ phase.
   the matching can't find it), the fix is the same: match each Part's
   `slotContent` keys to the new template's slide ids by shape (which slide
   has images vs questions vs which audio filenames) and rewrite the keys.
+  **Version history (2026-09-02)**: `handleSave()` now also writes the whole
+  `{slides, theme}` to `storyline_template/current/history/{id}` on every
+  save (`savedAt`/`savedByUid`/`savedByName`/`label`/`pinned`) — best-effort,
+  the main `setDoc` of `current` isn't blocked by a failed snapshot. The
+  `TemplateHistoryPanel` on the editor lists them newest-first with
+  pin/label/delete and **Restore** (loads the snapshot into the editor
+  state — not an immediate write — so it's reviewed then Saved, which
+  snapshots it again; a confirm warns that restoring one from before a
+  slide was added/renamed can unlink that slide's Part content, same
+  slide-id-keying hazard as above). `firestore.rules` gained a
+  `storyline_template/{doc}/history/{id}` match (admin read/write) — needs
+  `firebase deploy --only firestore:rules` to take effect.
 - **Pre-test gated screens** (3 seed slides, transcribed from the old
   system's real start-of-test screens): `accept_reject_test` shows
   `item.testDisplayName` with Accept/Reject buttons in place of the normal
