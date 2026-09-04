@@ -2,7 +2,7 @@ import { Fragment, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { collection, getDocs, getDoc, addDoc, doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'
-import { ArrowLeft, Plus, Pencil, Rocket, Copy, Archive as ArchiveIcon, Trash2, PauseCircle, PlayCircle, Shield, ShieldOff, Tag, Download } from 'lucide-react'
+import { ArrowLeft, Plus, Pencil, Rocket, Copy, Archive as ArchiveIcon, Trash2, PauseCircle, PlayCircle, Shield, ShieldOff, History, Tag, Download } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
 import type { StorylinePart, StorylinePartNumber, StorylinePartTheme, StorylineTemplate, StorylineTestType } from '@/types'
@@ -35,8 +35,8 @@ async function fetchThemes(): Promise<StorylinePartTheme[]> {
 const STATUS_FILTER_LABELS: Record<string, string> = {
   all: 'All statuses', draft: 'Draft', published: 'Published', archived: 'Archived',
 }
-const BACKUP_FILTER_LABELS: Record<string, string> = {
-  all: 'Normal + backup', normal: 'Normal only', backup: 'Backups only',
+const CATEGORY_FILTER_LABELS: Record<string, string> = {
+  all: 'Any category', normal: 'Normal only', backup: 'Backups only', retired: 'Retired only',
 }
 
 function statusVariant(status: StorylinePart['status']) {
@@ -72,8 +72,8 @@ export function StorylinePartsPage() {
   const statusFilter = (searchParams.get('status') ?? 'all') as 'all' | StorylinePart['status']
   const setStatusFilter = (v: 'all' | StorylinePart['status']) => setParam('status', v, v === 'all')
 
-  const backupFilter = (searchParams.get('backup') ?? 'all') as 'all' | 'backup' | 'normal'
-  const setBackupFilter = (v: 'all' | 'backup' | 'normal') => setParam('backup', v, v === 'all')
+  const categoryFilter = (searchParams.get('category') ?? 'all') as 'all' | 'backup' | 'retired' | 'normal'
+  const setCategoryFilter = (v: 'all' | 'backup' | 'retired' | 'normal') => setParam('category', v, v === 'all')
 
   const showArchived = searchParams.get('archived') === '1'
   const setShowArchived = (v: boolean) => setParam('archived', '1', !v)
@@ -102,13 +102,20 @@ export function StorylinePartsPage() {
       // Archived Parts pile up and rarely matter day-to-day — hidden unless
       // explicitly shown, or explicitly filtered to "Archived" above.
       .filter(p => showArchived || statusFilter === 'archived' || p.status !== 'archived')
-      .filter(p => backupFilter === 'all' || (backupFilter === 'backup' ? !!p.isBackup : !p.isBackup))
+      // 'normal' means neither reserve category — treated as mutually
+      // exclusive (a Part shouldn't really be both, see StorylinePart.retired).
+      .filter(p => {
+        if (categoryFilter === 'all') return true
+        if (categoryFilter === 'backup') return !!p.isBackup
+        if (categoryFilter === 'retired') return !!p.retired
+        return !p.isBackup && !p.retired
+      })
       // Untagged Parts (testTypes undefined/empty) are eligible for every
       // Test Type — the backward-compatible default, see StorylinePart.testTypes.
       .filter(p => testTypeFilter === 'all' || !p.testTypes?.length || p.testTypes.includes(testTypeFilter))
       .filter(p => s === '' || p.label.toLowerCase().includes(s))
       .sort((a, b) => a.partNumber - b.partNumber || a.label.localeCompare(b.label))
-  }, [parts, filter, statusFilter, backupFilter, testTypeFilter, showArchived, search])
+  }, [parts, filter, statusFilter, categoryFilter, testTypeFilter, showArchived, search])
 
   async function handleNewPart() {
     await addDoc(collection(db, 'storyline_parts'), {
@@ -178,7 +185,14 @@ export function StorylinePartsPage() {
   }
 
   async function handleToggleBackup(part: StorylinePart) {
-    await updateDoc(doc(db, 'storyline_parts', part.id), { isBackup: !part.isBackup })
+    // Mutually exclusive with retired — marking one clears the other,
+    // rather than leaving a Part in an ambiguous both-flagged state.
+    await updateDoc(doc(db, 'storyline_parts', part.id), { isBackup: !part.isBackup, retired: false })
+    queryClient.invalidateQueries({ queryKey: ['storyline_parts'] })
+  }
+
+  async function handleToggleRetired(part: StorylinePart) {
+    await updateDoc(doc(db, 'storyline_parts', part.id), { retired: !part.retired, isBackup: false })
     queryClient.invalidateQueries({ queryKey: ['storyline_parts'] })
   }
 
@@ -267,14 +281,15 @@ export function StorylinePartsPage() {
               <SelectItem value="archived">Archived</SelectItem>
             </SelectContent>
           </Select>
-          <Select value={backupFilter} onValueChange={v => setBackupFilter(v as typeof backupFilter)}>
+          <Select value={categoryFilter} onValueChange={v => setCategoryFilter(v as typeof categoryFilter)}>
             <SelectTrigger className="w-36">
-              <SelectValue placeholder="All Parts">{(v: string) => BACKUP_FILTER_LABELS[v] ?? v}</SelectValue>
+              <SelectValue placeholder="Any category">{(v: string) => CATEGORY_FILTER_LABELS[v] ?? v}</SelectValue>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Normal + backup</SelectItem>
+              <SelectItem value="all">Any category</SelectItem>
               <SelectItem value="normal">Normal only</SelectItem>
               <SelectItem value="backup">Backups only</SelectItem>
+              <SelectItem value="retired">Retired only</SelectItem>
             </SelectContent>
           </Select>
           <Select value={testTypeFilter} onValueChange={v => setTestTypeFilter(v as typeof testTypeFilter)}>
@@ -325,7 +340,7 @@ export function StorylinePartsPage() {
                 <TableHead>Label</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Active</TableHead>
-                <TableHead>Backup</TableHead>
+                <TableHead>Category</TableHead>
                 <TableHead>Test types</TableHead>
                 <TableHead>Theme</TableHead>
                 <TableHead />
@@ -377,7 +392,11 @@ export function StorylinePartsPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        {part.isBackup ? <Badge variant="outline">backup</Badge> : <span className="text-muted-foreground text-sm">—</span>}
+                        {part.isBackup
+                          ? <Badge variant="outline">backup</Badge>
+                          : part.retired
+                            ? <Badge variant="secondary">retired</Badge>
+                            : <span className="text-muted-foreground text-sm">—</span>}
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-1 max-w-48">
@@ -444,6 +463,16 @@ export function StorylinePartsPage() {
                               {part.isBackup
                                 ? <><ShieldOff className="size-4 mr-1" /> Unmark backup</>
                                 : <><Shield className="size-4 mr-1" /> Mark as backup</>}
+                            </Button>
+                          )}
+                          {part.status !== 'archived' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleToggleRetired(part)}
+                              title="Old content no longer used for Live/Backup, but fine to reuse for Practice/sample/training — eligible only in Practice-type versions."
+                            >
+                              <History className="size-4 mr-1" /> {part.retired ? 'Unmark retired' : 'Mark as retired'}
                             </Button>
                           )}
                           {part.status === 'published' && (

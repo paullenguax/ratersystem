@@ -157,42 +157,33 @@ export function StorylineVersionEditorPage() {
         )}
         <div className="grid grid-cols-1 gap-3">
           {PART_NUMBERS.map(n => {
-            // Only offer Parts that are actually ready for normal use — published,
-            // active, and eligible for this Test's type (untagged Parts are
-            // eligible for every type, see StorylinePart.testTypes) — but keep
-            // an already-selected Part visible even if it's since been
-            // deactivated/archived/retagged out of eligibility, so an existing
-            // draft doesn't silently lose its selection. Reserve/backup Parts
-            // are excluded from normal ('live'/'practice') versions, but a
-            // 'backup' version is exactly where they belong, so they're
-            // included there instead.
-            const isEligible = (p: StorylinePart) =>
-              p.id === partRefs[n] || (
+            // Only offer Parts that are actually ready for normal use —
+            // published, active, and eligible for this Test's type
+            // (untagged Parts are eligible for every type, see
+            // StorylinePart.testTypes) — but keep an already-selected Part
+            // visible even if it's since been deactivated/archived/
+            // retagged out of eligibility, so an existing draft doesn't
+            // silently lose its selection. `isBackup`/`retired` are
+            // treated as mutually exclusive reserve categories, each
+            // scoped to exactly one Version type: backup Parts only in
+            // 'backup' Versions (real exam-day reserve), retired Parts
+            // only in 'practice' Versions (old content, fine for sample/
+            // training use, not for a real exam or its reserve copy).
+            const versionType = version.versionType ?? 'live'
+            const options = parts.filter(p =>
+              p.partNumber === n &&
+              (p.id === partRefs[n] || (
                 p.status === 'published' && p.active !== false &&
-                (version.versionType === 'backup' || !p.isBackup) &&
+                (p.isBackup ? versionType === 'backup' : p.retired ? versionType === 'practice' : true) &&
                 (!p.testTypes?.length || !test?.testType || p.testTypes.includes(test.testType))
-              )
-            const allForNumber = parts.filter(p => p.partNumber === n)
-            const options = allForNumber.filter(isEligible)
+              ))
+            )
             const formatOption = (p: StorylinePart) =>
               `${p.label}` +
               (p.status !== 'published' ? ` (${p.status})` : '') +
               (p.active === false ? ' (inactive)' : '') +
-              (p.isBackup ? ' (backup)' : '')
-            // Reasons a Part {n} record didn't make it into `options` — every
-            // condition `isEligible` checks, spelled out per-record, so "why
-            // isn't my new one showing" is answerable on screen instead of by
-            // guessing at the filter logic from outside.
-            const exclusionReason = (p: StorylinePart): string => {
-              const reasons: string[] = []
-              if (p.status !== 'published') reasons.push(`status: ${p.status}`)
-              if (p.active === false) reasons.push('inactive')
-              if (p.isBackup && version.versionType !== 'backup') reasons.push('backup-only Part, this version isn’t type Backup')
-              if (p.testTypes?.length && test?.testType && !p.testTypes.includes(test.testType)) {
-                reasons.push(`tagged for [${p.testTypes.join(', ')}], not "${test.testType}"`)
-              }
-              return reasons.length ? reasons.join('; ') : 'excluded (unknown reason — check partNumber/id match)'
-            }
+              (p.isBackup ? ' (backup)' : '') +
+              (p.retired ? ' (retired)' : '')
             return (
               <div key={n} className="space-y-1">
                 <label className="text-sm font-medium">Part {n}</label>
@@ -222,24 +213,6 @@ export function StorylineVersionEditorPage() {
                   <p className="text-xs text-muted-foreground">
                     No Part {n} exists yet. <Link to="/test-versions/parts" className="underline">Create one</Link>.
                   </p>
-                )}
-                {!partsLoading && !partsError && (
-                  <p className="text-xs text-muted-foreground">
-                    {allForNumber.length} Part {n} record{allForNumber.length === 1 ? '' : 's'} in the library total,
-                    {' '}{options.length} eligible for this Version.
-                  </p>
-                )}
-                {allForNumber.length > options.length && (
-                  <details className="text-xs text-muted-foreground">
-                    <summary className="cursor-pointer">See why the rest aren't eligible</summary>
-                    <ul className="mt-1 space-y-0.5 pl-3">
-                      {allForNumber.filter(p => !isEligible(p)).map(p => (
-                        <li key={p.id}>
-                          <span className="font-medium">{p.label}</span> ({p.id}) — {exclusionReason(p)}
-                        </li>
-                      ))}
-                    </ul>
-                  </details>
                 )}
               </div>
             )

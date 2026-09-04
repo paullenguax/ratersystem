@@ -432,6 +432,19 @@ export interface StorylinePart {
   // backup Part is still fully published and ready, just excluded from the
   // ordinary picker.
   isBackup?: boolean
+  // Old content that's no longer used for a real Live exam or kept in the
+  // Backup rotation, but is still fine to reuse for Practice/sample/
+  // training material — a third, distinct bucket from `isBackup` (real
+  // exam-day reserve, needs to stay exam-quality) and from
+  // `status: 'archived'` (frozen, excluded from every picker including
+  // this one, not reusable at all). Treated as mutually exclusive with
+  // `isBackup` in the picker (StorylineVersionEditorPage): eligible ONLY
+  // in Practice-type Versions. MUST also be excluded from the not-yet-
+  // built dynamic Part-pooling selection for real candidates whenever
+  // that's built (see getStorylineSyncData in functions/index.js, which
+  // already excludes `isBackup` from what it reports as `active` — a
+  // retired Part needs the same treatment there, not just here).
+  retired?: boolean
   // Which Test Types this Part is eligible for — not mutually exclusive
   // (e.g. a Part 2 might serve both FISO/AFISO and ADP Driver), matching
   // the real pooling shape noted above. Undefined/empty = eligible for

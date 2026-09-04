@@ -852,6 +852,36 @@ phase.
   Navigating back re-enters an earlier phase and flushes the one just left,
   so a back-and-forth yields a few short segments; the `seconds > 0` guard
   drops the trivial ones.
+  **New `StorylinePart.retired` flag (added 2026-09-04)**: found via a real
+  incident — an admin duplicated an archived, `isBackup`-flagged Part 1 to
+  refresh a Practice version's sample content, published the copy, and it
+  never appeared in `StorylineVersionEditorPage`'s Part picker. Root cause:
+  `isBackup` means "reserved exclusively for Backup-type Versions," not
+  "sourced from old backup content" — the admin's mental model was the
+  latter, but the flag enforces the former, unconditionally, for every
+  non-Backup Version. `retired` is the missing third category: old content
+  no longer used for a real Live exam or kept in the Backup rotation, but
+  fine to reuse for Practice/sample/training material. Treated as mutually
+  exclusive with `isBackup` (`StorylinePartsPage`'s toggle handlers clear
+  the other flag when either is set); eligible ONLY in `versionType:
+  'practice'` Versions in `StorylineVersionEditorPage`'s picker (Live and
+  Backup both exclude it, same as they'd exclude `isBackup` content
+  outside a Backup Version). `StorylinePartsPage` gained a matching "Mark
+  as retired" row action, a "retired" badge in what was the "Backup"
+  column (renamed "Category"), and the old two-way backup filter widened
+  to a four-way category filter (`all`/`normal`/`backup`/`retired`, URL
+  param renamed `backup` → `category`). **Also wired into the future**:
+  `getStorylineSyncData` (`functions/index.js`) computed `active: p.active
+  !== false && !p.isBackup` for the not-yet-built dynamic Part-pooling
+  sync — this now also excludes `!p.retired`, so whenever real automatic
+  Part selection is built (Phase E), it can't hand a real candidate
+  retired content, the same way it already couldn't hand out backup
+  content. A diagnostic UI was added to `StorylineVersionEditorPage` mid-
+  investigation (per-Part "N of M records eligible" + an expandable "why
+  the rest aren't" reasons list) to find this, then removed once the root
+  cause was confirmed — the page's earlier loading-state/error-banner+
+  Retry fix (same session, for a suspected-but-ultimately-unrelated flaky
+  Firestore read) was kept, since that's a real standing improvement.
 - **"Flight Strip" sample-tests landing page** (built 2026-08-06,
   `buildHomeTemplate()`/`HOME_SHELL_HEAD`/`HOME_SHELL_FOOT`/
   `HOME_LOGO_BASE64` in `exportStoryline.ts`, standalone starter copy at

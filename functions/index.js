@@ -1385,10 +1385,13 @@ exports.getStorylineSyncData = onRequest(
         return {
           firestoreId: d.id,
           partNumber: p.partNumber,
-          // Active for selection purposes: not explicitly deactivated and
-          // not a reserve/backup — matches the eligibility posture already
-          // used in StorylinePartsPage/StorylineVersionEditorPage.
-          active: p.active !== false && !p.isBackup,
+          // Active for selection purposes: not explicitly deactivated, not
+          // a reserve/backup, and not retired-to-practice-only content —
+          // matches the eligibility posture already used in
+          // StorylinePartsPage/StorylineVersionEditorPage. Real candidates
+          // must never be assigned backup or retired content by the future
+          // dynamic Part-pooling selection this feeds.
+          active: p.active !== false && !p.isBackup && !p.retired,
           themeFirestoreId: p.themeId ?? null,
           // Only ever consumed by the one-off legacy exposure backfill
           // (Phase D) — lets that script map an old content-pool code
