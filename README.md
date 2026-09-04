@@ -443,7 +443,9 @@ phase.
   `[ brackets ]` (e.g. "[ Take notes to explain the details. ]") is treated
   as a secondary "how to do the task" note — indented (`.candidate-instruction-note`),
   keeping the author's line colour — and the candidate instruction body text
-  is set at `1.95rem` for second-monitor legibility. A continuous timer starts the moment the slide tagged
+  is set at `4rem` for second-monitor legibility (bumped from an original
+  `1.95rem` over several rounds — see the 2026-09-04 entry below for why).
+  A continuous timer starts the moment the slide tagged
   `startsTestTimer` is reached and runs for the rest of the session; a
   slide's own `timing.prepSeconds`/`responseSeconds` (if set) auto-starts a
   second countdown the moment that slide becomes current — purely
@@ -795,7 +797,7 @@ phase.
   **Candidate-instructions text size (2026-09-04, Ben)**: a fixed rem size
   read fine on a laptop but too small on a wall-mounted second monitor
   viewed from across the room. `.candidate-instructions` font-size went
-  1.95rem → 2.6rem, then → 3rem. A container-query/`cqw`-based fluid-scaling
+  1.95rem → 2.6rem → 3rem → 4rem. A container-query/`cqw`-based fluid-scaling
   version (font size proportional to `div.polaroid`'s own measured width)
   was tried in between and reverted same day — real-content testing found
   Part 3's longer instruction block ran off the top/bottom of the screen at
