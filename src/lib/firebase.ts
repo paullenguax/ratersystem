@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app'
 import { getAuth } from 'firebase/auth'
-import { getFirestore } from 'firebase/firestore'
+import { initializeFirestore } from 'firebase/firestore'
 import { getStorage } from 'firebase/storage'
 import { getFunctions } from 'firebase/functions'
 
@@ -15,7 +15,17 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig)
 export const auth = getAuth(app)
-export const db = getFirestore(app)
+// initializeFirestore (not the plain getFirestore) so we can pass
+// ignoreUndefinedProperties: true — editor components across the app
+// follow a `set(field, value || undefined)` convention to mean "omit this
+// optional field when cleared," which produces a literal JS `undefined`
+// property. Firestore has no `undefined` type at all (unlike `null`,
+// which is a real stored value) and setDoc()/updateDoc() throw
+// "Unsupported field value: undefined" the moment one reaches them — this
+// flag makes the SDK silently drop such fields instead, which is what
+// every one of those call sites actually intended. Must be called before
+// any other getFirestore(app) for this app, and only once.
+export const db = initializeFirestore(app, { ignoreUndefinedProperties: true })
 export const storage = getStorage(app)
 export const functions = getFunctions(app)
 
@@ -29,7 +39,7 @@ const benchmarkConfig = {
 }
 
 const benchmarkApp = initializeApp(benchmarkConfig, 'benchmark')
-export const benchmarkDb = getFirestore(benchmarkApp)
+export const benchmarkDb = initializeFirestore(benchmarkApp, { ignoreUndefinedProperties: true })
 
 // getAuth() validates the API key format synchronously and throws if it's
 // missing/malformed — unlike getFirestore/getStorage, which stay lazy until
