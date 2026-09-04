@@ -27,12 +27,6 @@ div.polaroid {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  /* Longer instruction blocks (Part 3's especially) could run taller than
-     the window with nowhere for the overflow to go — .polaroid is
-     position:fixed with no size limit of its own, so text just ran off
-     screen top/bottom. Cap it and let it scroll instead of clipping. */
-  max-height: 90vh;
-  overflow-y: auto;
 }
 
 div.polaroid img {

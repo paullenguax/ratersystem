@@ -802,11 +802,13 @@ phase.
   was tried in between and reverted same day — real-content testing found
   Part 3's longer instruction block ran off the top/bottom of the screen at
   the sizes it produced on a wide window, and it was more moving parts than
-  the problem needed. Landed instead: a plain bigger fixed size, plus the
-  actual fix for the overflow — `div.polaroid` gained `max-height: 90vh` +
-  `overflow-y: auto`, so any instruction block taller than the screen
-  scrolls instead of clipping off invisibly (independent of font size, so
-  this stays correct for any future content-length change too).
+  the problem needed. `div.polaroid` briefly gained `max-height: 90vh` +
+  `overflow-y: auto` as a safety net for a too-tall instruction block, then
+  that was reverted too the same day — a candidate screen shouldn't scroll,
+  full stop, regardless of content length. Landed: a plain fixed `4rem`,
+  `div.polaroid` back to exactly its original rules, no overflow handling.
+  If a future instruction block runs long enough to overflow at `4rem`, the
+  fix is shorter script text for that slide, not player-level scrolling.
   **Training-run export (added 2026-09-04)**: a second button, **"Training
   run"**, next to "Export" on published Practice versions
   (`StorylineVersionsPage`). It calls `exportStorylinePractice(test,
