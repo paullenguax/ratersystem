@@ -856,6 +856,17 @@ phase.
   been uploaded to that folder, not what's merely marked Practice in
   Firestore. Keep the two lists (this one and `sample-site/index.html`) in
   sync by hand when a folder's added/renamed/removed.
+  **Training-run group (added 2026-09-04)**: `SAMPLE_TESTS` entries gained a
+  `kind: 'practice' | 'training'` tag, and the page renders two separate
+  groups (`SampleGroup`) — Practice samples (unchanged) and Training runs
+  (new, only shown when non-empty). First entry: `{label: 'Airline', folder:
+  'Airline-Training', kind: 'training'}` → `lenguax.com/sample/Airline-Training/
+  story.html`, matching the folder the "Export training run" button's zip
+  (see above) is meant to be uploaded to. `docs/manual/sample-collection.md`
+  was also rewritten — its old text described an unrelated "browse graded
+  recordings" page that doesn't match what `SampleCollectionPage.tsx` has
+  ever actually done (a leftover from the manual's first-draft pass, per
+  README's 2026-08-29 entry above).
 - **Live text for `versionType === 'live'` exports** (built 2026-08-20, plan
   at `/home/paul/.claude/plans/deep-wibbling-flurry.md`): a new
   `getStorylineLiveContent` Cloud Function (`functions/index.js`) lets
