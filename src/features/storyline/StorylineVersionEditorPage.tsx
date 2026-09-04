@@ -52,7 +52,9 @@ export function StorylineVersionEditorPage() {
   })
   const { data: template, isLoading: templateLoading } = useQuery({ queryKey: ['storyline_template'], queryFn: fetchTemplate })
   const { data: test } = useQuery({ queryKey: ['storyline_test', testId], queryFn: () => fetchTest(testId!), enabled: !!testId })
-  const { data: parts = [] } = useQuery({ queryKey: ['storyline_parts'], queryFn: fetchParts })
+  const {
+    data: parts = [], isLoading: partsLoading, isError: partsError, error: partsErrorObj, refetch: refetchParts,
+  } = useQuery({ queryKey: ['storyline_parts'], queryFn: fetchParts })
 
   const [versionLabel, setVersionLabel] = useState('')
   const [slotContent, setSlotContent] = useState<Record<string, StorylineSlotContent>>({})
@@ -143,6 +145,16 @@ export function StorylineVersionEditorPage() {
 
       <div className="rounded-md border p-4 space-y-3">
         <span className="font-medium">Parts</span>
+        {partsError && (
+          <div className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive flex items-center justify-between gap-3">
+            <span>
+              Couldn't load the Parts list
+              {partsErrorObj instanceof Error ? ` (${partsErrorObj.message})` : ''}. The dropdowns below are empty
+              because of this, not because no Parts exist.
+            </span>
+            <Button variant="outline" size="sm" onClick={() => refetchParts()}>Retry</Button>
+          </div>
+        )}
         <div className="grid grid-cols-1 gap-3">
           {PART_NUMBERS.map(n => {
             // Only offer Parts that are actually ready for normal use — published,
@@ -189,7 +201,10 @@ export function StorylineVersionEditorPage() {
                     ))}
                   </SelectContent>
                 </Select>
-                {options.length === 0 && (
+                {options.length === 0 && partsLoading && (
+                  <p className="text-xs text-muted-foreground">Loading Parts…</p>
+                )}
+                {options.length === 0 && !partsLoading && !partsError && (
                   <p className="text-xs text-muted-foreground">
                     No Part {n} exists yet. <Link to="/test-versions/parts" className="underline">Create one</Link>.
                   </p>
