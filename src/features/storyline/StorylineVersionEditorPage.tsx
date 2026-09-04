@@ -166,19 +166,33 @@ export function StorylineVersionEditorPage() {
             // are excluded from normal ('live'/'practice') versions, but a
             // 'backup' version is exactly where they belong, so they're
             // included there instead.
-            const options = parts.filter(p =>
-              p.partNumber === n &&
-              (p.id === partRefs[n] || (
+            const isEligible = (p: StorylinePart) =>
+              p.id === partRefs[n] || (
                 p.status === 'published' && p.active !== false &&
                 (version.versionType === 'backup' || !p.isBackup) &&
                 (!p.testTypes?.length || !test?.testType || p.testTypes.includes(test.testType))
-              ))
-            )
+              )
+            const allForNumber = parts.filter(p => p.partNumber === n)
+            const options = allForNumber.filter(isEligible)
             const formatOption = (p: StorylinePart) =>
               `${p.label}` +
               (p.status !== 'published' ? ` (${p.status})` : '') +
               (p.active === false ? ' (inactive)' : '') +
               (p.isBackup ? ' (backup)' : '')
+            // Reasons a Part {n} record didn't make it into `options` — every
+            // condition `isEligible` checks, spelled out per-record, so "why
+            // isn't my new one showing" is answerable on screen instead of by
+            // guessing at the filter logic from outside.
+            const exclusionReason = (p: StorylinePart): string => {
+              const reasons: string[] = []
+              if (p.status !== 'published') reasons.push(`status: ${p.status}`)
+              if (p.active === false) reasons.push('inactive')
+              if (p.isBackup && version.versionType !== 'backup') reasons.push('backup-only Part, this version isn’t type Backup')
+              if (p.testTypes?.length && test?.testType && !p.testTypes.includes(test.testType)) {
+                reasons.push(`tagged for [${p.testTypes.join(', ')}], not "${test.testType}"`)
+              }
+              return reasons.length ? reasons.join('; ') : 'excluded (unknown reason — check partNumber/id match)'
+            }
             return (
               <div key={n} className="space-y-1">
                 <label className="text-sm font-medium">Part {n}</label>
@@ -208,6 +222,24 @@ export function StorylineVersionEditorPage() {
                   <p className="text-xs text-muted-foreground">
                     No Part {n} exists yet. <Link to="/test-versions/parts" className="underline">Create one</Link>.
                   </p>
+                )}
+                {!partsLoading && !partsError && (
+                  <p className="text-xs text-muted-foreground">
+                    {allForNumber.length} Part {n} record{allForNumber.length === 1 ? '' : 's'} in the library total,
+                    {' '}{options.length} eligible for this Version.
+                  </p>
+                )}
+                {allForNumber.length > options.length && (
+                  <details className="text-xs text-muted-foreground">
+                    <summary className="cursor-pointer">See why the rest aren't eligible</summary>
+                    <ul className="mt-1 space-y-0.5 pl-3">
+                      {allForNumber.filter(p => !isEligible(p)).map(p => (
+                        <li key={p.id}>
+                          <span className="font-medium">{p.label}</span> ({p.id}) — {exclusionReason(p)}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
                 )}
               </div>
             )
