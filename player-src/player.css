@@ -27,9 +27,12 @@ div.polaroid {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  /* Lets .candidate-instructions size its text off the card's own measured
-     width (in `cqw`) rather than a fixed rem — see below. */
-  container-type: inline-size;
+  /* Longer instruction blocks (Part 3's especially) could run taller than
+     the window with nowhere for the overflow to go — .polaroid is
+     position:fixed with no size limit of its own, so text just ran off
+     screen top/bottom. Cap it and let it scroll instead of clipping. */
+  max-height: 90vh;
+  overflow-y: auto;
 }
 
 div.polaroid img {
@@ -105,53 +108,34 @@ div.polaroid img {
   margin: 8vh auto;
 }
 
-/* Font size scales with the candidate screen instead of a fixed rem — a
-   wall-mounted second monitor can be far larger than a laptop, and a
-   candidate reading it from across the room needs type sized to the actual
-   screen (Ben). `cqw` measures against .polaroid's own width (see
-   `container-type` above), which is itself 70%/92% of the viewport — so
-   this is effectively "one line reads at a comfortable fraction of the
-   screen," scaling continuously rather than jumping between fixed sizes.
-   The plain `vw` clamp() is what browsers without container-query support
-   use instead; its coefficient is ~0.7x the `cqw` one for the same reason
-   (vw is against the full viewport, cqw against the ~70%-wide card).
-   Padding/margins below are in `em` so the whole block scales together
-   with the text, not just the type. Clamped at both ends: never too small
-   to read on a small window, never absurdly large on a huge display. */
 .candidate-instructions {
-  padding: 1em 1.2em;
-  font-size: clamp(1.8rem, 4.2vw, 7rem);
+  padding: 40px 48px;
+  font-size: 3rem;
   font-style: italic;
   line-height: 1.4;
   color: #222;
   text-align: left;
 }
 
-@container (min-width: 1px) {
-  .candidate-instructions {
-    font-size: clamp(1.8rem, 6cqw, 7rem);
-  }
-}
-
 .candidate-instructions p {
-  margin: 0 0 0.5em;
+  margin: 0 0 20px;
 }
 
 /* A `[ bracketed ]` "how to do the task" note — indented and set off from
    the prompts above it, keeping whatever colour the author gave the line. */
 .candidate-instructions .candidate-instruction-note {
-  margin-top: 0.7em;
+  margin-top: 28px;
   margin-left: 1.4em;
   list-style: none;
 }
 
 .candidate-instructions ul {
-  margin: 0 0 0.5em;
+  margin: 0 0 20px;
   padding-left: 1.3em;
 }
 
 .candidate-instructions li {
-  margin-bottom: 0.2em;
+  margin-bottom: 8px;
 }
 
 #internet-status {
