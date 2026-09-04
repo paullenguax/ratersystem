@@ -183,7 +183,7 @@ export function StorylineVersionsPage() {
   // exportStorylinePractice()'s file header. Live/Backup keep going through
   // exportStorylineVersion() unchanged; that's the only place violation
   // tracking, exposure/part-counting, and the WP booking gate apply.
-  async function handleExport(version: StorylineVersion) {
+  async function handleExport(version: StorylineVersion, opts?: { trainingRun?: boolean }) {
     if (!test) return
     try {
       if ((version.versionType ?? 'live') === 'practice') {
@@ -201,7 +201,7 @@ export function StorylineVersionsPage() {
               `${test.name}: ${version.versionLabel}`,
             )
           : undefined
-        await exportStorylinePractice(test, version, template?.theme, liveItems)
+        await exportStorylinePractice(test, version, template?.theme, liveItems, opts)
       } else {
         await exportStorylineVersion(test, version, template?.theme)
       }
@@ -368,6 +368,16 @@ export function StorylineVersionsPage() {
                             <Button variant="ghost" size="sm" onClick={() => handleExport(version)}>
                               <Download className="size-4 mr-1" /> Export
                             </Button>
+                            {(version.versionType ?? 'live') === 'practice' && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleExport(version, { trainingRun: true })}
+                                title="Practice export dressed up as a real sitting — pre-test screens, play-to-the-end audio, pre-filled booking details. For familiarising interlocutors and for real-candidate sample gathering. Still records nothing."
+                              >
+                                <Download className="size-4 mr-1" /> Training run
+                              </Button>
+                            )}
                             <Button variant="ghost" size="sm" onClick={() => handleArchive(version)}>
                               <ArchiveIcon className="size-4 mr-1" /> Archive
                             </Button>

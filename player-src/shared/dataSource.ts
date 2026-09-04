@@ -64,21 +64,23 @@ export async function loadItems(): Promise<StorylineItem[]> {
 
 // Export-time flags (`ungated` — see StorylineVersion.ungated in the main
 // app's types — and `liveContentId`, present only for versionType 'live'
-// exports, see exportStorylineVersion() in exportStoryline.ts). Only
-// meaningful for the legacy per-Version export path; the dynamic-pooling
-// path doesn't fetch this at all (no per-candidate concept of "skip the
-// confirm gating," or of live-fetched text, exists there yet). Absent
-// flags.json (any export built before this feature, or preview mode,
-// which never fetches this) = every flag off/absent = today's only
-// behavior, same absent-is-safe pattern as loadTheme() below.
-export async function loadFlags(): Promise<{ ungated?: boolean; liveContentId?: string }> {
+// exports, see exportStorylineVersion() in exportStoryline.ts;
+// `trainingRun`, written only by the "Export training run" button on a
+// Practice version — see exportStorylinePractice()). Only meaningful for
+// the legacy per-Version export path; the dynamic-pooling path doesn't
+// fetch this at all (no per-candidate concept of "skip the confirm
+// gating," or of live-fetched text, exists there yet). Absent flags.json
+// (any export built before this feature, or preview mode, which never
+// fetches this) = every flag off/absent = today's only behavior, same
+// absent-is-safe pattern as loadTheme() below.
+export async function loadFlags(): Promise<{ ungated?: boolean; liveContentId?: string; trainingRun?: boolean }> {
   const { isPreview, isDynamic } = getParams()
   if (isPreview || isDynamic) return {}
 
   try {
     const res = await fetch('./flags.json')
     if (!res.ok) return {}
-    return (await res.json()) as { ungated?: boolean; liveContentId?: string }
+    return (await res.json()) as { ungated?: boolean; liveContentId?: string; trainingRun?: boolean }
   } catch {
     return {}
   }

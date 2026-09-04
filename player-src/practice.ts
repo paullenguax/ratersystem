@@ -1,6 +1,6 @@
-import type { StorylineItem } from './shared/types'
+import type { StorylineItem, ChecklistItem } from './shared/types'
 import { channelName } from './shared/session'
-import { loadItems, loadTheme } from './shared/dataSource'
+import { loadItems, loadTheme, loadFlags } from './shared/dataSource'
 import { applyTheme } from './shared/applyTheme'
 import { renderInlineMarkup, renderScriptText } from './shared/markup'
 import { preloadMediaToBlobs, applyMediaBlobs } from './shared/preloadMedia'
@@ -25,8 +25,32 @@ import teacLogo from './assets/teac-logo.png'
 // simple non-interactive "here's which test this is" intro (see
 // BRANDED_KINDS/renderIntro) instead of the real accept/reject controls,
 // which depend on a real booking to mean anything.
+// Skipped in a normal Practice export — booking-only screens that mean
+// nothing without a real proctored sitting. A *training run* (flags.json
+// { trainingRun: true }, written by the "Export training run" button on a
+// Practice version) keeps them, gated, so an interlocutor rehearses the
+// whole flow — see trainingRun below.
 const SKIPPED_KINDS = new Set(['test_data_confirm', 'admin_checklist'])
-const BRANDED_KINDS = new Set(['accept_reject_test'])
+const BRANDED_KINDS = new Set(['accept_reject_test', 'test_data_confirm', 'admin_checklist'])
+
+// Set once flags.json resolves, before the first render. A training run
+// dresses the sample player up to feel like a real Live sitting: the
+// pre-test screens are shown and must be completed, recordings must play
+// to the end before Next, the booking identity is pre-filled, and the
+// event log opens by default to make the point that a real test records
+// all of this. Still entirely local — nothing is sent or stored, no
+// WordPress calls — exactly like any Practice export.
+let trainingRun = false
+
+// Baked booking identity for a training run — a real Live test gets these
+// from WordPress before the examiner sits down, so they are pre-filled
+// here too rather than typed on the day.
+const TRAINING_FIELDS = {
+  candidateName: 'SALLY SMITH',
+  centreName: 'Lenguax Centre',
+  testNumber: 'SAMPLE 001',
+  examinerName: 'SAMPLE INTERLOCUTOR',
+}
 
 // practice.html/story.html is opened directly with no launch URL supplying
 // a session id (unlike examiner.php, which WordPress generates per
@@ -238,7 +262,10 @@ volumeSlider?.addEventListener('input', () => {
 volumeSlider?.addEventListener('change', () =>
   logEvent('volume_changed', `master volume ${Math.round(masterVolume * 100)}%`))
 
-function createAudioControls(clip: { label: string; url: string; maxPlays?: number }): HTMLElement {
+function createAudioControls(
+  clip: { label: string; url: string; maxPlays?: number },
+  onComplete?: () => void,
+): HTMLElement {
   const audio = new Audio(clip.url)
   audio.volume = masterVolume
   allAudios.push(audio)
@@ -339,6 +366,7 @@ function createAudioControls(clip: { label: string; url: string; maxPlays?: numb
     logEvent('audio_ended', `"${clip.label}" played in full — ${count}${limit !== undefined ? `/${limit}` : ''} play${count === 1 ? '' : 's'}`)
     if (activeAudio === audio) activeAudio = null
     refreshClipButtons()
+    onComplete?.()
   })
 
   clipRegistry.push({ sync })
@@ -348,11 +376,30 @@ function createAudioControls(clip: { label: string; url: string; maxPlays?: numb
   return wrap
 }
 
+// In a training run only: fill the {Centre Name}/{Test Number}/{Examiner
+// Name}/{Candidate Name}/{Date} script tokens from the baked identity, the
+// same way examiner.ts fills them from the real booking. A plain Practice
+// run leaves the tokens untouched (its sample content rarely uses them).
+function applyTrainingFields(text: string): string {
+  if (!trainingRun) return text
+  const subs: Record<string, string> = {
+    '{Centre Name}': TRAINING_FIELDS.centreName,
+    '{Test Number}': TRAINING_FIELDS.testNumber,
+    '{Examiner Name}': TRAINING_FIELDS.examinerName,
+    '{Candidate Name}': TRAINING_FIELDS.candidateName,
+    '{Date}': new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
+  }
+  let out = text
+  for (const [token, value] of Object.entries(subs)) out = out.split(token).join(value)
+  return out
+}
+
 function renderTextAndAudio(content: HTMLElement, item: StorylineItem) {
-  const text = item.examinerText ?? ''
+  const text = applyTrainingFields(item.examinerText ?? '')
   const clips = item.media?.audioClips ?? []
   const volumeClip = clips.find(c => c.label === 'Volume check')
   const mainClips = clips.filter(c => c.label !== 'Volume check')
+  const onClipDone = () => updateNavState()
 
   function appendText(segment: string) {
     // Trim per-segment: the {audio}/{volumeCheck} split leaves a trailing or
@@ -370,22 +417,22 @@ function renderTextAndAudio(content: HTMLElement, item: StorylineItem) {
   if (!text.includes('{audio}') && !text.includes('{volumeCheck}')) {
     appendText(text)
     const ordered = volumeClip ? [volumeClip, ...mainClips] : mainClips
-    ordered.forEach(clip => content.appendChild(createAudioControls(clip)))
+    ordered.forEach(clip => content.appendChild(createAudioControls(clip, onClipDone)))
     return
   }
 
   const mainQueue = [...mainClips]
   for (const seg of text.split(/(\{audio\}|\{volumeCheck\})/g)) {
     if (seg === '{volumeCheck}') {
-      if (volumeClip) content.appendChild(createAudioControls(volumeClip))
+      if (volumeClip) content.appendChild(createAudioControls(volumeClip, onClipDone))
     } else if (seg === '{audio}') {
       const clip = mainQueue.shift()
-      if (clip) content.appendChild(createAudioControls(clip))
+      if (clip) content.appendChild(createAudioControls(clip, onClipDone))
     } else {
       appendText(seg)
     }
   }
-  mainQueue.forEach(clip => content.appendChild(createAudioControls(clip)))
+  mainQueue.forEach(clip => content.appendChild(createAudioControls(clip, onClipDone)))
 }
 
 // --- Image zoom (click to pop out to near-full-size, click again/backdrop to collapse) ---
@@ -541,6 +588,33 @@ function updatePartTimer(partNumber: number | undefined) {
   }
 }
 
+// --- Per-phase duration ----------------------------------------------
+// Mirrors examiner.ts: how long the sitting spent in each phase —
+// Pre-test, Introduction, Part 1–4, Closing — logged on the way out.
+// examiner.ts also sends this as a `phase_duration` telemetry event; here
+// it is only a log line, like everything else in this player.
+function phaseLabelFor(item: StorylineItem): string {
+  if (item.partNumber) return `Part ${item.partNumber}`
+  if (item.kind === 'closing') return 'Closing'
+  if (item.kind === 'instruction') return 'Introduction'
+  return 'Pre-test'
+}
+let phaseLabel: string | null = null
+let phaseStartedAt = 0
+function flushPhase() {
+  if (phaseLabel === null) return
+  const seconds = Math.round((Date.now() - phaseStartedAt) / 1000)
+  if (seconds > 0) logEvent('phase_duration', `${phaseLabel} took ${formatTime(seconds)}`)
+  phaseLabel = null
+}
+function enterPhase(item: StorylineItem) {
+  const label = phaseLabelFor(item)
+  if (label === phaseLabel) return
+  flushPhase()
+  phaseLabel = label
+  phaseStartedAt = Date.now()
+}
+
 // --- Per-slide prep/response countdown — manual ▶ Start / ↻ Reset -------
 let slideTimerHandle: number | undefined
 let slideTimerRemaining = 0
@@ -649,6 +723,177 @@ function setNavVisible(visible: boolean) {
   if (nav) nav.style.display = visible ? '' : 'none'
 }
 
+// --- Training-run gating (all no-ops unless trainingRun) ---------------
+// Ticked room-setup items and audio slides that have been explicitly
+// skipped-without-playing. checkedItems is rebuilt per render (fresh DOM);
+// skipArmed persists so a slide skipped once stays passable if revisited.
+let checkedItems = new Set<number>()
+const skipArmed = new Set<number>()
+
+function testDataComplete(): boolean {
+  return (document.getElementById('td-agree') as HTMLInputElement | null)?.checked ?? false
+}
+
+function audioGateBlocks(item: StorylineItem): boolean {
+  if (!trainingRun) return false
+  if (item.kind !== 'audio_response' && item.kind !== 'audio_set') return false
+  if (skipArmed.has(currentIndex)) return false
+  const clips = item.media?.audioClips ?? []
+  return clips.length > 0 && !clips.every(c => (playCounts.get(c.url) ?? 0) > 0)
+}
+
+function updateNavState() {
+  const nextBtn = document.getElementById('next-btn') as HTMLButtonElement | null
+  const prevBtn = document.getElementById('prev-btn') as HTMLButtonElement | null
+  if (prevBtn) prevBtn.disabled = currentIndex === 0
+  if (!nextBtn) return
+  const item = items[currentIndex]
+  if (!item) { nextBtn.disabled = true; return }
+
+  let blocked = mediaGateBlocks(item)
+  if (trainingRun && !blocked) {
+    if (item.kind === 'test_data_confirm' && !testDataComplete()) blocked = true
+    else if (item.checklistItems?.length && !item.checklistItems.every((_, i) => checkedItems.has(i))) blocked = true
+    else if (audioGateBlocks(item)) blocked = true
+  }
+  nextBtn.disabled = blocked
+}
+
+// --- Training-run pre-test screens (ported from examiner.ts, minus the
+// telemetry and the real WordPress reject call — this player reports
+// nothing anywhere) ---------------------------------------------------
+function findVolumeCheckUrl(): string | undefined {
+  for (const it of items) {
+    const clip = it.media?.audioClips?.find(c => c.label === 'Volume check')
+    if (clip) return clip.url
+  }
+  return undefined
+}
+
+function renderChecklist(container: HTMLElement, rawItems: (string | ChecklistItem)[]) {
+  const checklistItems = rawItems.map(it => (typeof it === 'string' ? { text: it } : it))
+  const wrap = document.createElement('div')
+  wrap.className = 'checklist'
+  checklistItems.forEach((it, i) => {
+    const row = document.createElement('div')
+    row.className = 'checklist-item'
+    const label = document.createElement('label')
+    label.className = 'checklist-item-label'
+    const box = document.createElement('input')
+    box.type = 'checkbox'
+    box.addEventListener('change', () => {
+      if (box.checked) checkedItems.add(i)
+      else checkedItems.delete(i)
+      logEvent('checklist_item_toggled', `${box.checked ? 'ticked' : 'unticked'} "${it.text}"`)
+      updateNavState()
+    })
+    const span = document.createElement('span')
+    span.textContent = it.text
+    label.append(box, span)
+    row.appendChild(label)
+    if (it.icon === 'screen') {
+      const btn = document.createElement('button')
+      btn.type = 'button'
+      btn.className = 'checklist-action'
+      btn.textContent = '🖥'
+      btn.title = 'Open/focus the candidate window'
+      btn.addEventListener('click', openOrFocusCandidateWindow)
+      row.appendChild(btn)
+    } else if (it.icon === 'speaker') {
+      const url = findVolumeCheckUrl()
+      const btn = document.createElement('button')
+      btn.type = 'button'
+      btn.className = 'checklist-action'
+      btn.textContent = '🔊'
+      if (url) {
+        btn.title = 'Play the volume check clip'
+        btn.addEventListener('click', () => {
+          const audio = new Audio(url)
+          audio.volume = masterVolume
+          audio.play()
+        })
+      } else {
+        btn.disabled = true
+        btn.title = 'No volume check clip in this version'
+      }
+      row.appendChild(btn)
+    }
+    wrap.appendChild(row)
+  })
+  container.appendChild(wrap)
+}
+
+const TEST_DATA_FIELDS = [
+  { label: 'Centre Name', value: TRAINING_FIELDS.centreName },
+  { label: 'Test Number', value: TRAINING_FIELDS.testNumber },
+  { label: 'Examiner Name', value: TRAINING_FIELDS.examinerName },
+  { label: 'Candidate Name', value: TRAINING_FIELDS.candidateName },
+]
+
+function renderTestDataConfirm(card: HTMLElement) {
+  const wrap = document.createElement('div')
+  wrap.className = 'test-data-fields'
+  for (const f of TEST_DATA_FIELDS) {
+    const row = document.createElement('div')
+    row.className = 'test-data-field'
+    const span = document.createElement('span')
+    span.textContent = f.label
+    const value = document.createElement('strong')
+    value.textContent = f.value || '—'
+    row.append(span, value)
+    wrap.appendChild(row)
+  }
+  const agreeRow = document.createElement('label')
+  agreeRow.className = 'test-data-agree'
+  const agreeBox = document.createElement('input')
+  agreeBox.type = 'checkbox'
+  agreeBox.id = 'td-agree'
+  agreeBox.addEventListener('change', () => updateNavState())
+  const agreeSpan = document.createElement('span')
+  agreeSpan.textContent = 'I agree to abide by Lenguax terms.'
+  agreeRow.append(agreeBox, agreeSpan)
+  wrap.appendChild(agreeRow)
+  card.appendChild(wrap)
+}
+
+function renderAcceptReject(card: HTMLElement, item: StorylineItem) {
+  if (item.testDisplayName) {
+    const name = document.createElement('div')
+    name.className = 'test-display-name'
+    name.textContent = item.testDisplayName
+    card.appendChild(name)
+  }
+  const note = document.createElement('div')
+  note.className = 'practice-intro-note'
+  note.textContent =
+    'Training run — a sample sitting. Nothing here is scored or recorded, but every action is shown in the event log below, exactly as a real test would record it.'
+  card.appendChild(note)
+
+  const row = document.createElement('div')
+  row.className = 'accept-reject-buttons'
+  const acceptBtn = document.createElement('button')
+  acceptBtn.type = 'button'
+  acceptBtn.className = 'accept-btn'
+  acceptBtn.textContent = '✓ Accept this Test'
+  acceptBtn.addEventListener('click', () => {
+    if (currentIndex >= items.length - 1) return
+    logEvent('test_accepted', 'examiner accepted the test')
+    currentIndex++
+    renderCurrentSlide()
+  })
+  const rejectBtn = document.createElement('button')
+  rejectBtn.type = 'button'
+  rejectBtn.className = 'reject-btn'
+  rejectBtn.textContent = '✕ Reject this Test'
+  rejectBtn.addEventListener('click', () => {
+    if (!window.confirm('Reject this test? This will end the session.')) return
+    logEvent('test_rejected', 'examiner rejected the test before completion — a real test emails the centre and compliance')
+    endSession('Test rejected — session ended.')
+  })
+  row.append(acceptBtn, rejectBtn)
+  card.appendChild(row)
+}
+
 // Every exported Practice zip is meant to be unpacked into its own
 // subfolder one level under the shared home.html/index.html (see HOW-TO-
 // PUBLISH.txt — e.g. lenguax.com/sample/Airline/story.html next to
@@ -659,6 +904,7 @@ const BACK_TO_INDEX_URL = '../index.html'
 
 function endSession(message: string) {
   sessionEnded = true
+  flushPhase()
   if (activeAudio) { activeAudio.pause(); activeAudio = null }
   closeZoom()
   const card = document.getElementById('slide-card')
@@ -713,6 +959,7 @@ function renderCurrentSlide() {
   if (activeAudio) { activeAudio.pause(); activeAudio = null }
   clipRegistry = []
   closeZoom()
+  checkedItems = new Set()
 
   const item = items[currentIndex]
   logEvent('slide_view', `${currentIndex + 1}/${items.length} — "${item.label || item.kind}" (${item.kind})`)
@@ -742,9 +989,12 @@ function renderCurrentSlide() {
   if (item.kind === 'accept_reject_test') {
     // No item.label heading here — the admin-authored slide name (e.g.
     // "Accept/Reject") is meaningful to an examiner, not to a solo
-    // practice-taker. renderIntro()'s testDisplayName already serves as
-    // this screen's heading.
-    renderIntro(content, item)
+    // practice-taker. Both renderers use testDisplayName as the heading.
+    // A training run shows the real Accept/Reject controls (they mean
+    // something once the whole pre-test flow is being rehearsed); a plain
+    // Practice run keeps the non-interactive intro.
+    if (trainingRun) renderAcceptReject(content, item)
+    else renderIntro(content, item)
   } else {
     const heading = document.createElement('div')
     heading.className = 'slide-heading'
@@ -752,6 +1002,10 @@ function renderCurrentSlide() {
     content.appendChild(heading)
     renderTextAndAudio(content, item)
     if (item.previewContent?.length) renderPreviewContent(content, item.previewContent)
+    // Booking-only screens — only reached in a training run (SKIPPED_KINDS
+    // filters them out of a plain Practice export).
+    if (item.kind === 'test_data_confirm') renderTestDataConfirm(content)
+    if (item.checklistItems?.length) renderChecklist(content, item.checklistItems)
 
     const images = item.media?.images
     if (images?.length) {
@@ -778,25 +1032,41 @@ function renderCurrentSlide() {
     }
   }
 
+  // Training run: on an audio slide still waiting on a recording, offer a
+  // working escape hatch — it advances, and says plainly in the log that a
+  // real test would not have allowed it.
+  if (audioGateBlocks(item)) {
+    const skip = document.createElement('button')
+    skip.type = 'button'
+    skip.className = 'audio-skip'
+    skip.textContent = 'Skip without playing every recording'
+    skip.addEventListener('click', () => {
+      skipArmed.add(currentIndex)
+      logEvent('audio_gate_skipped', `advanced past "${item.label}" without playing every recording — a real test does not allow this`)
+      skip.disabled = true
+      updateNavState()
+    })
+    content.appendChild(skip)
+  }
+
   refreshClipButtons()
-  setNavVisible(true)
+  setNavVisible(!(trainingRun && item.kind === 'accept_reject_test'))
 
   const isLast = currentIndex >= items.length - 1
   const nextBtn = document.getElementById('next-btn') as HTMLButtonElement | null
   if (nextBtn) {
-    nextBtn.disabled = mediaGateBlocks(item)
     nextBtn.textContent = isLast ? '✓ Finish' : (item.nextButtonLabel || 'Next ▶')
     nextBtn.classList.toggle('next-btn-prominent', isLast || !!item.nextButtonLabel)
   }
-  const prevBtn = document.getElementById('prev-btn') as HTMLButtonElement | null
-  if (prevBtn) prevBtn.disabled = currentIndex === 0
 
   if (notesContent) notesContent.innerHTML = renderInlineMarkup(item.notes || 'No notes for this slide.')
 
   if (item.startsTestTimer) startGlobalTimer()
   updatePartTimer(item.partNumber)
+  enterPhase(item)
   prepareSlideTimer(item)
   sendAdvance(item)
+  updateNavState()
 }
 
 document.getElementById('prev-btn')?.addEventListener('click', () => {
@@ -810,7 +1080,7 @@ document.getElementById('next-btn')?.addEventListener('click', () => {
   if (sessionEnded) return
   if (currentIndex >= items.length - 1) {
     logEvent('test_finished', 'reached the end of the test')
-    endSession('Sample test complete — thanks for trying it out.')
+    endSession(trainingRun ? 'Training run complete.' : 'Sample test complete — thanks for trying it out.')
     return
   }
   logEvent('navigate', 'forward to next slide')
@@ -820,8 +1090,21 @@ document.getElementById('next-btn')?.addEventListener('click', () => {
 
 loadTheme().then(applyTheme)
 
-loadItems().then(loaded => {
-  items = loaded.filter(item => !SKIPPED_KINDS.has(item.kind)).sort((a, b) => a.order - b.order)
+// A training run opens the event log by default and sharpens the summary —
+// the point is that a real sitting records every line of it.
+function applyTrainingChrome() {
+  const panel = document.querySelector('.log-panel')
+  if (!panel) return
+  panel.setAttribute('open', '')
+  const summary = panel.querySelector('summary')
+  if (summary) summary.textContent = 'Event log — everything you do is recorded. This training run isn’t saved; a real test is.'
+}
+
+Promise.all([loadFlags(), loadItems()]).then(([flags, loaded]) => {
+  trainingRun = !!flags.trainingRun
+  if (trainingRun) applyTrainingChrome()
+  const skipped = trainingRun ? new Set<string>() : SKIPPED_KINDS
+  items = loaded.filter(item => !skipped.has(item.kind)).sort((a, b) => a.order - b.order)
   logSessionStart()
   renderCurrentSlide()
   void runMediaPreload()

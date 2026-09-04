@@ -185,9 +185,23 @@ async function bundlePracticeShellFiles(zip: JSZip): Promise<void> {
   }
 }
 
-function buildPracticeInstructions(test: StorylineTest, version: StorylineVersion): string {
+function buildPracticeInstructions(test: StorylineTest, version: StorylineVersion, trainingRun = false): string {
+  const trainingNote = trainingRun
+    ? `
+THIS IS A TRAINING-RUN EXPORT
+${'-'.repeat(29)}
+It behaves like a real sitting so an interlocutor can rehearse the whole
+flow: the pre-test screens (accept/reject, confirm data, room setup) are
+shown and must be completed, every recording must be played to the end
+before you can move on, the booking details are pre-filled
+(SALLY SMITH / Lenguax Centre / SAMPLE 001), and the event log is open by
+default. It still sends and stores nothing — it is local-only, exactly
+like any other Practice export.
+`
+    : ''
   return `How to publish "${test.name} — ${version.versionLabel}" as a sample test
 ${'='.repeat(30 + test.name.length + version.versionLabel.length)}
+${trainingNote}
 
 1. Upload every file in this zip into its own subfolder on the website
    (e.g. /sample/${sanitizeFilename(test.name)}-${sanitizeFilename(version.versionLabel)}/).
@@ -531,7 +545,9 @@ export async function exportStorylinePractice(
   version: StorylineVersion,
   theme?: StorylineTheme,
   liveItems?: StorylineItem[],
+  opts?: { trainingRun?: boolean },
 ) {
+  const trainingRun = !!opts?.trainingRun
   const zip = new JSZip()
   await bundlePracticeShellFiles(zip)
 
@@ -544,10 +560,15 @@ export async function exportStorylinePractice(
   const bundledItems = await bundleMedia(zip, liveItems ?? version.items)
   zip.file('version.json', JSON.stringify(bundledItems, null, 2))
   zip.file('theme.json', JSON.stringify(theme ?? {}, null, 2))
-  zip.file('HOW-TO-PUBLISH.txt', buildPracticeInstructions(test, version))
+  // Same "absent file = today's default" pattern as theme.json — a normal
+  // Practice export ships no flags.json and practice.ts treats that as
+  // trainingRun:false. Only the "Export training run" button writes it.
+  if (trainingRun) zip.file('flags.json', JSON.stringify({ trainingRun: true }, null, 2))
+  zip.file('HOW-TO-PUBLISH.txt', buildPracticeInstructions(test, version, trainingRun))
   zip.file('home.html', buildHomeTemplate(test, version))
 
-  await downloadZip(zip, `${sanitizeFilename(test.name)}-${sanitizeFilename(version.versionLabel)}-practice.zip`)
+  const suffix = trainingRun ? 'training' : 'practice'
+  await downloadZip(zip, `${sanitizeFilename(test.name)}-${sanitizeFilename(version.versionLabel)}-${suffix}.zip`)
 }
 
 // --- Dynamic Part-pooling exports (see /home/paul/.claude/plans/

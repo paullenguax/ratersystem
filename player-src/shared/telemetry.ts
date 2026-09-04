@@ -16,7 +16,7 @@ const ENDPOINT = 'https://us-central1-ratersystem.cloudfunctions.net/reportStory
 // Bump whenever the set of emitted events or their `data` shapes changes,
 // so a stored log stays self-describing about what the client of the day
 // was capable of seeing.
-export const PLAYER_BUILD = '2026-08-29'
+export const PLAYER_BUILD = '2026-09-04'
 
 // Events that must not linger in the buffer — they either gate an email or
 // tend to fire exactly as the page is going away (window closing, network

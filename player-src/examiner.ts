@@ -187,6 +187,44 @@ function updatePartTimer(partNumber: number | undefined) {
   }
 }
 
+// --- Per-phase duration ----------------------------------------------
+// Coarser than the per-Part timer above (Parts 1 & 4 only, and it resets
+// visually): this records how long the sitting actually spent in each
+// phase — Pre-test, Introduction, Part 1–4, Closing — as one
+// `phase_duration` telemetry event emitted on the way out of that phase.
+// Cheap to emit now; useful later for questions like "how long is Part 3
+// really taking across centres". Navigating back re-enters an earlier
+// phase and logs the one just left, so a back-and-forth produces a few
+// short segments rather than one clean figure — acceptable, and the
+// `seconds > 0` guard drops the trivial ones.
+function phaseLabelFor(item: StorylineItem): string {
+  if (item.partNumber) return `Part ${item.partNumber}`
+  if (item.kind === 'closing') return 'Closing'
+  if (item.kind === 'instruction') return 'Introduction'
+  return 'Pre-test'
+}
+
+let phaseLabel: string | null = null
+let phaseStartedAt = 0
+
+function flushPhase() {
+  if (phaseLabel === null) return
+  const seconds = Math.round((Date.now() - phaseStartedAt) / 1000)
+  if (seconds > 0) {
+    track('phase_duration', { phase: phaseLabel, seconds })
+    logEvent(`${phaseLabel} took ${formatTime(seconds)}.`)
+  }
+  phaseLabel = null
+}
+
+function enterPhase(item: StorylineItem) {
+  const label = phaseLabelFor(item)
+  if (label === phaseLabel) return
+  flushPhase()
+  phaseLabel = label
+  phaseStartedAt = Date.now()
+}
+
 // --- Per-slide prep/response countdown --------------------------------
 // Does NOT auto-run: the interlocutor presses ▶ Start at the scripted
 // "...starting now", so a 30s response clock isn't already at 00:00 by
@@ -756,6 +794,7 @@ function setNavVisible(visible: boolean) {
 
 function endSession(message: string) {
   sessionEnded = true
+  flushPhase()
   if (activeAudio) { activeAudio.pause(); activeAudio = null }
   closeZoom()
   const card = document.getElementById('slide-card')
@@ -1062,6 +1101,7 @@ function renderCurrentSlide() {
 
   if (item.startsTestTimer) startGlobalTimer()
   updatePartTimer(item.partNumber)
+  enterPhase(item)
   prepareSlideTimer(item)
   sendAdvance(item)
   updateNavState()

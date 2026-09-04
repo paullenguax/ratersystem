@@ -785,6 +785,49 @@ phase.
   dropped to normal weight to match the in-script `{questions}` style.
   `templateSeed.ts` gained further blank lines in the Part 2 Intro /
   Section 1 scripts (needs a template reload to reach live).
+  **Training-run export (added 2026-09-04)**: a second button, **"Training
+  run"**, next to "Export" on published Practice versions
+  (`StorylineVersionsPage`). It calls `exportStorylinePractice(test,
+  version, theme, liveItems, { trainingRun: true })`, which writes a
+  `flags.json` `{ trainingRun: true }` into the zip (same "absent file =
+  today's default" pattern as `theme.json`/`ungated`; a normal Practice
+  export ships none and `practice.ts` treats that as `trainingRun: false`)
+  and names it `…-training.zip`. `player-src/shared/dataSource.ts`'s
+  `loadFlags()` return type gained `trainingRun?: boolean`. In
+  `practice.ts`, `trainingRun` mode dresses the sample player up to feel
+  like a real Live sitting, for two uses: familiarising interlocutors with
+  the new tool, and running it with real candidates for sample gathering.
+  It (a) keeps the `test_data_confirm` / `admin_checklist` slides
+  (`SKIPPED_KINDS` becomes empty) and renders the real Accept/Reject
+  controls instead of `renderIntro()`; (b) **hard-gates** the Confirm Test
+  Data agree-checkbox and the room-setup checklist (ported `renderChecklist`
+  / `renderTestDataConfirm` / `findVolumeCheckUrl` / `testDataComplete` from
+  `examiner.ts`, minus the `track()` calls); (c) **soft-gates** audio slides
+  — `audioGateBlocks()` disables Next until every clip on an `audio_response`
+  / `audio_set` slide has played to completion once, with a working
+  `.audio-skip` "Skip without playing every recording" button that logs
+  `audio_gate_skipped` and arms `skipArmed` for that slide; (d) bakes
+  `TRAINING_FIELDS` (`SALLY SMITH` / `Lenguax Centre` / `SAMPLE 001` /
+  `SAMPLE INTERLOCUTOR`) into the `{Candidate Name}` / `{Centre Name}` /
+  `{Test Number}` / `{Examiner Name}` / `{Date}` script tokens via
+  `applyTrainingFields()`; (e) opens the Event Log `<details>` by default
+  and sharpens its `<summary>`. All of it is behind `if (trainingRun)`, so a
+  plain Practice export is byte-for-byte unchanged. `createAudioControls()`
+  gained an `onComplete` callback (threaded through `renderTextAndAudio` as
+  `onClipDone → updateNavState`) so a finishing clip re-evaluates the gate;
+  the old inline `nextBtn.disabled = mediaGateBlocks(item)` in
+  `renderCurrentSlide()` is now a proper `updateNavState()`.
+  `HOW-TO-PUBLISH.txt` gains a training-run paragraph.
+  **Per-phase duration (added 2026-09-04)**: both players log how long each
+  phase of a sitting took — Pre-test / Introduction / Part 1–4 / Closing,
+  keyed by `phaseLabelFor(item)` — on the way out of that phase.
+  `examiner.ts` also emits it as a `phase_duration` **telemetry** event
+  (`{ phase, seconds }` → `storyline_events`, no email rule, so it's stored
+  metadata only); `PLAYER_BUILD` bumped to `2026-09-04`. `practice.ts` logs
+  it to the event-log panel only (always — not gated on `trainingRun`).
+  Navigating back re-enters an earlier phase and flushes the one just left,
+  so a back-and-forth yields a few short segments; the `seconds > 0` guard
+  drops the trivial ones.
 - **"Flight Strip" sample-tests landing page** (built 2026-08-06,
   `buildHomeTemplate()`/`HOME_SHELL_HEAD`/`HOME_SHELL_FOOT`/
   `HOME_LOGO_BASE64` in `exportStoryline.ts`, standalone starter copy at
@@ -1156,4 +1199,4 @@ sidebar as "User Manual".
 
 ## Last updated
 
-2026-09-01
+2026-09-04
