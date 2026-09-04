@@ -771,6 +771,13 @@ phase.
   which folder a given export ends up named. examiner.ts's real-exam
   `endSession()` deliberately doesn't get this link — a real exam ends with
   an examiner already there, not a solo visitor who needs somewhere to go.
+  **Suppressed for training runs (2026-09-04)**: `endSession()` now skips
+  the "← Back to sample tests" link when `trainingRun`. Real trigger: it
+  was clicked at the end of a training-run test and 404'd, which is how the
+  live `lenguax.com/sample/index.html` was discovered missing — but a
+  training run isn't one of the candidate-facing tests on that board and
+  shouldn't route back to it regardless of whether the file exists. A plain
+  Practice export keeps the link.
   **Notes panel**: `item.notes` shows in the docked `.notes-panel` (shown by
   default, "Hide Notes" to collapse) — same as the examiner player after the
   2026-09-01 rework described above; practice.ts logs `notes_opened`/

@@ -916,11 +916,17 @@ function endSession(message: string) {
     msg.textContent = message
     card.appendChild(msg)
 
-    const backLink = document.createElement('a')
-    backLink.className = 'session-ended-back'
-    backLink.href = BACK_TO_INDEX_URL
-    backLink.textContent = '← Back to sample tests'
-    card.appendChild(backLink)
+    // Training runs aren't one of the candidate-facing tests on the public
+    // board — this session shouldn't route back there (and the folder it
+    // lives in isn't necessarily even linked from it). A plain Practice
+    // sample keeps the link.
+    if (!trainingRun) {
+      const backLink = document.createElement('a')
+      backLink.className = 'session-ended-back'
+      backLink.href = BACK_TO_INDEX_URL
+      backLink.textContent = '← Back to sample tests'
+      card.appendChild(backLink)
+    }
   }
   setNavVisible(false)
   logEvent('session_end', 'a real test would now flush any buffered events and close the session record')
