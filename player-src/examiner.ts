@@ -991,7 +991,7 @@ function updateNavState() {
   // examiner click through freely regardless of gating. The last slide
   // still respects gating (e.g. a closing slide's audio must finish
   // playing) but is no longer unconditionally disabled — Next becomes
-  // "Finish test" there instead of stopping dead, see
+  // "Finish" there instead of stopping dead, see
   // renderCurrentSlide()/finishTest().
   // The media gate is separate: "START TEST" (the slide that starts the
   // session timer) stays disabled until every recording/picture is cached
@@ -1093,7 +1093,7 @@ function renderCurrentSlide() {
   const isLast = currentIndex >= items.length - 1
   const nextBtn = document.getElementById('next-btn') as HTMLButtonElement | null
   if (nextBtn) {
-    nextBtn.textContent = isLast ? '✓ Finish test' : (item.nextButtonLabel || 'Next ▶')
+    nextBtn.textContent = isLast ? '✓ Finish' : (item.nextButtonLabel || 'Next ▶')
     nextBtn.classList.toggle('next-btn-prominent', isLast || !!item.nextButtonLabel)
   }
 

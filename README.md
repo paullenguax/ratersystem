@@ -1157,9 +1157,11 @@ phase.
   (`completed`→`test_finished`, `violation`→its subtype) and handled
   identically. Fire-and-forget throughout — a failed report never blocks or
   alters the test. Nothing is emitted in Preview, and the practice player
-  (`practice.ts`) has no telemetry at all. **A "Finish test" action** —
-  Next becomes "✓ Finish test" on the last slide (previously just
-  permanently disabled once reached) — is what fires `test_finished`; both
+  (`practice.ts`) has no telemetry at all. **A "Finish" action** —
+  Next becomes "✓ Finish" on the last slide (previously just
+  permanently disabled once reached; wording matched to `practice.ts`'s own
+  last-slide button, and to the last slide's Notes, 2026-09-04) — is what
+  fires `test_finished`; both
   it and reject also call the *old* system's own already-working
   `assets/rejectTest.php`/`sendStats.php` (`player-src/shared/wpCallback.ts`,
   best-effort, relative fetch, `!isPreview`-only) so existing WordPress-side
