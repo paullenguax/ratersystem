@@ -1185,6 +1185,16 @@ sidebar as "User Manual".
 ## Notes
 
 - `shadcn/ui` here uses the Base UI variant — always `render` prop, never `asChild`
+- Firestore's `db`/`benchmarkDb` are created via `initializeFirestore(app, {
+  ignoreUndefinedProperties: true })`, not the plain `getFirestore(app)` —
+  editor components throughout the app follow a `set(field, value ||
+  undefined)` convention for "omit this optional field when cleared,"
+  which otherwise throws `Unsupported field value: undefined` on
+  `setDoc`/`updateDoc` the moment a previously-set optional field gets
+  cleared (first hit: unchecking a slide's "starts the timer" box in the
+  Script Template). Keep using `db`/`benchmarkDb` from `lib/firebase.ts` —
+  don't call `getFirestore(app)` directly elsewhere, it'd re-add the bug
+  for that call site.
 - SiteGround caches aggressively. `public/.htaccess` now sets `Cache-Control:
   no-cache, must-revalidate` on `index.html` (and every SPA route rewritten to it)
   and `immutable, max-age=1y` on the fingerprinted `/assets/*` — so a deploy is
