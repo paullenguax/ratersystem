@@ -792,6 +792,20 @@ phase.
   dropped to normal weight to match the in-script `{questions}` style.
   `templateSeed.ts` gained further blank lines in the Part 2 Intro /
   Section 1 scripts (needs a template reload to reach live).
+  **Candidate-instructions text scales with the screen (2026-09-04, Ben)**:
+  a fixed rem size read fine on a laptop but too small on a wall-mounted
+  second monitor viewed from across the room. First pass bumped
+  `.candidate-instructions` 1.95rem → 2.6rem. Second pass replaced the fixed
+  size with `font-size: clamp(1.8rem, 6cqw, 7rem)` measured against
+  `div.polaroid`'s own width (`container-type: inline-size` added to
+  `div.polaroid`) — so text scales continuously with however big the
+  candidate's actual screen is, clamped so it's never illegibly small on a
+  small window or absurd on a huge one. A `vw`-based `clamp()` (coefficient
+  ~0.7x the `cqw` one, since `.polaroid` is ~70% of the viewport) is the
+  value used by any browser without container-query support. Padding/
+  margins on `.candidate-instructions` and its `p`/`ul`/`li`/
+  `.candidate-instruction-note` children were converted from px to `em` so
+  the whole block scales together with the text, not just the font.
   **Training-run export (added 2026-09-04)**: a second button, **"Training
   run"**, next to "Export" on published Practice versions
   (`StorylineVersionsPage`). It calls `exportStorylinePractice(test,
