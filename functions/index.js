@@ -330,6 +330,35 @@ exports.deleteBenchmarkCentreAccount = onCall({ secrets: [BENCHMARK_SERVICE_ACCO
   return { ok: true }
 })
 
+// Sends one email via Resend and always logs a failure — including a bad
+// HTTP status, which a bare fetch().catch() does NOT surface (fetch only
+// rejects on network errors, so an invalid/revoked API key previously failed
+// completely silently in every fire-and-forget notification email below).
+// Returns whether it actually sent; callers that treat email as best-effort
+// (not worth failing the whole request over) just log this, they don't throw.
+async function sendResendEmail(payload) {
+  const apiKey = RESEND_API_KEY.value()
+  if (!apiKey) {
+    console.error(`sendResendEmail: RESEND_API_KEY not configured, skipping send to ${payload.to}`)
+    return false
+  }
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    if (!res.ok) {
+      console.error(`sendResendEmail: failed (${res.status}) sending to ${payload.to}: ${await res.text()}`)
+      return false
+    }
+    return true
+  } catch (err) {
+    console.error(`sendResendEmail: network error sending to ${payload.to}`, err)
+    return false
+  }
+}
+
 // Creates a RaterSystem login: a Firebase Auth user in this project plus its
 // matching people/{uid} doc, then emails a password-reset link so the person
 // can set their own password — replaces the manual Console + Firestore +
@@ -382,25 +411,14 @@ exports.invitePerson = onCall({ secrets: [RESEND_API_KEY] }, async (request) => 
     const resetLink = await admin.auth().generatePasswordResetLink(email, {
       url: 'https://lenguax.com/ratersystem/login',
     })
-    const apiKey = RESEND_API_KEY.value()
-    if (apiKey) {
-      const res = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from: 'RaterSystem <notifications@lenguax.com>',
-          to: email,
-          subject: 'Set your RaterSystem password',
-          text: `You've been added to the Lenguax RaterSystem. Set your password here:\n\n${resetLink}`,
-        }),
-      })
-      inviteEmailSent = res.ok
-    }
+    inviteEmailSent = await sendResendEmail({
+      from: 'RaterSystem <notifications@lenguax.com>',
+      to: email,
+      subject: 'Set your RaterSystem password',
+      text: `You've been added to the Lenguax RaterSystem. Set your password here:\n\n${resetLink}`,
+    })
   } catch (err) {
-    console.error('invitePerson: failed to generate/send invite email', err)
+    console.error('invitePerson: failed to generate invite link', err)
   }
 
   return { uid: userRecord.uid, inviteEmailSent }
@@ -583,6 +601,10 @@ exports.canvasUserSearch = onCall(async (request) => {
 //   firstName          — used to create account if no canvasUserId
 //   lastName           — used to create account if no canvasUserId
 //   sectionId          — Canvas section to enroll in
+//   sectionName?       — human-readable "Course → Section" label from the wizard's
+//                        own section picker, stored on the log entry so
+//                        EnrollmentLogPage shows something better than a bare
+//                        Canvas section ID
 //   updateEmail?       — if true, update the Canvas login email to `email`
 //   concludeOldSection? — if true, conclude any existing student enrollments in the
 //                         same course (other than the target section)
@@ -597,6 +619,7 @@ exports.canvasEnroll = onCall(async (request) => {
     firstName,
     lastName,
     sectionId,
+    sectionName,
     updateEmail = false,
     concludeOldSection = false,
   } = request.data
@@ -729,6 +752,7 @@ exports.canvasEnroll = onCall(async (request) => {
     email,
     canvasUserId,
     sectionId,
+    sectionName: sectionName || '',
     status: alreadyEnrolled ? 'already_enrolled' : created ? 'new_account' : 'enrolled',
     emailUpdated,
     concludedSections,
@@ -1045,23 +1069,12 @@ exports.notifySelfServeSubmission = onDocumentUpdated(
 
     if (!notificationEmail || !apiKey) return // not configured — skip silently
 
-    try {
-      await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from: 'RaterSystem <notifications@lenguax.com>',
-          to: notificationEmail,
-          subject: `Self-serve submission — ${after.raterName}`,
-          text: `${after.raterName} has confirmed their self-serve rater exam for "${after.sessionName}".\n\nReview it here: https://lenguax.com/ratersystem/assignments/${event.params.assignmentId}`,
-        }),
-      })
-    } catch (err) {
-      console.error('notifySelfServeSubmission: failed to send email', err)
-    }
+    await sendResendEmail({
+      from: 'RaterSystem <notifications@lenguax.com>',
+      to: notificationEmail,
+      subject: `Self-serve submission — ${after.raterName}`,
+      text: `${after.raterName} has confirmed their self-serve rater exam for "${after.sessionName}".\n\nReview it here: https://lenguax.com/ratersystem/assignments/${event.params.assignmentId}`,
+    })
   }
 )
 
@@ -1088,23 +1101,12 @@ exports.notifyStandardizationSubmission = onDocumentUpdated(
 
     if (!notificationEmail || !apiKey) return // not configured — skip silently
 
-    try {
-      await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from: 'RaterSystem <notifications@lenguax.com>',
-          to: notificationEmail,
-          subject: `Standardization submission — ${after.raterName}`,
-          text: `${after.raterName} has confirmed their standardization scores for "${after.sessionName}".\n\nReview it here: https://lenguax.com/ratersystem/assignments/${event.params.assignmentId}`,
-        }),
-      })
-    } catch (err) {
-      console.error('notifyStandardizationSubmission: failed to send email', err)
-    }
+    await sendResendEmail({
+      from: 'RaterSystem <notifications@lenguax.com>',
+      to: notificationEmail,
+      subject: `Standardization submission — ${after.raterName}`,
+      text: `${after.raterName} has confirmed their standardization scores for "${after.sessionName}".\n\nReview it here: https://lenguax.com/ratersystem/assignments/${event.params.assignmentId}`,
+    })
   }
 )
 
@@ -1291,32 +1293,25 @@ exports.reportStorylineEvent = onRequest(
       const emailable = events.filter((e) => STORYLINE_EMAIL_RULES[e.event])
       if (emailable.length > 0) {
         const cfg = (await db.doc('config/storyline').get()).data() || {}
-        const apiKey = RESEND_API_KEY.value()
         const addr = { ops: cfg.notificationEmail, compliance: cfg.complianceEmail }
-        if (apiKey) {
-          // One email per recipient so ops and compliance never see each
-          // other's address and one bad address can't block the other.
-          await Promise.all(emailable.flatMap((e) => {
-            const tos = [...new Set(STORYLINE_EMAIL_RULES[e.event].map((r) => addr[r]).filter(Boolean))]
-            const testLabel = e.testDisplayName || 'Unknown test'
-            const isCompletion = e.event === 'test_finished'
-            const subject = isCompletion
-              ? `Test completed — ${testLabel}`
-              : `Test event — ${testLabel} (${e.event})`
-            const extra = e.data && e.data.details ? `\n\n${e.data.details}` : ''
-            const text = `${isCompletion ? 'A test was completed.' : `Reported: ${e.event}.`}\n\n`
-              + `Test: ${e.testDisplayName || '—'}\nCentre: ${e.centreName || '—'}\n`
-              + `Test number: ${e.testNumber || '—'}\nExaminer: ${e.examinerName || '—'}\n`
-              + `Candidate: ${e.candidateName || '—'}${extra}`
-            return tos.map((to) =>
-              fetch('https://api.resend.com/emails', {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ from: 'RaterSystem <notifications@lenguax.com>', to, subject, text }),
-              }).catch((err) => console.error(`reportStorylineEvent: email to ${to} failed`, err)),
-            )
-          }))
-        }
+        // One email per recipient so ops and compliance never see each
+        // other's address and one bad address can't block the other.
+        await Promise.all(emailable.flatMap((e) => {
+          const tos = [...new Set(STORYLINE_EMAIL_RULES[e.event].map((r) => addr[r]).filter(Boolean))]
+          const testLabel = e.testDisplayName || 'Unknown test'
+          const isCompletion = e.event === 'test_finished'
+          const subject = isCompletion
+            ? `Test completed — ${testLabel}`
+            : `Test event — ${testLabel} (${e.event})`
+          const extra = e.data && e.data.details ? `\n\n${e.data.details}` : ''
+          const text = `${isCompletion ? 'A test was completed.' : `Reported: ${e.event}.`}\n\n`
+            + `Test: ${e.testDisplayName || '—'}\nCentre: ${e.centreName || '—'}\n`
+            + `Test number: ${e.testNumber || '—'}\nExaminer: ${e.examinerName || '—'}\n`
+            + `Candidate: ${e.candidateName || '—'}${extra}`
+          return tos.map((to) =>
+            sendResendEmail({ from: 'RaterSystem <notifications@lenguax.com>', to, subject, text }),
+          )
+        }))
       }
     } catch (err) {
       // Never fail the request over email — events are already logged.

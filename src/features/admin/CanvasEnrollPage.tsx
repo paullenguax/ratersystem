@@ -55,6 +55,7 @@ const enrollFn = httpsCallable<{
   firstName?: string
   lastName?: string
   sectionId: number
+  sectionName?: string
   updateEmail?: boolean
   concludeOldSection?: boolean
 }, EnrollResult>(functions, 'canvasEnroll')
@@ -405,6 +406,7 @@ function ConfirmStep({ person, section, updateEmail, concludeOldSection, onConfi
         firstName,
         lastName,
         sectionId: section.id,
+        sectionName: section.displayName,
         updateEmail,
         concludeOldSection,
       })
