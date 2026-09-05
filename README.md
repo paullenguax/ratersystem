@@ -143,6 +143,7 @@ Certificate validation is public at `/validate/:certNumber` (no auth required).
 | `canvasLookupUser` / `canvasUserSearch` | Exact-email / fuzzy-name Canvas user lookup (admin, enroll wizard) |
 | `canvasEnroll` | Full manual enrollment: create-user-if-needed, optional email update, optional old-section conclusion, enroll, log (admin) |
 | `canvasSectionEnrollments` | Students in one specific section (admin, section-membership audit) |
+| `resendEnrollmentEmail` | Re-sends the "welcome to your course" email for one `canvasEnrollmentLog` entry (admin) — backs the "Resend email" button on `/admin/enrollment-log`. Ports the WP plugin's `cce_send_enrollment_email` template so this works for manual-wizard entries too, which never touch WordPress and so have no equivalent action there. Looks up the course name from `sectionId` via the Canvas API; sends via Resend (`RESEND_API_KEY`) |
 | `enrollmentWebhook` | HTTP endpoint the WordPress plugin POSTs to after each WooCommerce enrollment attempt; shared-secret auth (`x-webhook-secret` / `ENROLLMENT_WEBHOOK_SECRET`) |
 | `requestSelfAssignment` | Self-serve exam entry point (any signed-in user). Resolves the caller's active Canvas section, finds-or-creates the matching `sessions` doc, and builds a 4-test `assignments` doc using unseen/difficulty-tier/well-known-anchor selection (same approach as Auto-assign) |
 | `notifySelfServeSubmission` | Fires when a self-serve rater explicitly confirms their scores (`confirmedAt` newly set — not just all 4 tests being scored, which only flips `status` to `submitted`); emails `config/canvas.notificationEmail` via Resend (`RESEND_API_KEY` secret) — skipped silently if either isn't configured |
@@ -1276,4 +1277,4 @@ sidebar as "User Manual".
 
 ## Last updated
 
-2026-09-04
+2026-09-05
