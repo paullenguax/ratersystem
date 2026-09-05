@@ -738,6 +738,109 @@ exports.canvasEnroll = onCall(async (request) => {
   return { canvasUserId, created, alreadyEnrolled, concludedSections, emailUpdated }
 })
 
+// ── resendEnrollmentEmail ──────────────────────────────────────────────────────
+// Re-sends the "welcome to your course" email for an entry in canvasEnrollmentLog.
+// Ports the WordPress plugin's cce_send_enrollment_email/cce_get_email_wrapper
+// template (canvas-cohort-enrollment.php) so this works from a single place for
+// both WooCommerce-sourced and manually-enrolled entries — the WP plugin's own
+// enrollment log only ever contains the former, so manual entries have nowhere
+// else to trigger this from.
+
+function enrollmentEmailHtml({ firstName, courseName, canvasUrl }) {
+  const body = `
+    <p>Hi ${firstName},</p>
+    <p>🎉 Welcome to ${courseName}!</p>
+    <p>You have been successfully enrolled and can start learning immediately.</p>
+    <div class="highlight">
+      <p><strong>🚀 Access your course:</strong><br/><a href="${canvasUrl}">${canvasUrl}</a></p>
+    </div>
+    <p><strong>📚 What's next:</strong></p>
+    <ul>
+      <li>Check your email for Canvas login instructions (if it's your first time)</li>
+      <li>Complete your profile setup</li>
+      <li>Start with the course introduction</li>
+    </ul>
+    <p><strong>💡 Need help?</strong><br/>Reply to this email — course support is available 24/7.</p>
+    <p>Happy learning!<br/>The Lenguax Team</p>
+  `
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
+        .email-container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .email-header { text-align: center; border-bottom: 2px solid #007cba; padding-bottom: 20px; margin-bottom: 20px; }
+        .email-footer { text-align: center; border-top: 1px solid #ddd; padding-top: 20px; margin-top: 20px; font-size: 12px; color: #666; }
+        .highlight { background: #f8f9fa; padding: 15px; border-left: 4px solid #007cba; margin: 15px 0; }
+        a { color: #007cba; }
+      </style>
+    </head>
+    <body>
+      <div class="email-container">
+        <div class="email-header"><h1>Lenguax</h1></div>
+        <div class="email-content">${body}</div>
+        <div class="email-footer">
+          <p>This email was sent by <a href="https://lenguax.com">Lenguax</a></p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `
+}
+
+exports.resendEnrollmentEmail = onCall({ secrets: [RESEND_API_KEY] }, async (request) => {
+  await assertAdmin(request)
+  const { email, sectionId, name } = request.data
+  if (!email) throw new HttpsError('invalid-argument', 'Missing email')
+  if (!sectionId) throw new HttpsError('invalid-argument', 'Missing sectionId')
+
+  const apiToken = await getCanvasToken()
+
+  let courseName = 'Your Course'
+  try {
+    const sectionRes = await canvasFetch(`/api/v1/sections/${sectionId}`, apiToken)
+    if (sectionRes.ok) {
+      const section = await sectionRes.json()
+      const courseRes = await canvasFetch(`/api/v1/courses/${section.course_id}`, apiToken)
+      if (courseRes.ok) {
+        const course = await courseRes.json()
+        courseName = course.name || courseName
+      }
+    }
+  } catch (err) {
+    console.error('resendEnrollmentEmail: failed to look up course name', err)
+  }
+
+  const firstName = (name || '').trim().split(/\s+/)[0] || email.split('@')[0]
+  const canvasUrl = `${CANVAS_URL}/login/canvas`
+
+  const apiKey = RESEND_API_KEY.value()
+  if (!apiKey) throw new HttpsError('failed-precondition', 'Email sending is not configured')
+
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: 'Lenguax <notifications@lenguax.com>',
+      to: email,
+      subject: `Welcome to ${courseName}! 🎓`,
+      html: enrollmentEmailHtml({ firstName, courseName, canvasUrl }),
+    }),
+  })
+
+  if (!res.ok) {
+    const body = await res.text()
+    throw new HttpsError('internal', `Failed to send email: ${body}`)
+  }
+
+  return { sent: true }
+})
+
 // ── requestSelfAssignment ──────────────────────────────────────────────────────
 // Called right after a Canvas SSO login flagged as a self-serve exam request
 // (see the `state=self_serve` param round-tripped through the OAuth flow).

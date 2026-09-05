@@ -1,8 +1,14 @@
 import { useState, useEffect } from 'react'
 import { collection, getDocs, orderBy, query, limit, Timestamp } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
-import { AlertTriangle, CheckCircle2, Info, RefreshCw } from 'lucide-react'
+import { httpsCallable } from 'firebase/functions'
+import { db, functions } from '@/lib/firebase'
+import { AlertTriangle, CheckCircle2, Info, Mail, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+
+const resendEnrollmentEmailFn = httpsCallable<
+  { email: string; sectionId: number; name?: string },
+  { sent: boolean }
+>(functions, 'resendEnrollmentEmail')
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -89,6 +95,23 @@ export function EnrollmentLogPage() {
   const [entries, setEntries] = useState<LogEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<Filter>('all')
+  const [resendingId, setResendingId] = useState<string | null>(null)
+
+  async function resend(entry: LogEntry) {
+    if (!entry.sectionId) {
+      alert('This entry has no section on record, so the course name can\'t be resolved.')
+      return
+    }
+    setResendingId(entry.id)
+    try {
+      await resendEnrollmentEmailFn({ email: entry.email, sectionId: entry.sectionId, name: entry.name })
+      alert(`Email resent to ${entry.email}.`)
+    } catch (err) {
+      alert(`Failed to resend: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setResendingId(null)
+    }
+  }
 
   async function load() {
     setLoading(true)
@@ -190,6 +213,7 @@ export function EnrollmentLogPage() {
                 <th className="text-left px-3 py-2 font-medium">Section</th>
                 <th className="text-left px-3 py-2 font-medium">Source</th>
                 <th className="text-left px-3 py-2 font-medium">Status</th>
+                <th className="text-left px-3 py-2 font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -219,6 +243,17 @@ export function EnrollmentLogPage() {
                   </td>
                   <td className="px-3 py-2">
                     <StatusBadge status={entry.status} />
+                  </td>
+                  <td className="px-3 py-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={resendingId === entry.id}
+                      onClick={() => resend(entry)}
+                    >
+                      <Mail className={`size-3.5 mr-1.5 ${resendingId === entry.id ? 'animate-pulse' : ''}`} />
+                      Resend email
+                    </Button>
                   </td>
                 </tr>
               ))}
