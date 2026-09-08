@@ -2,8 +2,9 @@ import { Fragment, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { collection, getDocs, getDoc, addDoc, doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'
+import { ref, listAll, deleteObject } from 'firebase/storage'
 import { ArrowLeft, Plus, Pencil, Rocket, Copy, Archive as ArchiveIcon, Trash2, PauseCircle, PlayCircle, Shield, ShieldOff, History, Tag, Download } from 'lucide-react'
-import { db } from '@/lib/firebase'
+import { db, storage } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
 import type { StorylinePart, StorylinePartNumber, StorylinePartTheme, StorylineTemplate, StorylineTestType } from '@/types'
 import { missingPartContent } from './partCompleteness'
@@ -174,6 +175,38 @@ export function StorylinePartsPage() {
 
   async function handleDelete(part: StorylinePart) {
     if (!window.confirm(`Delete "${part.label}"? This can't be undone. If any draft version currently references this Part, it'll need a different one selected.`)) return
+    await deleteDoc(doc(db, 'storyline_parts', part.id))
+    queryClient.invalidateQueries({ queryKey: ['storyline_parts'] })
+  }
+
+  // storyline_versions is global (not scoped per test), so this is a
+  // straight scan — small collection, only run on an explicit delete click.
+  // partRefs is keyed by part *number* with the referenced Part's id as the
+  // value, so a plain Object.values().includes() check finds it regardless
+  // of which slot it's filling.
+  async function findReferencingVersions(partId: string): Promise<string[]> {
+    const snap = await getDocs(collection(db, 'storyline_versions'))
+    return snap.docs
+      .filter(d => Object.values((d.data().partRefs ?? {}) as Record<string, string>).includes(partId))
+      .map(d => `${d.data().versionLabel} (${d.data().status})`)
+  }
+
+  // Archived Parts have no editor/export surface left, so once nothing
+  // references them they're safe to remove outright — unlike the draft-only
+  // handleDelete above, which only warns. This is a hard block instead of a
+  // soft warning: a draft version's live preview/export re-resolves Parts by
+  // id at request time (see resolveItems), so a dangling partRef wouldn't
+  // fail loudly, it'd just silently drop that Part's content. Also clears
+  // the Part's uploaded audio/images from Storage, since nothing else does.
+  async function handleDeleteArchived(part: StorylinePart) {
+    const referencing = await findReferencingVersions(part.id)
+    if (referencing.length > 0) {
+      window.alert(`Can't delete "${part.label}" — still referenced by:\n${referencing.map(v => `- ${v}`).join('\n')}\n\nPick a different Part for those versions first.`)
+      return
+    }
+    if (!window.confirm(`Permanently delete "${part.label}" and its uploaded audio/images? This can't be undone.`)) return
+    const media = await listAll(ref(storage, `storylines/parts/${part.id}/`))
+    await Promise.all(media.items.map(item => deleteObject(item)))
     await deleteDoc(doc(db, 'storyline_parts', part.id))
     queryClient.invalidateQueries({ queryKey: ['storyline_parts'] })
   }
@@ -482,6 +515,11 @@ export function StorylinePartsPage() {
                           )}
                           {part.status === 'draft' && (
                             <Button variant="ghost" size="sm" onClick={() => handleDelete(part)}>
+                              <Trash2 className="size-4 mr-1" /> Delete
+                            </Button>
+                          )}
+                          {part.status === 'archived' && (
+                            <Button variant="ghost" size="sm" onClick={() => handleDeleteArchived(part)}>
                               <Trash2 className="size-4 mr-1" /> Delete
                             </Button>
                           )}

@@ -290,7 +290,16 @@ phase.
   Select). `StorylinePartsPage` (Parts Library,
   filterable by Part number/status/backup/test type, archived hidden by
   default via a "Show archived" toggle since they pile up and rarely
-  matter day-to-day) → `StorylinePartEditorPage`
+  matter day-to-day). A **Delete** button (added 2026-09-08, mirroring the
+  Versions one above) shows only once a Part is archived — hard-blocked
+  (not just a confirm dialog) if any `storyline_versions` doc's `partRefs`
+  still points at its id, since a version's live preview/export re-resolves
+  Parts by id at request time rather than failing loudly on a dangling ref;
+  the alert lists which versions to fix first. Once clear, deleting also
+  sweeps that Part's `storylines/parts/<id>/` Storage folder (audio/images)
+  via `listAll`/`deleteObject` — the Versions delete above doesn't do this
+  for its own media, this is the first place in the feature that does.
+  → `StorylinePartEditorPage`
   (slot-filling for that Part's slides only). Since 2026-08-20 all of
   Parts Library's filters (Part number, status, backup, test type, search
   text, show-archived) live in the URL (`useSearchParams`, `replace: true`
@@ -1279,4 +1288,4 @@ sidebar as "User Manual".
 
 ## Last updated
 
-2026-09-05
+2026-09-08
