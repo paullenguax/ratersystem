@@ -821,6 +821,24 @@ phase.
   `div.polaroid` back to exactly its original rules, no overflow handling.
   If a future instruction block runs long enough to overflow at `4rem`, the
   fix is shorter script text for that slide, not player-level scrolling.
+  **Fit-to-window candidate panel (2026-09-08, after 10" secondary-screen
+  trial)**: superseded all of the above. `div.polaroid` is now `position:
+  fixed; inset: 0` — the panel *is* the window, no 70%-width card, no
+  centring margin, minimal `vmin` padding — so content images and the logo
+  fill the screen (`.image-cell img` / `.candidate-logo`: `max-width/height:
+  100%; object-fit: contain`; two-up A/B pictures each take half). Text size
+  is set per-panel by `fitInstructionsPanels()` in `candidate.ts`: a binary
+  search on px that shrinks each `.candidate-instructions` block to the
+  largest size where `scrollHeight/Width <= clientHeight/Width` — i.e. it
+  measures *actual* overflow in both dimensions, which is what the reverted
+  `cqw` attempt couldn't do (that scaled to width only, so a long block on a
+  wide window still ran off vertically). `.candidate-instructions` is
+  `max-*: 100%; overflow: hidden` with `em`-based spacing; the CSS
+  `font-size: 2rem` is only a no-JS fallback. Re-fits on a debounced window
+  `resize` (screen swap / window move). Still no scrolling — the text
+  shrinks instead. The A/B `@media` switch is now `max-aspect-ratio: 11/10`
+  (portrait/squarish → stack) rather than a px width. `#internet-status`
+  gained a white ring so it stays visible over a full-bleed image.
   **Training-run export (added 2026-09-04)**: a second button, **"Training
   run"**, next to "Export" on published Practice versions
   (`StorylineVersionsPage`). It calls `exportStorylinePractice(test,

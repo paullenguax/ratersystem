@@ -16,40 +16,56 @@ body.candidate-view {
   background: #fff;
 }
 
+/* Each panel IS the visible area — fills the whole candidate window with no
+   card chrome or centring margins stealing space (the complaint on a small
+   10" secondary screen). Only one panel is `visible` at a time; the rest
+   stack underneath at the same full-window size. */
 div.polaroid {
-  width: 70%;
-  background-color: white;
-  margin-left: auto;
-  margin-right: auto;
-  margin-bottom: 25px;
-  visibility: hidden;
   position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  inset: 0;
+  width: auto;
+  margin: 0;
+  transform: none;
+  background: #fff;
+  visibility: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.2vmin;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
-div.polaroid img {
+/* A content image (never the logo — that's scoped separately below) fills
+   as much of the panel as it can while staying whole. `contain` means the
+   only white left is the unavoidable letterbox from the image's own aspect
+   ratio, not wasted margin. */
+.image-cell img {
   display: block;
-  width: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
   height: auto;
-  /* Never taller than the window — a portrait picture (e.g. Part 4 ALPHA)
-     used to overflow the candidate screen so the examiner couldn't see all
-     of it. `contain` keeps the whole image visible, letterboxed on the
-     white card if its aspect doesn't match. */
-  max-height: 86vh;
   object-fit: contain;
 }
 
 .image-row {
   display: flex;
-  gap: 8px;
+  gap: 1vmin;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
 }
 
 .image-cell {
   position: relative;
-  flex: 1;
+  flex: 1 1 0;
   min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .image-cell-label {
@@ -68,68 +84,72 @@ div.polaroid img {
   justify-content: center;
 }
 
-/* Below this width, side-by-side A/B pictures get too small to read
-   comfortably — stack them instead, each at full (wider) card width. */
-@media (max-width: 700px) {
-  div.polaroid {
-    width: 92%;
-  }
-
+/* On a portrait / squarish window, side-by-side A/B pictures get too narrow
+   — stack them instead, each full width and half height. */
+@media (max-aspect-ratio: 11 / 10) {
   .image-row {
     flex-direction: column;
   }
 
   .image-cell {
-    flex: none;
+    width: 100%;
+    height: auto;
+    flex: 1 1 0;
+    min-height: 0;
   }
 }
 
-/* Logo-only candidate screens (between Parts, preamble, closing) — big and
-   bold so it reads across the room. Source art is 1416×344, so it fills the
-   width instead of sitting at natural size in a sea of white. The card
-   itself widens for a logo (it's otherwise sized for portrait pictures),
-   and the selector is scoped under .polaroid to outweigh the generic
-   `div.polaroid img` rule above. */
-.polaroid:has(.candidate-logo) {
-  width: 90%;
-}
-
+/* Logo-only candidate screens (between Parts, preamble, closing) — fills the
+   panel like an image does, letterboxed only by its own aspect ratio. */
 .polaroid img.candidate-logo {
-  width: min(84vw, 1150px);
-  height: auto;
-  max-height: 72vh;
   display: block;
-  margin: 8vh auto;
+  max-width: 92%;
+  max-height: 88%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
 }
 
+/* Candidate-screen prompts. The font-size here is only a fallback — the real
+   size is set per-panel by fitInstructionsPanels() in candidate.ts, which
+   shrinks the text to the largest size that fully fits the window (so a long
+   Part 3 instruction list on a small screen isn't cut off, and a short Part 2
+   prompt on a big screen still fills it). `max-*: 100%` + `overflow: hidden`
+   give that measurement a hard box to fit inside. Spacing is in `em` so it
+   scales down with the fitted font. */
 .candidate-instructions {
-  padding: 40px 48px;
-  font-size: 4rem;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  padding: 3vmin 4vmin;
+  font-size: 2rem;
   font-style: italic;
-  line-height: 1.4;
+  line-height: 1.35;
   color: #222;
   text-align: left;
 }
 
 .candidate-instructions p {
-  margin: 0 0 20px;
+  margin: 0 0 0.6em;
 }
 
 /* A `[ bracketed ]` "how to do the task" note — indented and set off from
    the prompts above it, keeping whatever colour the author gave the line. */
 .candidate-instructions .candidate-instruction-note {
-  margin-top: 28px;
+  margin-top: 0.9em;
   margin-left: 1.4em;
   list-style: none;
 }
 
 .candidate-instructions ul {
-  margin: 0 0 20px;
+  margin: 0 0 0.6em;
   padding-left: 1.3em;
 }
 
 .candidate-instructions li {
-  margin-bottom: 8px;
+  margin-bottom: 0.35em;
 }
 
 #internet-status {
@@ -140,6 +160,9 @@ div.polaroid img {
   height: 14px;
   border-radius: 50%;
   background: #999;
+  /* A white ring so the dot stays visible now that images fill the window
+     right up to the corner. */
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.85);
   z-index: 10000;
 }
 

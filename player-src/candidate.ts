@@ -137,6 +137,9 @@ function renderPanels(items: StorylineItem[]) {
 
   // Show the logo straight away, before the examiner sends any state.
   showState(BRAND_STATE)
+
+  // Fit instruction text once layout has settled.
+  requestAnimationFrame(fitInstructionsPanels)
 }
 
 function showState(candidateState: string) {
@@ -149,6 +152,39 @@ function showState(candidateState: string) {
     panel.style.visibility = panel.id === targetId ? 'visible' : 'hidden'
   })
 }
+
+// Size each instruction block to the largest font that still fits its panel
+// whole — so a long Part 3 list on a small secondary screen isn't clipped,
+// and a short prompt on a big screen still fills the space. Binary search on
+// px; the panel is always window-sized (position: fixed; inset: 0) even
+// while hidden, so every panel can be measured up front. `.candidate-
+// instructions` is `max-*: 100%; overflow: hidden`, so scroll* > client*
+// means it's overflowing.
+function fitInstructionsPanels() {
+  document.querySelectorAll<HTMLElement>('#panels .polaroid').forEach(panel => {
+    const box = panel.querySelector<HTMLElement>('.candidate-instructions')
+    if (!box) return
+    const fits = () =>
+      box.scrollHeight <= box.clientHeight + 1 && box.scrollWidth <= box.clientWidth + 1
+    let lo = 14
+    let hi = 96
+    box.style.fontSize = `${hi}px`
+    if (fits()) return
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1
+      box.style.fontSize = `${mid}px`
+      if (fits()) lo = mid
+      else hi = mid
+    }
+    box.style.fontSize = `${lo}px`
+  })
+}
+
+let resizeTimer: ReturnType<typeof setTimeout> | undefined
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer)
+  resizeTimer = setTimeout(fitInstructionsPanels, 150)
+})
 
 let loadedItems: StorylineItem[] = []
 let lastState = BRAND_STATE
