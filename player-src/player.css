@@ -55,17 +55,18 @@ div.polaroid {
   justify-content: center;
 }
 
-/* Sized to the largest box of the image's own aspect ratio that fits the
-   cell — set inline from naturalWidth/Height in candidate.ts (the 4/3 here
-   is just a placeholder for the split-second before that runs). Because
-   this box *is* the rendered image, the A/B label pins to the image
-   corner instead of floating in the cell's letterbox space, and the image
-   scales *up* to fill big screens (plain max-width/height won't upscale). */
+/* Width/height are set in px by fitImageFrames() in candidate.ts to the
+   largest box of the image's own aspect ratio that fits the cell, so this
+   box *is* the rendered image: the A/B label pins to the image corner
+   instead of floating in the cell's letterbox space, and the image scales
+   *up* to fill big screens (plain max-width/height won't upscale). The
+   `100%` here is the pre-JS fallback (fills the cell, image letterboxed);
+   the image `load` handler fires the real sizing immediately for
+   cached/blob sources. */
 .image-frame {
   position: relative;
+  width: 100%;
   height: 100%;
-  max-width: 100%;
-  aspect-ratio: 4 / 3;
 }
 
 .image-frame img {

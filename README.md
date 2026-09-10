@@ -825,12 +825,16 @@ phase.
   trial)**: superseded all of the above. `div.polaroid` is now `position:
   fixed; inset: 0` — the panel *is* the window, no 70%-width card, no
   centring margin, minimal `vmin` padding — so content images and the logo
-  fill the screen. Each image sits in an `.image-frame` whose `aspect-ratio`
-  is set inline from the image's `naturalWidth/Height` in `candidate.ts`, so
-  the frame *is* the rendered picture: it scales **up** to fill a big
-  wall-mounted screen (plain `max-width/height` won't enlarge a smaller
-  source), and the A/B label (`position: absolute` in the frame) pins to the
-  image corner instead of floating in the cell's letterbox area. `.candidate-
+  fill the screen. Each image sits in an `.image-frame` that
+  `fitImageFrames()` in `candidate.ts` sizes in px (on image `load` + on
+  render + debounced `resize`) to the largest box of the image's own aspect
+  ratio that fits its cell — so the frame *is* the rendered picture: it
+  scales **up** to fill a big wall-mounted screen (plain `max-width/height`
+  won't enlarge a smaller source), and the A/B label (`position: absolute`
+  in the frame) pins to the image corner instead of floating in the cell's
+  letterbox area. (A CSS `aspect-ratio` + `height: 100%` version was tried
+  first but won't shrink the definite height back when `max-width` clamps,
+  so the frame stayed full-height and the label kept floating.) `.candidate-
   logo` is `width/height: 92%/88%; object-fit: contain` for the same
   scale-up reason. Two-up A/B pictures each take half the width (stack on a
   portrait/squarish window, `@media (max-aspect-ratio: 11/10)`). Text size

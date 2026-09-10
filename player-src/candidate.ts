@@ -94,13 +94,7 @@ function renderPanels(items: StorylineItem[]) {
         const img = document.createElement('img')
         img.src = url
         img.alt = state
-        const applyRatio = () => {
-          if (img.naturalWidth && img.naturalHeight) {
-            frame.style.aspectRatio = `${img.naturalWidth} / ${img.naturalHeight}`
-          }
-        }
-        if (img.complete) applyRatio()
-        img.addEventListener('load', applyRatio)
+        img.addEventListener('load', fitImageFrames)
         frame.appendChild(img)
         // A, B, C… labels so everyone can unambiguously refer to "picture A"
         // vs "picture B" once more than one image is shown at once.
@@ -151,8 +145,11 @@ function renderPanels(items: StorylineItem[]) {
   // Show the logo straight away, before the examiner sends any state.
   showState(BRAND_STATE)
 
-  // Fit instruction text once layout has settled.
-  requestAnimationFrame(fitInstructionsPanels)
+  // Fit text + images once layout has settled (image `load` also re-fits).
+  requestAnimationFrame(() => {
+    fitImageFrames()
+    fitInstructionsPanels()
+  })
 }
 
 function showState(candidateState: string) {
@@ -193,10 +190,34 @@ function fitInstructionsPanels() {
   })
 }
 
+// Size each .image-frame to the largest box of the image's own aspect ratio
+// that fits its cell, so the frame *is* the rendered picture — the A/B label
+// (absolutely positioned inside it) then pins to the image corner, and the
+// image scales up to fill a large wall-mounted screen. Done in JS because
+// CSS `aspect-ratio` + `height: 100%` won't shrink the definite height back
+// when `max-width` clamps, so the frame stayed full-height.
+function fitImageFrames() {
+  document.querySelectorAll<HTMLElement>('#panels .image-frame').forEach(frame => {
+    const img = frame.querySelector('img')
+    const cell = frame.parentElement
+    if (!img || !cell || !img.naturalWidth || !img.naturalHeight) return
+    const cw = cell.clientWidth
+    const ch = cell.clientHeight
+    if (!cw || !ch) return
+    const r = img.naturalWidth / img.naturalHeight
+    const [w, h] = cw / ch > r ? [ch * r, ch] : [cw, cw / r]
+    frame.style.width = `${Math.round(w)}px`
+    frame.style.height = `${Math.round(h)}px`
+  })
+}
+
 let resizeTimer: ReturnType<typeof setTimeout> | undefined
 window.addEventListener('resize', () => {
   clearTimeout(resizeTimer)
-  resizeTimer = setTimeout(fitInstructionsPanels, 150)
+  resizeTimer = setTimeout(() => {
+    fitImageFrames()
+    fitInstructionsPanels()
+  }, 150)
 })
 
 let loadedItems: StorylineItem[] = []
