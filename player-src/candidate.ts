@@ -86,18 +86,31 @@ function renderPanels(items: StorylineItem[]) {
       images.forEach((url, i) => {
         const cell = document.createElement('div')
         cell.className = 'image-cell'
+        // The frame is sized to the image's own aspect ratio (set below) so
+        // it's exactly the rendered picture — the A/B label then sits on the
+        // image corner, not in the cell's letterbox area.
+        const frame = document.createElement('div')
+        frame.className = 'image-frame'
         const img = document.createElement('img')
         img.src = url
         img.alt = state
-        cell.appendChild(img)
+        const applyRatio = () => {
+          if (img.naturalWidth && img.naturalHeight) {
+            frame.style.aspectRatio = `${img.naturalWidth} / ${img.naturalHeight}`
+          }
+        }
+        if (img.complete) applyRatio()
+        img.addEventListener('load', applyRatio)
+        frame.appendChild(img)
         // A, B, C… labels so everyone can unambiguously refer to "picture A"
         // vs "picture B" once more than one image is shown at once.
         if (images.length > 1) {
           const tag = document.createElement('span')
           tag.className = 'image-cell-label'
           tag.textContent = String.fromCharCode(65 + i)
-          cell.appendChild(tag)
+          frame.appendChild(tag)
         }
+        cell.appendChild(frame)
         imageRow.appendChild(cell)
       })
       panel.appendChild(imageRow)

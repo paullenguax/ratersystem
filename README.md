@@ -825,8 +825,15 @@ phase.
   trial)**: superseded all of the above. `div.polaroid` is now `position:
   fixed; inset: 0` — the panel *is* the window, no 70%-width card, no
   centring margin, minimal `vmin` padding — so content images and the logo
-  fill the screen (`.image-cell img` / `.candidate-logo`: `max-width/height:
-  100%; object-fit: contain`; two-up A/B pictures each take half). Text size
+  fill the screen. Each image sits in an `.image-frame` whose `aspect-ratio`
+  is set inline from the image's `naturalWidth/Height` in `candidate.ts`, so
+  the frame *is* the rendered picture: it scales **up** to fill a big
+  wall-mounted screen (plain `max-width/height` won't enlarge a smaller
+  source), and the A/B label (`position: absolute` in the frame) pins to the
+  image corner instead of floating in the cell's letterbox area. `.candidate-
+  logo` is `width/height: 92%/88%; object-fit: contain` for the same
+  scale-up reason. Two-up A/B pictures each take half the width (stack on a
+  portrait/squarish window, `@media (max-aspect-ratio: 11/10)`). Text size
   is set per-panel by `fitInstructionsPanels()` in `candidate.ts`: a binary
   search on px that shrinks each `.candidate-instructions` block to the
   largest size where `scrollHeight/Width <= clientHeight/Width` — i.e. it
@@ -836,9 +843,8 @@ phase.
   `max-*: 100%; overflow: hidden` with `em`-based spacing; the CSS
   `font-size: 2rem` is only a no-JS fallback. Re-fits on a debounced window
   `resize` (screen swap / window move). Still no scrolling — the text
-  shrinks instead. The A/B `@media` switch is now `max-aspect-ratio: 11/10`
-  (portrait/squarish → stack) rather than a px width. `#internet-status`
-  gained a white ring so it stays visible over a full-bleed image.
+  shrinks instead. `#internet-status` gained a white ring so it stays
+  visible over a full-bleed image.
   **Training-run export (added 2026-09-04)**: a second button, **"Training
   run"**, next to "Export" on published Practice versions
   (`StorylineVersionsPage`). It calls `exportStorylinePractice(test,
