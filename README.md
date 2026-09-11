@@ -373,6 +373,26 @@ phase.
   pairing appears (`StorylinePartEditorPage.tsx`, `StorylineVersionEditor
   Page.tsx`, `StorylineTestContentEditorPage.tsx`) and relabeling it
   "Volume check clip (played first, before the recording below)".
+- **Cross-Part media-reuse delete guard (2026-09-11)**: root-caused a real
+  incident — a shared `vol.mp3` volume-check clip's download URL had been
+  copy-pasted (not re-uploaded) into ~49 other Parts' own `volumeCheck`
+  fields to avoid duplicate uploads of a tiny reused clip, plus baked into
+  9 published/archived Versions' frozen snapshots. `handleDeleteArchived`'s
+  only pre-delete check was "does any Version's `partRefs` point at this
+  Part" — it had no way to see the copy-pasted-URL reuse, since that's not
+  a tracked reference anywhere, just a matching string. Deleting the
+  "unreferenced" owning Part wiped its Storage files (via `listAll` +
+  `deleteObject`) and broke every one of those 49+9 at once, silently,
+  with a 403 "Permission denied" surfacing later on whatever tried to
+  fetch the dead URL next (see `StorylineMediaCheckPage` below, built to
+  diagnose exactly this). Fixed: `handleDeleteArchived` now also collects
+  every media URL the Part's own `slotContent` holds and blocks the
+  delete — same hard-block posture as the existing `partRefs` check — if
+  any *other* Part's `slotContent` or any Version's frozen `items[].media`
+  contains one of them, naming what's sharing it. Doesn't (can't) guard
+  against a file deleted manually via the Firebase Console outside the
+  app. The underlying reuse-by-URL habit is otherwise unchanged and still
+  supported — this only stops it from being invisible at delete time.
 - **Access**: `storyline_tests`/`storyline_versions`/`storyline_parts`/
   `storyline_template`/`storylines/` Storage are admin-only for read *and*
   write (unlike `test_bank`'s `isSignedIn()`-read — test content should stay

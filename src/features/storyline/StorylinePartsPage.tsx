@@ -6,7 +6,7 @@ import { ref, listAll, deleteObject } from 'firebase/storage'
 import { ArrowLeft, Plus, Pencil, Rocket, Copy, Archive as ArchiveIcon, Trash2, PauseCircle, PlayCircle, Shield, ShieldOff, History, Tag, Download } from 'lucide-react'
 import { db, storage } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
-import type { StorylinePart, StorylinePartNumber, StorylinePartTheme, StorylineTemplate, StorylineTestType } from '@/types'
+import type { StorylinePart, StorylinePartNumber, StorylinePartTheme, StorylineTemplate, StorylineTestType, StorylineSlotContent, StorylineVersion } from '@/types'
 import { missingPartContent } from './partCompleteness'
 import { exportStorylinePart } from './exportStoryline'
 import { TEST_TYPES } from './StorylineTestDrawer'
@@ -191,6 +191,58 @@ export function StorylinePartsPage() {
       .map(d => `${d.data().versionLabel} (${d.data().status})`)
   }
 
+  // Every media URL a Part's own slotContent currently holds — used below
+  // to check whether some *other* Part/Version quietly reused one of them
+  // (copy-pasted the download URL into its own field instead of uploading
+  // a separate copy — a real, deliberate space-saving habit for small
+  // shared clips like a volume-check "can you hear this?" recording) rather
+  // than being tracked as a formal reference the way partRefs is. A real
+  // incident: deleting an "unreferenced" Part whose vol.mp3 URL had been
+  // copied into ~49 other Parts' own volumeCheck fields (plus baked into 9
+  // published/archived Versions' frozen snapshots) wiped that Storage file
+  // for all of them at once, with no warning, since findReferencingVersions
+  // above only sees partRefs, not copied URLs.
+  function collectPartUrls(slotContent: Record<string, StorylineSlotContent>): Set<string> {
+    const urls = new Set<string>()
+    for (const slot of Object.values(slotContent)) {
+      slot.images?.forEach(u => u && urls.add(u))
+      if (slot.audio?.intro) urls.add(slot.audio.intro)
+      slot.audio?.recordings?.forEach(u => u && urls.add(u))
+      if (slot.audio?.volumeCheck) urls.add(slot.audio.volumeCheck)
+    }
+    return urls
+  }
+
+  function slotContentUsesAnyUrl(slotContent: Record<string, StorylineSlotContent>, urls: Set<string>): boolean {
+    for (const slot of Object.values(slotContent)) {
+      if (slot.images?.some(u => u && urls.has(u))) return true
+      if (slot.audio?.intro && urls.has(slot.audio.intro)) return true
+      if (slot.audio?.recordings?.some(u => u && urls.has(u))) return true
+      if (slot.audio?.volumeCheck && urls.has(slot.audio.volumeCheck)) return true
+    }
+    return false
+  }
+
+  function findPartsSharingMedia(urls: Set<string>, excludePartId: string): string[] {
+    return parts
+      .filter(p => p.id !== excludePartId && slotContentUsesAnyUrl(p.slotContent, urls))
+      .map(p => `${p.label} (Part ${p.partNumber})`)
+  }
+
+  async function findVersionsSharingMedia(urls: Set<string>): Promise<string[]> {
+    const snap = await getDocs(collection(db, 'storyline_versions'))
+    const hits: string[] = []
+    for (const d of snap.docs) {
+      const version = d.data() as StorylineVersion
+      const usesIt = (version.items ?? []).some(item =>
+        item.media?.images?.some(u => u && urls.has(u)) ||
+        item.media?.audioClips?.some(c => c.url && urls.has(c.url)),
+      )
+      if (usesIt) hits.push(`${version.versionLabel} (${version.status})`)
+    }
+    return hits
+  }
+
   // Archived Parts have no editor/export surface left, so once nothing
   // references them they're safe to remove outright — unlike the draft-only
   // handleDelete above, which only warns. This is a hard block instead of a
@@ -203,6 +255,19 @@ export function StorylinePartsPage() {
     if (referencing.length > 0) {
       window.alert(`Can't delete "${part.label}" — still referenced by:\n${referencing.map(v => `- ${v}`).join('\n')}\n\nPick a different Part for those versions first.`)
       return
+    }
+    const urls = collectPartUrls(part.slotContent)
+    if (urls.size > 0) {
+      const sharingParts = findPartsSharingMedia(urls, part.id)
+      if (sharingParts.length > 0) {
+        window.alert(`Can't delete "${part.label}" — its media file(s) are also used by:\n${sharingParts.map(p => `- ${p}`).join('\n')}\n\nThose Parts were likely built by copying this Part's file URL rather than uploading a separate copy. Upload a separate copy of the shared file(s) onto each before deleting this Part, or its media will break for all of them.`)
+        return
+      }
+      const sharingVersions = await findVersionsSharingMedia(urls)
+      if (sharingVersions.length > 0) {
+        window.alert(`Can't delete "${part.label}" — its media file(s) are also baked into the published/archived snapshot of:\n${sharingVersions.map(v => `- ${v}`).join('\n')}\n\nDeleting now would break those too.`)
+        return
+      }
     }
     if (!window.confirm(`Permanently delete "${part.label}" and its uploaded audio/images? This can't be undone.`)) return
     const media = await listAll(ref(storage, `storylines/parts/${part.id}/`))
