@@ -5,7 +5,8 @@ import { collection, doc, getDoc, getDocs, writeBatch } from 'firebase/firestore
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage'
 import { ArrowLeft, PlayCircle, Wrench, Upload } from 'lucide-react'
 import { db, storage } from '@/lib/firebase'
-import type { StorylinePart, StorylineVersion, StorylineTest, StorylineSlotContent, StorylineItem, StorylineTemplate } from '@/types'
+import type { StorylinePart, StorylinePartNumber, StorylineVersion, StorylineTest, StorylineSlotContent, StorylineItem, StorylineTemplate } from '@/types'
+import { resolveItems } from './resolveItems'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -63,8 +64,10 @@ async function fetchAllRefs(): Promise<MediaRef[]> {
     getDoc(doc(db, 'storyline_template', 'current')),
   ])
   const parts = partsSnap.docs.map(d => ({ id: d.id, ...d.data() }) as StorylinePart)
+  const partById = new Map(parts.map(p => [p.id, p]))
+  const tests = testsSnap.docs.map(d => ({ id: d.id, ...d.data() }) as StorylineTest)
+  const testById = new Map(tests.map(t => [t.id, t]))
   const versions = versionsSnap.docs.map(d => ({ id: d.id, ...d.data() }) as StorylineVersion)
-  const testNameById = new Map(testsSnap.docs.map(d => [d.id, (d.data() as StorylineTest).name]))
   const template = templateSnap.exists() ? (templateSnap.data() as StorylineTemplate) : undefined
   const slideLabelById = new Map((template?.slides ?? []).map(s => [s.id, s.label]))
 
@@ -80,9 +83,30 @@ async function fetchAllRefs(): Promise<MediaRef[]> {
   }
 
   for (const version of versions) {
-    const testName = testNameById.get(version.testId) ?? version.testId
-    const label = `Version: ${testName} — ${version.versionLabel} (${version.status})`
-    for (const item of version.items ?? []) {
+    const test = testById.get(version.testId)
+    const label = `Version: ${test?.name ?? version.testId} — ${version.versionLabel} (${version.status})`
+    // Published/archived Versions carry their frozen, immutable snapshot in
+    // `items` — that's the file that actually got exported, so checking it
+    // (not a fresh resolve) answers "does the thing that's really out there
+    // work". A draft's `items` is empty by design (only Publish computes
+    // it — see StorylineVersion.items) — Preview instead resolves it live
+    // from the current template/Parts, so a draft-only check has to do the
+    // same thing here, or draft content (like a Part swap made mid-fix,
+    // exactly what surfaced this gap) is invisible to this whole page.
+    const items = version.status === 'draft' && template
+      ? resolveItems(
+          template.slides,
+          test?.variables,
+          version.slotContent ?? {},
+          Object.fromEntries(
+            Object.entries(version.partRefs ?? {})
+              .map(([n, id]) => [n, id ? partById.get(id) : undefined])
+              .filter(([, p]) => p),
+          ) as Partial<Record<StorylinePartNumber, StorylinePart>>,
+          `${test?.name ?? version.testId}: ${version.versionLabel}`,
+        )
+      : version.items ?? []
+    for (const item of items) {
       item.media?.images?.forEach((u, i) => u && add(u, `${label} · ${item.label} · image ${i + 1}`))
       item.media?.audioClips?.forEach(c => c.url && add(c.url, `${label} · ${item.label} · ${c.label || 'audio'}`))
     }

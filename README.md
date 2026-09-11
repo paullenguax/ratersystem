@@ -338,7 +338,15 @@ phase.
   straight off `item.label` for Versions) — added 2026-09-11 after the
   first version's labels collapsed a Part 3's 4 audio-bearing slides
   (Example, Set 1/2/3) into indistinguishable "recording 1" rows with no
-  way to tell which Set was actually broken. Each
+  way to tell which Set was actually broken. **A draft Version's media is
+  also live-resolved** (same `resolveItems()` call `handlePreview` uses,
+  fed `version.partRefs` looked up against the already-fetched Parts) —
+  `items` is only populated by Publish, so relying on it alone made this
+  page structurally blind to any draft, including a Part swap made mid-fix
+  (a real gap: a still-broken shared clip in one draft went unflagged while
+  the admin was actively working around it). Published/archived Versions
+  still check their frozen `items` as-is — that's the file that actually
+  got exported, deliberately not re-resolved fresh. Each
   broken row has a **Fix** action, which scrolls the fix panel into view
   (the broken-links table can easily run to 50+ rows, so without this a
   click on an early row opened a panel entirely off-screen and looked like
