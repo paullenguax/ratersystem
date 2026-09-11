@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { collection, doc, getDocs, writeBatch } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, writeBatch } from 'firebase/firestore'
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage'
 import { ArrowLeft, PlayCircle, Wrench, Upload } from 'lucide-react'
 import { db, storage } from '@/lib/firebase'
-import type { StorylinePart, StorylineVersion, StorylineTest, StorylineSlotContent, StorylineItem } from '@/types'
+import type { StorylinePart, StorylineVersion, StorylineTest, StorylineSlotContent, StorylineItem, StorylineTemplate } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -27,35 +27,46 @@ interface CheckResult {
   detail: string
 }
 
-function partSourceLabel(part: StorylinePart, field: string): string {
+// `slideLabelById` disambiguates *which* slide a Part's slot content
+// belongs to — a Part 3 has 4 audio-bearing slides (Example, Set 1, Set 2,
+// Set 3) all needing an "intro"/"recording 1/2/3", so without the slide's
+// own label every one of those would report as indistinguishable "audio
+// intro" / "recording 1" rows and there'd be no way to tell which Set is
+// actually broken.
+function partSourceLabel(part: StorylinePart, slideLabel: string | undefined, field: string): string {
   const tags = [part.retired && 'retired', part.isBackup && 'backup', part.status !== 'published' && part.status]
     .filter(Boolean)
     .join(', ')
-  return `Part: ${part.label} (Part ${part.partNumber}${tags ? ` — ${tags}` : ''}) · ${field}`
+  return `Part: ${part.label} (Part ${part.partNumber}${tags ? ` — ${tags}` : ''}) · ${slideLabel ?? 'unknown slide'} · ${field}`
 }
 
 function collectFromSlotContent(
   slotContent: Record<string, StorylineSlotContent> | undefined,
-  label: (field: string) => string,
+  slideLabelById: Map<string, string>,
+  label: (slideLabel: string | undefined, field: string) => string,
   add: (url: string, source: string) => void,
 ) {
-  for (const slot of Object.values(slotContent ?? {})) {
-    slot.images?.forEach((u, i) => u && add(u, label(`image ${i + 1}`)))
-    if (slot.audio?.intro) add(slot.audio.intro, label('audio intro'))
-    slot.audio?.recordings?.forEach((u, i) => u && add(u, label(`recording ${i + 1}`)))
-    if (slot.audio?.volumeCheck) add(slot.audio.volumeCheck, label('volume check'))
+  for (const [slideId, slot] of Object.entries(slotContent ?? {})) {
+    const slideLabel = slideLabelById.get(slideId)
+    slot.images?.forEach((u, i) => u && add(u, label(slideLabel, `image ${i + 1}`)))
+    if (slot.audio?.intro) add(slot.audio.intro, label(slideLabel, 'audio intro'))
+    slot.audio?.recordings?.forEach((u, i) => u && add(u, label(slideLabel, `recording ${i + 1}`)))
+    if (slot.audio?.volumeCheck) add(slot.audio.volumeCheck, label(slideLabel, 'volume check'))
   }
 }
 
 async function fetchAllRefs(): Promise<MediaRef[]> {
-  const [partsSnap, versionsSnap, testsSnap] = await Promise.all([
+  const [partsSnap, versionsSnap, testsSnap, templateSnap] = await Promise.all([
     getDocs(collection(db, 'storyline_parts')),
     getDocs(collection(db, 'storyline_versions')),
     getDocs(collection(db, 'storyline_tests')),
+    getDoc(doc(db, 'storyline_template', 'current')),
   ])
   const parts = partsSnap.docs.map(d => ({ id: d.id, ...d.data() }) as StorylinePart)
   const versions = versionsSnap.docs.map(d => ({ id: d.id, ...d.data() }) as StorylineVersion)
   const testNameById = new Map(testsSnap.docs.map(d => [d.id, (d.data() as StorylineTest).name]))
+  const template = templateSnap.exists() ? (templateSnap.data() as StorylineTemplate) : undefined
+  const slideLabelById = new Map((template?.slides ?? []).map(s => [s.id, s.label]))
 
   const byUrl = new Map<string, MediaRef>()
   const add = (url: string, source: string) => {
@@ -65,15 +76,15 @@ async function fetchAllRefs(): Promise<MediaRef[]> {
   }
 
   for (const part of parts) {
-    collectFromSlotContent(part.slotContent, field => partSourceLabel(part, field), add)
+    collectFromSlotContent(part.slotContent, slideLabelById, (slideLabel, field) => partSourceLabel(part, slideLabel, field), add)
   }
 
   for (const version of versions) {
     const testName = testNameById.get(version.testId) ?? version.testId
     const label = `Version: ${testName} — ${version.versionLabel} (${version.status})`
     for (const item of version.items ?? []) {
-      item.media?.images?.forEach((u, i) => u && add(u, `${label} · image ${i + 1}`))
-      item.media?.audioClips?.forEach(c => c.url && add(c.url, `${label} · ${c.label || 'audio'}`))
+      item.media?.images?.forEach((u, i) => u && add(u, `${label} · ${item.label} · image ${i + 1}`))
+      item.media?.audioClips?.forEach(c => c.url && add(c.url, `${label} · ${item.label} · ${c.label || 'audio'}`))
     }
   }
 

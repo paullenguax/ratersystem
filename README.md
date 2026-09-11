@@ -332,7 +332,13 @@ phase.
   request shape `bundleMedia()` already relies on working cross-origin)
   each unique URL with 6-way concurrency. Broken ones list every Part/
   Version that references them, so a shared-file break shows its whole
-  blast radius in one row instead of one failed export at a time. Each
+  blast radius in one row instead of one failed export at a time. Source
+  labels include the *slide's own label* (fetched from
+  `storyline_template/current` and joined by slide id for Parts, read
+  straight off `item.label` for Versions) — added 2026-09-11 after the
+  first version's labels collapsed a Part 3's 4 audio-bearing slides
+  (Example, Set 1/2/3) into indistinguishable "recording 1" rows with no
+  way to tell which Set was actually broken. Each
   broken row has a **Fix** action, which scrolls the fix panel into view
   (the broken-links table can easily run to 50+ rows, so without this a
   click on an early row opened a panel entirely off-screen and looked like
