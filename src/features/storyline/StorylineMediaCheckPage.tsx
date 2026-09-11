@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { collection, getDocs } from 'firebase/firestore'
-import { ArrowLeft, PlayCircle } from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { collection, doc, getDocs, writeBatch } from 'firebase/firestore'
+import { ArrowLeft, PlayCircle, Wrench } from 'lucide-react'
 import { db } from '@/lib/firebase'
-import type { StorylinePart, StorylineVersion, StorylineTest, StorylineSlotContent } from '@/types'
+import type { StorylinePart, StorylineVersion, StorylineTest, StorylineSlotContent, StorylineItem } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
 // One media URL to verify, with everywhere it's referenced from (the same
@@ -114,11 +116,88 @@ async function runWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T)
   return results
 }
 
+// Whole-field replace (not a targeted array-index update — Firestore has no
+// clean way to patch one string inside a nested array/map, and we already
+// have the full field loaded, so rebuilding it in JS and writing it back
+// whole is simpler and just as safe) of every occurrence of `oldUrl` with
+// `newUrl` across a Part's slotContent.
+function replaceUrlInSlotContent(
+  slotContent: Record<string, StorylineSlotContent>,
+  oldUrl: string,
+  newUrl: string,
+): { changed: boolean; result: Record<string, StorylineSlotContent> } {
+  let changed = false
+  const result: Record<string, StorylineSlotContent> = {}
+  for (const [slideId, slot] of Object.entries(slotContent)) {
+    const next: StorylineSlotContent = { ...slot }
+    if (next.images?.includes(oldUrl)) {
+      next.images = next.images.map(u => (u === oldUrl ? newUrl : u))
+      changed = true
+    }
+    if (next.audio) {
+      const audio = { ...next.audio }
+      let audioChanged = false
+      if (audio.intro === oldUrl) { audio.intro = newUrl; audioChanged = true }
+      if (audio.volumeCheck === oldUrl) { audio.volumeCheck = newUrl; audioChanged = true }
+      if (audio.recordings?.includes(oldUrl)) {
+        audio.recordings = audio.recordings.map(u => (u === oldUrl ? newUrl : u))
+        audioChanged = true
+      }
+      if (audioChanged) { next.audio = audio; changed = true }
+    }
+    result[slideId] = next
+  }
+  return { changed, result }
+}
+
+// Same idea for a Version's frozen `items[].media` — used when the fix
+// target is a published/archived Version's own snapshot rather than (or as
+// well as) a Part's editable slotContent.
+function replaceUrlInItems(
+  items: StorylineItem[],
+  oldUrl: string,
+  newUrl: string,
+): { changed: boolean; result: StorylineItem[] } {
+  let changed = false
+  const result = items.map(item => {
+    if (!item.media) return item
+    const media = { ...item.media }
+    let itemChanged = false
+    if (media.images?.includes(oldUrl)) {
+      media.images = media.images.map(u => (u === oldUrl ? newUrl : u))
+      itemChanged = true
+    }
+    if (media.audioClips?.some(c => c.url === oldUrl)) {
+      media.audioClips = media.audioClips.map(c => (c.url === oldUrl ? { ...c, url: newUrl } : c))
+      itemChanged = true
+    }
+    if (!itemChanged) return item
+    changed = true
+    return { ...item, media }
+  })
+  return { changed, result }
+}
+
+interface FixPreview {
+  oldUrl: string
+  newUrl: string
+  parts: { id: string; label: string; slotContent: Record<string, StorylineSlotContent> }[]
+  versions: { id: string; label: string; items: StorylineItem[] }[]
+}
+
 export function StorylineMediaCheckPage() {
+  const queryClient = useQueryClient()
   const { data: refs = [], isLoading } = useQuery({ queryKey: ['storyline_media_refs'], queryFn: fetchAllRefs })
   const [running, setRunning] = useState(false)
   const [checked, setChecked] = useState(0)
   const [results, setResults] = useState<CheckResult[] | null>(null)
+
+  const [fixingUrl, setFixingUrl] = useState<string | null>(null)
+  const [newUrlInput, setNewUrlInput] = useState('')
+  const [preview, setPreview] = useState<FixPreview | null>(null)
+  const [previewing, setPreviewing] = useState(false)
+  const [applying, setApplying] = useState(false)
+  const [fixMessage, setFixMessage] = useState<string | null>(null)
 
   async function runCheck() {
     setRunning(true)
@@ -135,6 +214,62 @@ export function StorylineMediaCheckPage() {
     )
     setResults(out)
     setRunning(false)
+  }
+
+  function startFix(url: string) {
+    setFixingUrl(url)
+    setNewUrlInput('')
+    setPreview(null)
+    setFixMessage(null)
+  }
+
+  // Read-only scan — no writes yet. Finds every Part/Version that would
+  // change, so the admin sees the blast radius before anything is touched.
+  async function previewFix() {
+    if (!fixingUrl || !newUrlInput.trim()) return
+    setPreviewing(true)
+    setFixMessage(null)
+    try {
+      const oldUrl = fixingUrl
+      const newUrl = newUrlInput.trim()
+      const [partsSnap, versionsSnap] = await Promise.all([
+        getDocs(collection(db, 'storyline_parts')),
+        getDocs(collection(db, 'storyline_versions')),
+      ])
+      const parts: FixPreview['parts'] = []
+      for (const d of partsSnap.docs) {
+        const part = { id: d.id, ...d.data() } as StorylinePart
+        const { changed, result } = replaceUrlInSlotContent(part.slotContent, oldUrl, newUrl)
+        if (changed) parts.push({ id: part.id, label: `${part.label} (Part ${part.partNumber})`, slotContent: result })
+      }
+      const versions: FixPreview['versions'] = []
+      for (const d of versionsSnap.docs) {
+        const version = { id: d.id, ...d.data() } as StorylineVersion
+        const { changed, result } = replaceUrlInItems(version.items ?? [], oldUrl, newUrl)
+        if (changed) versions.push({ id: version.id, label: `${version.versionLabel} (${version.status})`, items: result })
+      }
+      setPreview({ oldUrl, newUrl, parts, versions })
+    } finally {
+      setPreviewing(false)
+    }
+  }
+
+  async function applyFix() {
+    if (!preview) return
+    setApplying(true)
+    try {
+      const batch = writeBatch(db)
+      preview.parts.forEach(p => batch.update(doc(db, 'storyline_parts', p.id), { slotContent: p.slotContent }))
+      preview.versions.forEach(v => batch.update(doc(db, 'storyline_versions', v.id), { items: v.items }))
+      await batch.commit()
+      setFixMessage(`Updated ${preview.parts.length} Part(s) and ${preview.versions.length} Version(s).`)
+      setPreview(null)
+      setFixingUrl(null)
+      queryClient.invalidateQueries({ queryKey: ['storyline_media_refs'] })
+      setResults(r => (r ? r.filter(x => x.url !== preview.oldUrl) : r))
+    } finally {
+      setApplying(false)
+    }
   }
 
   const broken = results?.filter(r => !r.ok) ?? []
@@ -176,6 +311,7 @@ export function StorylineMediaCheckPage() {
                 <TableHead>Referenced by</TableHead>
                 <TableHead>Problem</TableHead>
                 <TableHead>URL</TableHead>
+                <TableHead />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -190,12 +326,63 @@ export function StorylineMediaCheckPage() {
                   <TableCell className="text-xs text-muted-foreground max-w-md truncate">
                     <a href={r.url} target="_blank" rel="noreferrer" className="hover:underline">{r.url}</a>
                   </TableCell>
+                  <TableCell>
+                    <Button variant="outline" size="sm" onClick={() => startFix(r.url)}>
+                      <Wrench className="size-4 mr-1" /> Fix
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </div>
       )}
+
+      {fixingUrl && (
+        <div className="rounded-md border p-4 space-y-3 max-w-2xl">
+          <h2 className="font-semibold">Replace a broken URL</h2>
+          <div className="space-y-1">
+            <Label>Old (broken) URL</Label>
+            <p className="text-xs text-muted-foreground break-all">{fixingUrl}</p>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="new-url">New URL — upload a replacement file first (Parts Library or a
+              Version's content editor), then paste its download URL here</Label>
+            <Input id="new-url" value={newUrlInput} onChange={e => setNewUrlInput(e.target.value)} placeholder="https://firebasestorage.googleapis.com/…" />
+          </div>
+          <div className="flex items-center gap-3">
+            <Button variant="outline" onClick={previewFix} disabled={previewing || !newUrlInput.trim()}>
+              {previewing ? 'Scanning…' : 'Preview changes'}
+            </Button>
+            <Button variant="ghost" onClick={() => setFixingUrl(null)}>Cancel</Button>
+          </div>
+
+          {preview && (
+            <div className="space-y-2 pt-2 border-t">
+              <p className="text-sm">
+                This will update <strong>{preview.parts.length}</strong> Part(s) and{' '}
+                <strong>{preview.versions.length}</strong> Version(s) — including any published or
+                archived ones, whose frozen snapshot will be edited directly.
+              </p>
+              {preview.parts.length + preview.versions.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No matches found — check the old URL is exact.</p>
+              ) : (
+                <>
+                  <ul className="text-sm text-muted-foreground list-disc pl-5 max-h-48 overflow-y-auto">
+                    {preview.parts.map(p => <li key={p.id}>Part: {p.label}</li>)}
+                    {preview.versions.map(v => <li key={v.id}>Version: {v.label}</li>)}
+                  </ul>
+                  <Button onClick={applyFix} disabled={applying}>
+                    {applying ? 'Applying…' : `Apply fix to ${preview.parts.length + preview.versions.length} doc(s)`}
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {fixMessage && <p className="text-sm text-green-600">{fixMessage}</p>}
     </div>
   )
 }

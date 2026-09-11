@@ -332,7 +332,16 @@ phase.
   request shape `bundleMedia()` already relies on working cross-origin)
   each unique URL with 6-way concurrency. Broken ones list every Part/
   Version that references them, so a shared-file break shows its whole
-  blast radius in one row instead of one failed export at a time.
+  blast radius in one row instead of one failed export at a time. Each
+  broken row has a **Fix** action: paste the URL of a freshly re-uploaded
+  replacement, **Preview changes** does a read-only scan showing exactly
+  which Parts/Versions would change, then **Apply** whole-field-replaces
+  `slotContent`/`items` on just those docs in one `writeBatch`. Deliberately
+  edits published/archived Versions' frozen snapshots directly rather than
+  routing through Duplicate → Publish — an explicit exception to the
+  immutability convention elsewhere in this feature, accepted for dead-link
+  repairs on low-stakes sample/backup content (confirmed 2026-09-11); don't
+  extend this pattern to real content edits.
   `StorylineTestContentEditorPage` (`/test-versions/:testId/content`, "Content"
   from the Test Types list) is the whole-test-slide equivalent of
   `StorylinePartEditorPage`, also part of the dynamic Part-pooling work
