@@ -21,6 +21,7 @@ import { StorylineThemeRulesPage } from '@/features/storyline/StorylineThemeRule
 import { StorylineTestContentEditorPage } from '@/features/storyline/StorylineTestContentEditorPage'
 import { SampleCollectionPage } from '@/features/storyline/SampleCollectionPage'
 import { StorylineActivityPage } from '@/features/storyline/StorylineActivityPage'
+import { StorylineMediaCheckPage } from '@/features/storyline/StorylineMediaCheckPage'
 // Lazy — react-markdown + remark-gfm + the bundled manual content is a
 // chunk of weight nobody needs until they open /manual.
 const ManualPage = lazy(() =>
@@ -89,6 +90,7 @@ export default function App() {
                 <Route path="test-versions/parts/:partId/edit" element={<ProtectedRoute allowedRoles={['admin']}><StorylinePartEditorPage /></ProtectedRoute>} />
                 <Route path="test-versions/themes" element={<ProtectedRoute allowedRoles={['admin']}><StorylineThemeRulesPage /></ProtectedRoute>} />
                 <Route path="test-versions/activity" element={<ProtectedRoute allowedRoles={['admin']}><StorylineActivityPage /></ProtectedRoute>} />
+                <Route path="test-versions/media-check" element={<ProtectedRoute allowedRoles={['admin']}><StorylineMediaCheckPage /></ProtectedRoute>} />
                 <Route path="test-versions/:testId/content" element={<ProtectedRoute allowedRoles={['admin']}><StorylineTestContentEditorPage /></ProtectedRoute>} />
                 <Route path="test-versions/:testId" element={<ProtectedRoute allowedRoles={['admin']}><StorylineVersionsPage /></ProtectedRoute>} />
                 <Route path="test-versions/:testId/versions/:versionId/edit" element={<ProtectedRoute allowedRoles={['admin']}><StorylineVersionEditorPage /></ProtectedRoute>} />

@@ -320,6 +320,19 @@ phase.
   `config/storyline` notification-email fields (ops / compliance) editable
   inline. Most-recent 500 events; tolerant of both current `{event,…}` docs
   and legacy `{type,subtype,…}` ones. See "Telemetry" below.
+  `StorylineMediaCheckPage` (`/test-versions/media-check`, "Check media
+  links" from the Test Types header, admin-only, added 2026-09-11 after a
+  Storage download-token going stale mid-export) walks every `storyline_parts`
+  Part's `slotContent` and every `storyline_versions` Version's frozen
+  `items[].media`, dedupes by URL (deliberately — content authors reuse one
+  upload's URL across many Parts rather than re-uploading, e.g. a shared
+  `vol.mp3` volume-check clip copied into dozens of Part 2s, so one dead
+  token can silently break every one of them at once), and ranged-GETs
+  (`Range: bytes=0-0` — first byte only, not a full download; matches the
+  request shape `bundleMedia()` already relies on working cross-origin)
+  each unique URL with 6-way concurrency. Broken ones list every Part/
+  Version that references them, so a shared-file break shows its whole
+  blast radius in one row instead of one failed export at a time.
   `StorylineTestContentEditorPage` (`/test-versions/:testId/content`, "Content"
   from the Test Types list) is the whole-test-slide equivalent of
   `StorylinePartEditorPage`, also part of the dynamic Part-pooling work
@@ -1316,4 +1329,4 @@ sidebar as "User Manual".
 
 ## Last updated
 
-2026-09-08
+2026-09-11
