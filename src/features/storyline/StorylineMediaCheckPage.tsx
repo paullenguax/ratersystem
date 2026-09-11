@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { collection, doc, getDocs, writeBatch } from 'firebase/firestore'
-import { ArrowLeft, PlayCircle, Wrench } from 'lucide-react'
-import { db } from '@/lib/firebase'
+import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage'
+import { ArrowLeft, PlayCircle, Wrench, Upload } from 'lucide-react'
+import { db, storage } from '@/lib/firebase'
 import type { StorylinePart, StorylineVersion, StorylineTest, StorylineSlotContent, StorylineItem } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -198,6 +199,16 @@ export function StorylineMediaCheckPage() {
   const [previewing, setPreviewing] = useState(false)
   const [applying, setApplying] = useState(false)
   const [fixMessage, setFixMessage] = useState<string | null>(null)
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+
+  // The panel renders below the whole broken-links table, which can easily
+  // run to 50+ rows — without this, clicking "Fix" on an early row opens a
+  // panel that's completely off-screen and looks like the click did nothing.
+  useEffect(() => {
+    if (fixingUrl) panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [fixingUrl])
 
   async function runCheck() {
     setRunning(true)
@@ -221,6 +232,27 @@ export function StorylineMediaCheckPage() {
     setNewUrlInput('')
     setPreview(null)
     setFixMessage(null)
+  }
+
+  // Uploaded to a dedicated shared-media location, deliberately not any one
+  // Part's own folder — this fix is for URLs that got reused across many
+  // Parts/Versions in the first place (no single Part "owns" it any more),
+  // so a future Part deletion elsewhere should never be able to take this
+  // replacement out from under everything that now depends on it too.
+  function handleReplacementUpload(file: File) {
+    const path = `storylines/shared-media/${Date.now()}_${file.name}`
+    const task = uploadBytesResumable(storageRef(storage, path), file)
+    setUploadProgress(0)
+    task.on(
+      'state_changed',
+      snap => setUploadProgress(Math.round((snap.bytesTransferred / snap.totalBytes) * 100)),
+      () => setUploadProgress(null),
+      async () => {
+        const url = await getDownloadURL(task.snapshot.ref)
+        setNewUrlInput(url)
+        setUploadProgress(null)
+      },
+    )
   }
 
   // Read-only scan — no writes yet. Finds every Part/Version that would
@@ -339,15 +371,33 @@ export function StorylineMediaCheckPage() {
       )}
 
       {fixingUrl && (
-        <div className="rounded-md border p-4 space-y-3 max-w-2xl">
+        <div ref={panelRef} className="rounded-md border p-4 space-y-3 max-w-2xl scroll-mt-4">
           <h2 className="font-semibold">Replace a broken URL</h2>
           <div className="space-y-1">
             <Label>Old (broken) URL</Label>
             <p className="text-xs text-muted-foreground break-all">{fixingUrl}</p>
           </div>
           <div className="space-y-1">
-            <Label htmlFor="new-url">New URL — upload a replacement file first (Parts Library or a
-              Version's content editor), then paste its download URL here</Label>
+            <Label htmlFor="new-url">Replacement file</Label>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadProgress !== null}
+              >
+                <Upload className="size-4 mr-2" />
+                {uploadProgress !== null ? `Uploading… ${uploadProgress}%` : 'Upload replacement'}
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="audio/*,image/*"
+                className="sr-only"
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleReplacementUpload(f) }}
+              />
+              <span className="text-sm text-muted-foreground">or paste a URL you already have:</span>
+            </div>
             <Input id="new-url" value={newUrlInput} onChange={e => setNewUrlInput(e.target.value)} placeholder="https://firebasestorage.googleapis.com/…" />
           </div>
           <div className="flex items-center gap-3">

@@ -333,15 +333,26 @@ phase.
   each unique URL with 6-way concurrency. Broken ones list every Part/
   Version that references them, so a shared-file break shows its whole
   blast radius in one row instead of one failed export at a time. Each
-  broken row has a **Fix** action: paste the URL of a freshly re-uploaded
-  replacement, **Preview changes** does a read-only scan showing exactly
-  which Parts/Versions would change, then **Apply** whole-field-replaces
-  `slotContent`/`items` on just those docs in one `writeBatch`. Deliberately
-  edits published/archived Versions' frozen snapshots directly rather than
+  broken row has a **Fix** action, which scrolls the fix panel into view
+  (the broken-links table can easily run to 50+ rows, so without this a
+  click on an early row opened a panel entirely off-screen and looked like
+  it did nothing): **Upload replacement** uploads straight to
+  `storylines/shared-media/{timestamp}_{filename}` — deliberately not any
+  one Part's own folder, since this fix is for URLs that got reused across
+  many Parts/Versions in the first place, so a future Part deletion
+  elsewhere can never take the replacement out from under everything that
+  now depends on it too — or paste a URL you already have. **Preview
+  changes** does a read-only scan showing exactly which Parts/Versions
+  would change, then **Apply** whole-field-replaces `slotContent`/`items`
+  on just those docs in one `writeBatch`. Deliberately edits
+  published/archived Versions' frozen snapshots directly rather than
   routing through Duplicate → Publish — an explicit exception to the
   immutability convention elsewhere in this feature, accepted for dead-link
   repairs on low-stakes sample/backup content (confirmed 2026-09-11); don't
-  extend this pattern to real content edits.
+  extend this pattern to real content edits. `storage.rules` needs
+  `storylines/shared-media/{fileName}` (admin read/write) for the upload to
+  work — deployed separately from the app via `firebase deploy --only
+  storage`, same as any Firestore rules change.
   `StorylineTestContentEditorPage` (`/test-versions/:testId/content`, "Content"
   from the Test Types list) is the whole-test-slide equivalent of
   `StorylinePartEditorPage`, also part of the dynamic Part-pooling work

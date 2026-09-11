@@ -77,6 +77,16 @@ service firebase.storage {
       allow read, write: if isAdmin();
     }
 
+    // ── storylines/shared-media ──────────────────────────────────────────────
+    // Deliberately-shared assets (e.g. a volume-check clip reused across many
+    // Parts) uploaded from StorylineMediaCheckPage.tsx's "Fix" flow — not
+    // scoped to any one Part's folder, specifically so deleting a Part can
+    // never take a shared asset out from under everything else that uses it.
+
+    match /storylines/shared-media/{fileName} {
+      allow read, write: if isAdmin();
+    }
+
     // ── default deny ─────────────────────────────────────────────────────────
 
     match /{allPaths=**} {
