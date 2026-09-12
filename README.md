@@ -250,6 +250,14 @@ phase.
   been retagged out of eligibility, so an existing draft doesn't silently
   lose its selection. A Version just references one Part per number
   (`partRefs`) and supplies its own whole-test slide content directly.
+  `partRefs` is never touched by Publish (only `items`/`status`/
+  `publishedAt` are written) so it survives on a published/archived Version
+  forever, and the editor page already rendered it read-only once
+  `disabled` (`status !== 'draft'`) kicked in — but `StorylineVersionsPage`
+  only linked to that page for drafts ("Edit"), so "which Parts did this
+  actually use" was answerable only by knowing the URL by hand. Fixed
+  2026-09-12: non-draft Versions now get a **View Parts** link to the same
+  route instead.
   A single shared `storyline_template/current` doc (`StorylineTemplate`,
   edited on `StorylineTemplateEditorPage`) holds the fixed examiner wording
   as an ordered list of `TemplateSlide`s — `{questions}`/`{topic}` are
@@ -1383,4 +1391,4 @@ sidebar as "User Manual".
 
 ## Last updated
 
-2026-09-11
+2026-09-12

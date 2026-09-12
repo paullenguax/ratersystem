@@ -4,7 +4,7 @@ import {
   collection, query, where, getDocs, doc, getDoc,
   addDoc, updateDoc, deleteDoc, serverTimestamp,
 } from 'firebase/firestore'
-import { ArrowLeft, Plus, Pencil, Eye, Rocket, Copy, Archive as ArchiveIcon, Download, Lock, LockOpen, Trash2 } from 'lucide-react'
+import { ArrowLeft, Plus, Pencil, Eye, Info, Rocket, Copy, Archive as ArchiveIcon, Download, Lock, LockOpen, Trash2 } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
 import type { StorylinePart, StorylinePartNumber, StorylineTemplate, StorylineTest, StorylineVersion } from '@/types'
@@ -347,9 +347,21 @@ export function StorylineVersionsPage() {
                             ? <><Lock className="size-4 mr-1" /> Make gated</>
                             : <><LockOpen className="size-4 mr-1" /> Make ungated</>}
                         </Button>
-                        {version.status === 'draft' && (
+                        {version.status === 'draft' ? (
                           <Button variant="ghost" size="sm" nativeButton={false} render={<Link to={`/test-versions/${testId}/versions/${version.id}/edit`} />}>
                             <Pencil className="size-4 mr-1" /> Edit
+                          </Button>
+                        ) : (
+                          // Published/archived Versions keep their partRefs
+                          // forever (Publish only ever writes items/status/
+                          // publishedAt, never touches partRefs) — this page
+                          // already renders that read-only once `disabled`
+                          // kicks in, it just had no link pointing at it once
+                          // a Version left draft, so "which Parts did this
+                          // actually use" was only answerable by knowing the
+                          // URL by hand.
+                          <Button variant="ghost" size="sm" nativeButton={false} render={<Link to={`/test-versions/${testId}/versions/${version.id}/edit`} />}>
+                            <Info className="size-4 mr-1" /> View Parts
                           </Button>
                         )}
                         <Button variant="ghost" size="sm" onClick={() => handlePreview(version)}>
