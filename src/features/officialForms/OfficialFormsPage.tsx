@@ -151,7 +151,7 @@ export function OfficialFormsPage() {
       let spUrl: string | null = null
       if (msStatus === 'connected') {
         try {
-          spUrl = await uploadToSharePoint(blob, filename, SP_FOLDER_CAA)
+          spUrl = (await uploadToSharePoint(blob, filename, SP_FOLDER_CAA)).webUrl
           setCaaSharePointUrl(spUrl)
         } catch (err) {
           setCaaSharePointErr(err instanceof Error ? err.message : 'SharePoint upload failed')
@@ -210,7 +210,7 @@ export function OfficialFormsPage() {
       let spUrl: string | null = null
       if (msStatus === 'connected') {
         try {
-          spUrl = await uploadToSharePoint(blob, filename, SP_FOLDER_DGAC)
+          spUrl = (await uploadToSharePoint(blob, filename, SP_FOLDER_DGAC)).webUrl
           setDgacSharePointUrl(spUrl)
         } catch (err) {
           setDgacSharePointErr(err instanceof Error ? err.message : 'SharePoint upload failed')

@@ -55,7 +55,8 @@ Role is determined by the `people` Firestore collection — the doc ID **must** 
 | `assignments` | session + rater + tests; unit of work; `source: 'self_serve'` marks ones created by the self-serve flow; `category` (`'rater_course'` default, or `'standardization'`) determines which test pool and player the assignment uses; `confirmedAt` is the rater's explicit "yes, these are my answers" lock-in — distinct from `status: 'submitted'`, which just means all tests are scored |
 | `scores` | Individual ICAO scores per rater per test (rater-course assignments only) |
 | `standardization_scores` | Same shape as `scores` plus a `comments` field (≤250 chars), kept in a separate collection so standardization results never mix with rater-course scores — see "Standardization" below |
-| `certificates` | Lenguax cert records (L-prefix numbers) |
+| `certificates` | Lenguax cert records (L-prefix numbers); `sharePointItemId`/`shareLink`/`shareLinkExpiresAt` hold the per-candidate anonymous SharePoint view link, when one has been issued |
+| `certificateShareLinkLog` | Append-only audit trail of anonymous share links issued for certificates (candidate, cert number, link, expiry, issuer, timestamp) — admin read/write only |
 | `official_forms` | CAA 5012 and DGAC 87i records |
 | `cert_config/templates` | Storage URL overrides per cert type |
 | `benchmark_items` | MCQ items for Benchmark Check — vocabulary/structure/comprehension constructs, reading/listening modalities |
@@ -122,6 +123,14 @@ Any already-active user can reset their own password anytime via "Forgot passwor
 **DGAC 87i-Formlic** — pdf-lib AcroForm field filling on `87iFormlic.pdf`; page 2 has hardcoded X ticks + signature/stamp overlays
 
 Certificate validation is public at `/validate/:certNumber` (no auth required).
+
+### SharePoint save + shareable links (`src/lib/oneDrive.ts`, `src/lib/msal.ts`)
+
+Certificates, CAA 5012s and DGAC 87i's optionally upload to the SUPERADMIN SharePoint site (`lxuk.sharepoint.com/sites/SUPERADMIN`) via Microsoft Graph, using a per-staff-member delegated MSAL sign-in (`Files.ReadWrite.All`) from the "Connect"/"Disconnect" bar in the Certificates and Official Forms pages — there's no service account; uploads simply don't happen if nobody's connected. `SP_FOLDERS_CERT`/`SP_FOLDER_CAA`/`SP_FOLDER_DGAC` map form types to destination folders (e.g. cert type `'1'` → `Course Certificates/Rater`).
+
+For certificates specifically (not CAA/DGAC), once the PDF is uploaded, `createAnonymousViewLink` calls Graph's `createLink` action to also mint a **per-candidate**, read-only, no-sign-in link (`type: 'view'`, `scope: 'anonymous'`), defaulting to a 90-day expiry (Microsoft enforces a tenant-wide max on anonymous links, so don't assume a permanent one). The link and its actual (possibly tenant-clamped) expiry are stored on the `certificates` doc as `shareLink`/`shareLinkExpiresAt`, alongside `sharePointItemId` so the link can be regenerated later without re-uploading the file. Every link issued (create or regenerate) is also appended to `certificateShareLinkLog` for an audit trail. The Certificates page's records table shows expiry status and a regenerate action once a link exists (or a "Create" action if the record predates a link but has a stored `sharePointItemId`).
+
+If `createLink` fails with a permissions/policy error, that means anonymous ("Anyone") links are disabled at the tenant or SUPERADMIN site level — it's a SharePoint admin setting (tenant sharing policy + site-level external sharing), not a code fix; the error surfaced in the UI says as much.
 
 ## Canvas naming convention
 

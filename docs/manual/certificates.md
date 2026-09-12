@@ -10,6 +10,14 @@ the table.
 **Validation**: anyone can check a certificate at `/validate/<number>` by
 entering the number and PIN — it shows the real PDF.
 
+**Sharing with candidates**: once connected to SharePoint (see banner at the
+top of the page), generating a certificate also creates a per-candidate,
+read-only, no-sign-in link — safe to email or message to someone outside our
+Microsoft tenant. It's shown under the result and also lives in the records
+table (with its expiry date), where it can be copied or regenerated at any
+time. Links expire after 90 days by default; use the regenerate button (↻)
+once one has expired, or to extend one that's about to.
+
 **Templates**: swap the template image or artwork under
 **Admin → Cert Assets**; new certificates pick it up immediately, and so
 does the public validation page.

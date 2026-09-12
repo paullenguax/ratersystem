@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { collection, getDocs, addDoc, deleteDoc, doc, query, where, serverTimestamp } from 'firebase/firestore'
-import { Copy, Check, ExternalLink, Download, Trash2, CloudUpload, LogOut, Link } from 'lucide-react'
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, serverTimestamp } from 'firebase/firestore'
+import { Copy, Check, ExternalLink, Download, Trash2, CloudUpload, LogOut, Link, RefreshCw, Share2 } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
 import { Button } from '@/components/ui/button'
@@ -11,7 +11,7 @@ import {
   generateCertNumber, generatePIN, buildCertPDF, resolveTemplateUrl,
 } from './certGen'
 import { msSignIn, msSignOut, getMsAccount, getTokenStatus } from '@/lib/msal'
-import { uploadToSharePoint, SP_FOLDERS_CERT } from '@/lib/oneDrive'
+import { uploadToSharePoint, createAnonymousViewLink, SP_FOLDERS_CERT } from '@/lib/oneDrive'
 
 interface CertRecord {
   id: string
@@ -23,6 +23,20 @@ interface CertRecord {
   certTypeName: string
   createdAt?: { seconds: number }
   sharePointUrl?: string
+  sharePointItemId?: string
+  shareLink?: string
+  shareLinkExpiresAt?: string
+}
+
+function daysUntil(iso: string): number {
+  return Math.ceil((new Date(iso).getTime() - Date.now()) / (24 * 60 * 60 * 1000))
+}
+
+async function logShareLink(entry: { certificateId: string; certNumber: string; candidateName: string; link: string; expiresAt: string; issuedBy: string }) {
+  await addDoc(collection(db, 'certificateShareLinkLog'), {
+    ...entry,
+    issuedAt: serverTimestamp(),
+  })
 }
 
 const VALIDATION_BASE = 'https://lenguax.com/ratersystem/validate'
@@ -62,7 +76,11 @@ export function CertificatesPage() {
   const [msSignInErr, setMsSignInErr]   = useState<string | null>(null)
   const [certSpUrl, setCertSpUrl]       = useState<string | null>(null)
   const [certSpErr, setCertSpErr]       = useState<string | null>(null)
+  const [certShareLink, setCertShareLink]           = useState<{ url: string; expiresAt: string } | null>(null)
+  const [certShareLinkErr, setCertShareLinkErr]     = useState<string | null>(null)
   const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null)
+  const [regeneratingId, setRegeneratingId] = useState<string | null>(null)
+  const [regenerateErr, setRegenerateErr]   = useState<{ id: string; msg: string } | null>(null)
 
   async function handleMsSignIn() {
     setMsSignInErr(null)
@@ -97,6 +115,8 @@ export function CertificatesPage() {
     setGenerating(true)
     setCertSpUrl(null)
     setCertSpErr(null)
+    setCertShareLink(null)
+    setCertShareLinkErr(null)
     try {
       const templateUrl = await resolveTemplateUrl(certType, TEMPLATE_BASE)
       const pdf = await buildCertPDF({
@@ -114,17 +134,31 @@ export function CertificatesPage() {
       pdf.save(filename)
 
       let spUrl: string | null = null
+      let spItemId: string | null = null
+      let shareLink: { url: string; expiresAt: string } | null = null
       if (msStatus === 'connected') {
         try {
           const blob = pdf.output('blob')
-          spUrl = await uploadToSharePoint(blob, filename, SP_FOLDERS_CERT[certType])
+          const uploaded = await uploadToSharePoint(blob, filename, SP_FOLDERS_CERT[certType])
+          spUrl = uploaded.webUrl
+          spItemId = uploaded.itemId
           setCertSpUrl(spUrl)
         } catch (err) {
           setCertSpErr(err instanceof Error ? err.message : 'SharePoint upload failed')
         }
+
+        // Per-candidate anonymous view link — only once the file itself is up.
+        if (spItemId) {
+          try {
+            shareLink = await createAnonymousViewLink(spItemId)
+            setCertShareLink(shareLink)
+          } catch (err) {
+            setCertShareLinkErr(err instanceof Error ? err.message : 'Could not create shareable link')
+          }
+        }
       }
 
-      await addDoc(collection(db, 'certificates'), {
+      const docRef = await addDoc(collection(db, 'certificates'), {
         certNumber,
         pin,
         name: name.trim(),
@@ -133,13 +167,52 @@ export function CertificatesPage() {
         certTypeName: selectedType.label,
         createdBy: user?.uid ?? '',
         ...(spUrl ? { sharePointUrl: spUrl } : {}),
+        ...(spItemId ? { sharePointItemId: spItemId } : {}),
+        ...(shareLink ? { shareLink: shareLink.url, shareLinkExpiresAt: shareLink.expiresAt } : {}),
         createdAt: serverTimestamp(),
       })
+
+      if (shareLink) {
+        await logShareLink({
+          certificateId: docRef.id,
+          certNumber,
+          candidateName: name.trim(),
+          link: shareLink.url,
+          expiresAt: shareLink.expiresAt,
+          issuedBy: user?.uid ?? '',
+        })
+      }
 
       setGenerated({ certNumber, pin })
       queryClient.invalidateQueries({ queryKey: ['certificates'] })
     } finally {
       setGenerating(false)
+    }
+  }
+
+  async function handleRegenerateLink(rec: CertRecord) {
+    if (!rec.sharePointItemId) return
+    setRegeneratingId(rec.id)
+    setRegenerateErr(null)
+    try {
+      const shareLink = await createAnonymousViewLink(rec.sharePointItemId)
+      await updateDoc(doc(db, 'certificates', rec.id), {
+        shareLink: shareLink.url,
+        shareLinkExpiresAt: shareLink.expiresAt,
+      })
+      await logShareLink({
+        certificateId: rec.id,
+        certNumber: rec.certNumber,
+        candidateName: rec.name,
+        link: shareLink.url,
+        expiresAt: shareLink.expiresAt,
+        issuedBy: user?.uid ?? '',
+      })
+      queryClient.invalidateQueries({ queryKey: ['certificates'] })
+    } catch (err) {
+      setRegenerateErr({ id: rec.id, msg: err instanceof Error ? err.message : 'Could not create shareable link' })
+    } finally {
+      setRegeneratingId(null)
     }
   }
 
@@ -310,6 +383,20 @@ export function CertificatesPage() {
                 </a>
               )}
               {certSpErr && <p className="text-xs text-red-600">{certSpErr}</p>}
+              {certShareLink && (
+                <div className="space-y-1.5 border-t pt-3">
+                  <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                    <Share2 className="size-3.5" /> Shareable link (no sign-in required) — expires {new Date(certShareLink.expiresAt).toLocaleDateString()}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <code className="text-xs bg-muted px-2 py-1 rounded flex-1 break-all">{certShareLink.url}</code>
+                    <Button size="sm" variant="outline" onClick={() => copyText(certShareLink.url, 'shareLink')}>
+                      {copied === 'shareLink' ? <Check className="size-4" /> : <Copy className="size-4" />}
+                    </Button>
+                  </div>
+                </div>
+              )}
+              {certShareLinkErr && <p className="text-xs text-red-600 whitespace-pre-wrap border-t pt-3">{certShareLinkErr}</p>}
             </div>
           ) : (
             <div className="rounded-md border border-dashed p-12 text-center text-sm text-muted-foreground">
@@ -329,16 +416,60 @@ export function CertificatesPage() {
                       <th className="text-left px-2 py-1.5 font-medium text-muted-foreground">Name</th>
                       <th className="text-left px-2 py-1.5 font-medium text-muted-foreground">Type</th>
                       <th className="text-left px-2 py-1.5 font-medium text-muted-foreground">Date</th>
+                      <th className="text-left px-2 py-1.5 font-medium text-muted-foreground">Share link</th>
                       <th className="w-8" />
                     </tr>
                   </thead>
                   <tbody>
-                    {records.map(rec => (
+                    {records.map(rec => {
+                      const expired = rec.shareLinkExpiresAt ? daysUntil(rec.shareLinkExpiresAt) <= 0 : false
+                      const expSoon = rec.shareLinkExpiresAt ? daysUntil(rec.shareLinkExpiresAt) <= 7 && !expired : false
+                      return (
                       <tr key={rec.id} className="border-b hover:bg-muted/20">
                         <td className="px-2 py-1.5 font-mono">{rec.certNumber}</td>
                         <td className="px-2 py-1.5">{rec.name}</td>
                         <td className="px-2 py-1.5 text-muted-foreground">{rec.certTypeName}</td>
                         <td className="px-2 py-1.5 text-muted-foreground">{rec.date}</td>
+                        <td className="px-2 py-1.5">
+                          {rec.shareLink ? (
+                            <div className="flex items-center gap-1.5">
+                              <span className={expired ? 'text-red-600' : expSoon ? 'text-amber-600' : 'text-muted-foreground'}>
+                                {expired ? 'Expired' : `Expires ${new Date(rec.shareLinkExpiresAt!).toLocaleDateString()}`}
+                              </span>
+                              <button
+                                title="Copy shareable link"
+                                onClick={() => copyLink(rec.shareLink!, `share-${rec.id}`)}
+                                className="text-muted-foreground hover:text-primary"
+                              >
+                                {copiedLinkId === `share-${rec.id}` ? <Check className="size-3.5 text-green-600" /> : <Share2 className="size-3.5" />}
+                              </button>
+                              {rec.sharePointItemId && (
+                                <button
+                                  title="Regenerate shareable link"
+                                  onClick={() => handleRegenerateLink(rec)}
+                                  disabled={regeneratingId === rec.id}
+                                  className="text-muted-foreground hover:text-primary disabled:opacity-50"
+                                >
+                                  <RefreshCw className={`size-3.5 ${regeneratingId === rec.id ? 'animate-spin' : ''}`} />
+                                </button>
+                              )}
+                            </div>
+                          ) : rec.sharePointItemId ? (
+                            <button
+                              title="Create shareable link"
+                              onClick={() => handleRegenerateLink(rec)}
+                              disabled={regeneratingId === rec.id}
+                              className="flex items-center gap-1 text-muted-foreground hover:text-primary disabled:opacity-50"
+                            >
+                              <Share2 className={`size-3.5 ${regeneratingId === rec.id ? 'animate-spin' : ''}`} /> Create
+                            </button>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                          {regenerateErr?.id === rec.id && (
+                            <p className="text-red-600 mt-1 whitespace-pre-wrap max-w-xs">{regenerateErr.msg}</p>
+                          )}
+                        </td>
                         <td className="px-2 py-1.5">
                           <div className="flex gap-2">
                             {rec.sharePointUrl && (
@@ -364,7 +495,8 @@ export function CertificatesPage() {
                           </div>
                         </td>
                       </tr>
-                    ))}
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
