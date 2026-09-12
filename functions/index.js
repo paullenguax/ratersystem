@@ -1322,6 +1322,26 @@ exports.reportStorylineEvent = onRequest(
   }
 )
 
+// Ported copy of src/features/storyline/formatTestDisplayName.ts (kept in
+// sync manually like resolveItems.js — this is a separate CommonJS deploy
+// that can't import from the Vite app bundle). Drops the Test name when it
+// shares a leading run of words with the Version label, since showing both
+// then just repeats itself on the accept/reject splash slide.
+function formatTestDisplayName(testName, versionLabel) {
+  const test = (testName ?? '').trim()
+  const version = (versionLabel ?? '').trim()
+  if (!test) return version
+  if (!version) return test
+
+  const testWords = test.toLowerCase().split(/\s+/)
+  const versionWords = version.toLowerCase().split(/\s+/)
+  let shared = 0
+  while (shared < testWords.length && shared < versionWords.length && testWords[shared] === versionWords[shared]) {
+    shared++
+  }
+  return shared > 0 ? version : `${test}: ${version}`
+}
+
 // ── getStorylineLiveContent ──────────────────────────────────────────────
 // Called by examiner.ts at boot, for exported Versions with
 // versionType === 'live' only (see flags.json's liveContentId, set by
@@ -1417,7 +1437,7 @@ exports.getStorylineLiveContent = onRequest(
         test.variables,
         version.slotContent ?? {},
         parts,
-        `${test.name}: ${version.versionLabel}`,
+        formatTestDisplayName(test.name, version.versionLabel),
       )
 
       const items = resolved.map(item => ({

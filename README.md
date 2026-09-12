@@ -275,14 +275,23 @@ phase.
   content + its 4 Parts' content into the final flat `StorylineItem[]` —
   used identically by Preview, Publish (snapshots the result into
   `version.items`), and Export. It also takes a `testDisplayName` param
-  (`"{test.name}: {version.versionLabel}"` — colon, not em-dash, since
-  2026-08-18 — computed by the caller — the only field on `StorylineItem`
-  not derived from `TemplateSlide`/slot content) for the
-  `accept_reject_test` slide to display. Baked into `version.items` at
-  Publish time, so this only affects *new* publishes — an already-published
-  Version (and any already-exported zip built from it) keeps whatever
-  separator was live when it was published; re-publish (Duplicate → fill in
-  → Publish) a Version to pick up the new one.
+  (computed by the caller via `formatTestDisplayName(testName, versionLabel)`,
+  added 2026-09-12 — the only field on `StorylineItem` not derived from
+  `TemplateSlide`/slot content) for the `accept_reject_test` slide to
+  display. Test name and Version label often restate each other ("Airline
+  Sample Version" + "Airline Sample Collection"), which read as repetitive
+  shown back to back — `formatTestDisplayName` drops the Test name and shows
+  just the Version label whenever the two share a leading run of words, and
+  falls back to the old `"{test.name}: {version.versionLabel}"` form
+  (colon, not em-dash, since 2026-08-18) when they don't overlap (e.g.
+  "Airline Pilot" + "020"). Kept as a small standalone function
+  (`src/features/storyline/formatTestDisplayName.ts`) ported by hand into
+  `functions/index.js` for `getStorylineLiveContent`, same manual-sync
+  pattern as `resolveItems.js`. Baked into `version.items` at Publish time,
+  so this only affects *new* publishes — an already-published Version (and
+  any already-exported zip built from it) keeps whatever text was live when
+  it was published; re-publish (Duplicate → fill in → Publish) a Version to
+  pick up the improved text.
 - **Pages**: `StorylineTestsPage` → `StorylineVersionsPage` (draft/publish/
   duplicate-as-new-draft/archive/delete lifecycle, Part picker, Preview,
   Export; archived versions hidden by default via a "Show archived" toggle,

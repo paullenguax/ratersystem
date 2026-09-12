@@ -7,6 +7,7 @@ import { ArrowLeft, PlayCircle, Wrench, Upload } from 'lucide-react'
 import { db, storage } from '@/lib/firebase'
 import type { StorylinePart, StorylinePartNumber, StorylineVersion, StorylineTest, StorylineSlotContent, StorylineItem, StorylineTemplate } from '@/types'
 import { resolveItems } from './resolveItems'
+import { formatTestDisplayName } from './formatTestDisplayName'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -103,7 +104,7 @@ async function fetchAllRefs(): Promise<MediaRef[]> {
               .map(([n, id]) => [n, id ? partById.get(id) : undefined])
               .filter(([, p]) => p),
           ) as Partial<Record<StorylinePartNumber, StorylinePart>>,
-          `${test?.name ?? version.testId}: ${version.versionLabel}`,
+          formatTestDisplayName(test?.name ?? version.testId, version.versionLabel),
         )
       : version.items ?? []
     for (const item of items) {

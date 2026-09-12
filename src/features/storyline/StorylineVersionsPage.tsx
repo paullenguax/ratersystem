@@ -11,6 +11,7 @@ import type { StorylinePart, StorylinePartNumber, StorylineTemplate, StorylineTe
 import { previewStorylineVersion } from './useStorylinePreview'
 import { exportStorylineVersion, exportStorylinePractice } from './exportStoryline'
 import { resolveItems } from './resolveItems'
+import { formatTestDisplayName } from './formatTestDisplayName'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -153,7 +154,7 @@ export function StorylineVersionsPage() {
       return
     }
     if (!window.confirm(`Publish "${version.versionLabel}"? Published versions are immutable — further edits require duplicating as a new draft.`)) return
-    const items = resolveItems(template.slides, test?.variables, version.slotContent ?? {}, chosenParts, `${test?.name}: ${version.versionLabel}`)
+    const items = resolveItems(template.slides, test?.variables, version.slotContent ?? {}, chosenParts, formatTestDisplayName(test?.name ?? '', version.versionLabel))
     await updateDoc(doc(db, 'storyline_versions', version.id), {
       items,
       status: 'published',
@@ -173,7 +174,7 @@ export function StorylineVersionsPage() {
         window.alert('No Script Template found — set one up first.')
         return
       }
-      previewStorylineVersion(resolveItems(template.slides, test?.variables, version.slotContent ?? {}, selectedParts(version), `${test?.name}: ${version.versionLabel}`), template.theme)
+      previewStorylineVersion(resolveItems(template.slides, test?.variables, version.slotContent ?? {}, selectedParts(version), formatTestDisplayName(test?.name ?? '', version.versionLabel)), template.theme)
     } else {
       previewStorylineVersion(version.items, template?.theme)
     }
@@ -198,7 +199,7 @@ export function StorylineVersionsPage() {
               test.variables,
               version.slotContent ?? {},
               selectedParts(version),
-              `${test.name}: ${version.versionLabel}`,
+              formatTestDisplayName(test.name, version.versionLabel),
             )
           : undefined
         await exportStorylinePractice(test, version, template?.theme, liveItems, opts)

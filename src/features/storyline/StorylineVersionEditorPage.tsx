@@ -12,6 +12,7 @@ import { QuestionListField } from './QuestionListField'
 import { MediaUploadField } from './MediaUploadField'
 import { deriveComboImages } from './deriveComboImages'
 import { resolveItems } from './resolveItems'
+import { formatTestDisplayName } from './formatTestDisplayName'
 import { previewStorylineVersion } from './useStorylinePreview'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -94,7 +95,7 @@ export function StorylineVersionEditorPage() {
       const p = parts.find(part => part.id === partRefs[n])
       if (p) selectedParts[n] = p
     }
-    previewStorylineVersion(resolveItems(template.slides, test?.variables, slotContent, selectedParts, `${test?.name}: ${versionLabel}`), template.theme)
+    previewStorylineVersion(resolveItems(template.slides, test?.variables, slotContent, selectedParts, formatTestDisplayName(test?.name ?? '', versionLabel)), template.theme)
   }
 
   if (versionLoading || templateLoading) return <p className="text-sm text-muted-foreground">Loading…</p>
