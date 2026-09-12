@@ -28,6 +28,12 @@ export const TEST_TYPES: StorylineTestType[] = [
   'FISO/AFISO',
 ]
 
+export const TEST_CATEGORIES: { value: NonNullable<StorylineTest['category']>; label: string }[] = [
+  { value: 'live', label: 'Live' },
+  { value: 'backup', label: 'Backup' },
+  { value: 'sample', label: 'Sample' },
+]
+
 const schema = z.object({
   name: z.string().min(1, 'Required'),
   description: z.string().optional(),
@@ -54,6 +60,7 @@ export function StorylineTestDrawer({ open, onClose, test }: Props) {
   const isEdit = !!test
   const [active, setActive] = useState(true)
   const [testType, setTestType] = useState<StorylineTestType | undefined>()
+  const [category, setCategory] = useState<StorylineTest['category']>()
   const [variables, setVariables] = useState<Record<string, string>>({})
 
   const { data: template } = useQuery({ queryKey: ['storyline_template'], queryFn: fetchTemplate })
@@ -70,6 +77,7 @@ export function StorylineTestDrawer({ open, onClose, test }: Props) {
       reset(test ? { name: test.name, description: test.description ?? '', wpTestId: test.wpTestId != null ? String(test.wpTestId) : '' } : EMPTY)
       setActive(test?.active ?? true)
       setTestType(test?.testType)
+      setCategory(test?.category)
       setVariables(test?.variables ?? {})
     }
   }, [open, test, reset])
@@ -81,6 +89,7 @@ export function StorylineTestDrawer({ open, onClose, test }: Props) {
       description: data.description ?? '',
       active,
       testType: testType ?? null,
+      category: category ?? null,
       variables,
       wpTestId: trimmedWpTestId ? Number(trimmedWpTestId) : null,
     }
@@ -112,13 +121,27 @@ export function StorylineTestDrawer({ open, onClose, test }: Props) {
           </div>
 
           <div className="space-y-1">
-            <Label>Type</Label>
+            <Label>Role</Label>
             <Select value={testType ?? ''} onValueChange={v => setTestType(v as StorylineTestType)}>
               <SelectTrigger>
-                <SelectValue placeholder="Choose a type…">{(v: string) => v || 'Choose a type…'}</SelectValue>
+                <SelectValue placeholder="Choose a role…">{(v: string) => v || 'Choose a role…'}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {TEST_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1">
+            <Label>Category</Label>
+            <Select value={category ?? ''} onValueChange={v => setCategory(v as StorylineTest['category'])}>
+              <SelectTrigger>
+                <SelectValue placeholder="Choose a category…">
+                  {(v: string) => TEST_CATEGORIES.find(c => c.value === v)?.label ?? 'Choose a category…'}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {TEST_CATEGORIES.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>

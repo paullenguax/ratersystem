@@ -229,7 +229,16 @@ phase.
   Pilot, Private Pilot, Ab-Initio Pilot, Rotary Wing Pilot, Aerodrome/
   Approach/Area ATC, Student ATC, ADP Driver, Airport Operations, FISO/
   AFISO) lets the list be sorted by licence/role category independent of
-  the free-text `name`; each `storyline_versions` doc is one immutable-once-published assembly of
+  the free-text `name`. A separate optional `category: 'live' | 'backup' |
+  'sample'` field (added 2026-09-12) classifies the Test Type itself by
+  delivery purpose — distinct from a `storyline_versions` doc's own
+  `versionType`, which classifies individual Versions *within* one Test
+  Type. Unset by default (pre-existing Test Types need back-filling by
+  hand via Edit — no bulk migration was run). `StorylineTestsPage` gained
+  filter dropdowns for both `testType` ("Role" column/filter) and
+  `category` ("Category" column/filter), URL-persisted like
+  `StorylinePartsPage`'s filters, on top of the pre-existing click-to-sort
+  column headers; each `storyline_versions` doc is one immutable-once-published assembly of
   content for that test. The real test content is 4 **Parts**, each a
   globally-shared, pooled unit in its own `storyline_parts` collection (not
   scoped to any Test — matches real cross-role-type content sharing found in

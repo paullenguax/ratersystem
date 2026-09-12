@@ -368,6 +368,11 @@ export interface StorylineTest {
   // the list be sorted/scanned by category (e.g. all the ATC ones
   // together) independent of `name`, which is free text.
   testType?: StorylineTestType
+  // Live/Backup/Sample delivery category for the Test Type itself — distinct
+  // from a StorylineVersion's own `versionType` (which classifies individual
+  // Versions *within* a Test Type). Optional and unset by default since
+  // existing Test Types predate this field; back-fill by hand via Edit.
+  category?: 'live' | 'backup' | 'sample'
   // Fills for every [placeholder] token referenced anywhere in the shared
   // template (e.g. { role: 'air traffic controller' }) — a role type is
   // fixed per Test, reused across every Version of it and every Part it
