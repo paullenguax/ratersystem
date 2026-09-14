@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, serverTimestamp } from 'firebase/firestore'
-import { Copy, Check, ExternalLink, Download, Trash2, CloudUpload, LogOut, Link, RefreshCw, Share2 } from 'lucide-react'
+import { Copy, Check, ExternalLink, Download, Trash2, CloudUpload, LogOut, Link, RefreshCw, Share2, Plus } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
 import { Button } from '@/components/ui/button'
@@ -53,8 +53,8 @@ export function CertificatesPage() {
   const [name, setName]             = useState('')
   const [date, setDate]             = useState('')
   const [certType, setCertType]     = useState<CertTypeValue>('1')
-  const [pin]                       = useState(() => generatePIN())
-  const [certNumber]                = useState(() => generateCertNumber())
+  const [pin, setPin]               = useState(() => generatePIN())
+  const [certNumber, setCertNumber] = useState(() => generateCertNumber())
   const [generating, setGenerating] = useState(false)
   const [generated, setGenerated]   = useState<{ certNumber: string; pin: string } | null>(null)
   const [copied, setCopied]         = useState<string | null>(null)
@@ -188,6 +188,18 @@ export function CertificatesPage() {
     } finally {
       setGenerating(false)
     }
+  }
+
+  function handleNewCertificate() {
+    setName('')
+    setDate('')
+    setPin(generatePIN())
+    setCertNumber(generateCertNumber())
+    setGenerated(null)
+    setCertSpUrl(null)
+    setCertSpErr(null)
+    setCertShareLink(null)
+    setCertShareLinkErr(null)
   }
 
   async function handleRegenerateLink(rec: CertRecord) {
@@ -355,7 +367,12 @@ export function CertificatesPage() {
         <div className="space-y-4">
           {generated ? (
             <div className="rounded-md border p-5 space-y-4">
-              <p className="text-sm font-medium text-green-700">Certificate generated</p>
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-green-700">Certificate generated</p>
+                <Button size="sm" variant="outline" onClick={handleNewCertificate}>
+                  <Plus className="size-3.5 mr-1" /> New certificate
+                </Button>
+              </div>
               <div className="space-y-2 text-sm">
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Certificate number</span>
