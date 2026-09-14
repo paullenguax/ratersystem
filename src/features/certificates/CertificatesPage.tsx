@@ -112,6 +112,14 @@ export function CertificatesPage() {
 
   const selectedType = useMemo(() => CERT_TYPES.find(t => t.value === certType)!, [certType])
 
+  // Preview must reflect a live Storage override the same way actual PDF
+  // generation does — it previously always rendered the bundled default JPG,
+  // so a custom template uploaded in Cert Assets never showed up here.
+  const { data: previewUrl } = useQuery({
+    queryKey: ['cert-template-preview', certType],
+    queryFn: () => resolveTemplateUrl(certType, TEMPLATE_BASE),
+  })
+
   async function handleGenerate() {
     if (!name.trim() || !date.trim()) return
     setGenerating(true)
@@ -359,7 +367,7 @@ export function CertificatesPage() {
           {/* Template preview */}
           <div className="rounded-md border overflow-hidden">
             <img
-              src={`${TEMPLATE_BASE}/${selectedType.template}`}
+              src={previewUrl ?? `${TEMPLATE_BASE}/${selectedType.template}`}
               alt={selectedType.label}
               className="w-full opacity-80"
             />
