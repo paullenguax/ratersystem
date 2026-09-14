@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, serverTimestamp } from 'firebase/firestore'
+import type jsPDF from 'jspdf'
 import { Copy, Check, ExternalLink, Download, Trash2, CloudUpload, LogOut, Link, RefreshCw, Share2, Plus } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
@@ -57,6 +58,7 @@ export function CertificatesPage() {
   const [certNumber, setCertNumber] = useState(() => generateCertNumber())
   const [generating, setGenerating] = useState(false)
   const [generated, setGenerated]   = useState<{ certNumber: string; pin: string } | null>(null)
+  const [generatedPdf, setGeneratedPdf] = useState<{ pdf: jsPDF; filename: string } | null>(null)
   const [copied, setCopied]         = useState<string | null>(null)
 
   // ── SharePoint state ─────────────────────────────────────────────────────
@@ -131,7 +133,7 @@ export function CertificatesPage() {
       })
 
       const filename = `${selectedType.label} - ${name.trim()} - ${certNumber}.pdf`
-      pdf.save(filename)
+      setGeneratedPdf({ pdf, filename })
 
       let spUrl: string | null = null
       let spItemId: string | null = null
@@ -196,6 +198,7 @@ export function CertificatesPage() {
     setPin(generatePIN())
     setCertNumber(generateCertNumber())
     setGenerated(null)
+    setGeneratedPdf(null)
     setCertSpUrl(null)
     setCertSpErr(null)
     setCertShareLink(null)
@@ -350,7 +353,7 @@ export function CertificatesPage() {
             disabled={!name.trim() || !date.trim() || generating}
             className="w-full"
           >
-            {generating ? 'Generating…' : 'Generate & download certificate'}
+            {generating ? 'Generating…' : 'Generate certificate'}
           </Button>
 
           {/* Template preview */}
@@ -369,9 +372,20 @@ export function CertificatesPage() {
             <div className="rounded-md border p-5 space-y-4">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-medium text-green-700">Certificate generated</p>
-                <Button size="sm" variant="outline" onClick={handleNewCertificate}>
-                  <Plus className="size-3.5 mr-1" /> New certificate
-                </Button>
+                <div className="flex items-center gap-2">
+                  {generatedPdf && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => generatedPdf.pdf.save(generatedPdf.filename)}
+                    >
+                      <Download className="size-3.5 mr-1" /> Download PDF
+                    </Button>
+                  )}
+                  <Button size="sm" variant="outline" onClick={handleNewCertificate}>
+                    <Plus className="size-3.5 mr-1" /> New certificate
+                  </Button>
+                </div>
               </div>
               <div className="space-y-2 text-sm">
                 <div className="flex items-center justify-between">
