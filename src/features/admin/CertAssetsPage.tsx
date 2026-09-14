@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ref, uploadBytes, uploadBytesResumable, getDownloadURL } from 'firebase/storage'
+import { ref, uploadBytes, uploadBytesResumable, getDownloadURL, getMetadata } from 'firebase/storage'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { storage, db } from '@/lib/firebase'
@@ -13,7 +13,7 @@ interface AssetRow {
   defaultTemplate: string
   templateOverrideUrl: string | null
   psdUrl: string | null
-  displayUrl: string | null
+  psdFileName: string | null
 }
 
 async function loadAssets(): Promise<AssetRow[]> {
@@ -22,11 +22,12 @@ async function loadAssets(): Promise<AssetRow[]> {
 
   const storageItems = await Promise.all(
     CERT_TYPES.map(async ct => {
-      const [psdUrl, displayUrl] = await Promise.all([
-        getDownloadURL(ref(storage, `cert-psd/${ct.value}/source.psd`)).catch(() => null),
-        getDownloadURL(ref(storage, `cert-display/${ct.value}/display.jpg`)).catch(() => null),
+      const psdRef = ref(storage, `cert-psd/${ct.value}/source.psd`)
+      const [psdUrl, psdMeta] = await Promise.all([
+        getDownloadURL(psdRef).catch(() => null),
+        getMetadata(psdRef).catch(() => null),
       ])
-      return { certType: ct.value as CertTypeValue, psdUrl, displayUrl }
+      return { certType: ct.value as CertTypeValue, psdUrl, psdFileName: psdMeta?.customMetadata?.originalName ?? null }
     })
   )
 
@@ -36,7 +37,7 @@ async function loadAssets(): Promise<AssetRow[]> {
     defaultTemplate: ct.template,
     templateOverrideUrl: overrides[ct.value] ?? null,
     psdUrl: storageItems[i].psdUrl,
-    displayUrl: storageItems[i].displayUrl,
+    psdFileName: storageItems[i].psdFileName,
   }))
 }
 
@@ -74,19 +75,6 @@ export function CertAssetsPage() {
     }
   }
 
-  async function handleDisplayUpload(certType: CertTypeValue, file: File) {
-    const key = `display-${certType}`
-    setUploadingKey(key, true)
-    try {
-      await uploadBytes(ref(storage, `cert-display/${certType}/display.jpg`), file)
-      queryClient.invalidateQueries({ queryKey: ['cert-assets'] })
-    } catch (err) {
-      alert(`Display upload failed: ${err instanceof Error ? err.message : String(err)}`)
-    } finally {
-      setUploadingKey(key, false)
-    }
-  }
-
   async function handlePsdUpload(certType: CertTypeValue, file: File) {
     const key = `psd-${certType}`
     setUploadingKey(key, true)
@@ -97,7 +85,9 @@ export function CertAssetsPage() {
       // blips, unlike uploadBytes' single-shot PUT which was failing silent
       // (promise never settling visibly) on flaky connections.
       await new Promise<void>((resolve, reject) => {
-        const task = uploadBytesResumable(ref(storage, `cert-psd/${certType}/source.psd`), file)
+        const task = uploadBytesResumable(ref(storage, `cert-psd/${certType}/source.psd`), file, {
+          customMetadata: { originalName: file.name },
+        })
         task.on(
           'state_changed',
           snapshot => setProgress(p => ({ ...p, [key]: Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100) })),
@@ -137,7 +127,7 @@ export function CertAssetsPage() {
       <div>
         <h1 className="text-2xl font-semibold">Certificate Assets</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Manage templates, display images, and source files for each certificate type.
+          Manage templates and source files for each certificate type.
           Uploading a new template immediately overrides the PDF background for future certificates.
         </p>
       </div>
@@ -155,7 +145,7 @@ export function CertAssetsPage() {
               )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
               {/* Template */}
               <div className="space-y-2">
@@ -191,33 +181,6 @@ export function CertAssetsPage() {
                 </div>
               </div>
 
-              {/* Display image */}
-              <div className="space-y-2">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1">
-                  <FileImage className="size-3" />
-                  Display image
-                </p>
-                <div className="relative aspect-[210/297] bg-muted rounded overflow-hidden border">
-                  {row.displayUrl ? (
-                    <img src={row.displayUrl} alt="display" className="absolute inset-0 w-full h-full object-cover" />
-                  ) : (
-                    <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground">
-                      None — uses template
-                    </div>
-                  )}
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="w-full"
-                  disabled={uploading[`display-${row.certType}`]}
-                  onClick={() => pickFile('image/jpeg,image/png', f => handleDisplayUpload(row.certType, f))}
-                >
-                  <Upload className="size-3.5 mr-1.5" />
-                  {uploading[`display-${row.certType}`] ? 'Uploading…' : 'Upload display image'}
-                </Button>
-              </div>
-
               {/* PSD source */}
               <div className="space-y-2">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1">
@@ -228,8 +191,8 @@ export function CertAssetsPage() {
                   {row.psdUrl ? (
                     <>
                       <FileText className="size-8 opacity-30" />
-                      <p className="text-xs px-2 text-center break-all">source.psd</p>
-                      <a href={row.psdUrl} target="_blank" rel="noreferrer" download>
+                      <p className="text-xs px-2 text-center break-all">{row.psdFileName ?? 'source.psd'}</p>
+                      <a href={row.psdUrl} target="_blank" rel="noreferrer" download={row.psdFileName ?? 'source.psd'}>
                         <Button size="sm" variant="outline" className="text-xs">
                           <Download className="size-3.5 mr-1.5" />
                           Download

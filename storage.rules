@@ -47,12 +47,8 @@ service firebase.storage {
       allow read, write: if isAdmin();
     }
 
-    // ── cert-display / cert-psd ──────────────────────────────────────────────
-    // Admin-only preview JPGs and source PSDs, used only by CertAssetsPage.tsx.
-
-    match /cert-display/{certType}/{fileName} {
-      allow read, write: if isAdmin();
-    }
+    // ── cert-psd ─────────────────────────────────────────────────────────────
+    // Admin-only source PSDs, used only by CertAssetsPage.tsx.
 
     match /cert-psd/{certType}/{fileName} {
       allow read, write: if isAdmin();
