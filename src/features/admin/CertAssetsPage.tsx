@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
+import { ref, uploadBytes, uploadBytesResumable, getDownloadURL } from 'firebase/storage'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { storage, db } from '@/lib/firebase'
@@ -43,6 +43,8 @@ async function loadAssets(): Promise<AssetRow[]> {
 export function CertAssetsPage() {
   const queryClient = useQueryClient()
   const [uploading, setUploading] = useState<Record<string, boolean>>({})
+  const [progress, setProgress] = useState<Record<string, number>>({})
+  const [uploadErrors, setUploadErrors] = useState<Record<string, string>>({})
 
   const { data: rows = [], isLoading, error } = useQuery({
     queryKey: ['cert-assets'],
@@ -88,11 +90,27 @@ export function CertAssetsPage() {
   async function handlePsdUpload(certType: CertTypeValue, file: File) {
     const key = `psd-${certType}`
     setUploadingKey(key, true)
+    setProgress(p => ({ ...p, [key]: 0 }))
+    setUploadErrors(p => ({ ...p, [key]: '' }))
     try {
-      await uploadBytes(ref(storage, `cert-psd/${certType}/source.psd`), file)
+      // PSDs are 20MB+ — uploadBytesResumable chunks and retries on network
+      // blips, unlike uploadBytes' single-shot PUT which was failing silent
+      // (promise never settling visibly) on flaky connections.
+      await new Promise<void>((resolve, reject) => {
+        const task = uploadBytesResumable(ref(storage, `cert-psd/${certType}/source.psd`), file)
+        task.on(
+          'state_changed',
+          snapshot => setProgress(p => ({ ...p, [key]: Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100) })),
+          reject,
+          resolve
+        )
+      })
       queryClient.invalidateQueries({ queryKey: ['cert-assets'] })
     } catch (err) {
-      alert(`PSD upload failed: ${err instanceof Error ? err.message : String(err)}`)
+      const message = err instanceof Error ? err.message : String(err)
+      console.error('[PSD upload] failed', err)
+      setUploadErrors(p => ({ ...p, [key]: message }))
+      alert(`PSD upload failed: ${message}`)
     } finally {
       setUploadingKey(key, false)
     }
@@ -230,8 +248,11 @@ export function CertAssetsPage() {
                   onClick={() => pickFile('.psd,.psb,.ai,.pdf,.zip', f => handlePsdUpload(row.certType, f))}
                 >
                   <Upload className="size-3.5 mr-1.5" />
-                  {uploading[`psd-${row.certType}`] ? 'Uploading…' : 'Upload source file'}
+                  {uploading[`psd-${row.certType}`] ? `Uploading… ${progress[`psd-${row.certType}`] ?? 0}%` : 'Upload source file'}
                 </Button>
+                {uploadErrors[`psd-${row.certType}`] && (
+                  <p className="text-xs text-red-600 break-all">{uploadErrors[`psd-${row.certType}`]}</p>
+                )}
               </div>
 
             </div>
