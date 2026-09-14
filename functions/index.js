@@ -464,8 +464,12 @@ exports.canvasEnrollments = onCall(async (request) => {
 })
 
 // ── canvasSections ────────────────────────────────────────────────────────────
-// Returns all active sections across all accessible courses, sorted newest first.
-// Sections whose end_at is more than SECTION_END_GRACE_DAYS ago are excluded.
+// Returns active sections across the courses listed in config/canvas.courses
+// (the same curated allow-list Canvas Sync and self-serve gating use), sorted
+// newest first. Sections whose end_at is more than SECTION_END_GRACE_DAYS ago
+// are excluded. Courses not in that curated list (e.g. master/template course
+// copies) never appear here — add a course to config/canvas.courses to make
+// it enrollable via the wizard.
 
 exports.canvasSections = onCall(async (request) => {
   await assertAdmin(request)
@@ -473,7 +477,7 @@ exports.canvasSections = onCall(async (request) => {
 
   const db = admin.firestore()
   const configSnap = await db.doc('config/canvas').get()
-  const excludedCourseIds = new Set((configSnap.data()?.excludedCourseIds || []).map(Number))
+  const knownCourseIds = new Set((configSnap.data()?.courses || []).map(c => Number(c.id)))
 
   const courses = await canvasFetchAll(
     '/api/v1/courses?per_page=100&include[]=term',
@@ -494,7 +498,7 @@ exports.canvasSections = onCall(async (request) => {
   const sections = []
 
   for (const course of courses) {
-    if (excludedCourseIds.has(course.id)) continue
+    if (!knownCourseIds.has(course.id)) continue
 
     let courseSections
     try {
