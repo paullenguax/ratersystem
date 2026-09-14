@@ -139,7 +139,7 @@ export function CertificatesPage() {
       if (msStatus === 'connected') {
         try {
           const blob = pdf.output('blob')
-          const uploaded = await uploadToSharePoint(blob, filename, SP_FOLDERS_CERT[certType])
+          const uploaded = await uploadToSharePoint(blob, filename, SP_FOLDERS_CERT[certType], 'CourseCertificates')
           spUrl = uploaded.webUrl
           spItemId = uploaded.itemId
           setCertSpUrl(spUrl)
@@ -150,7 +150,7 @@ export function CertificatesPage() {
         // Per-candidate anonymous view link — only once the file itself is up.
         if (spItemId) {
           try {
-            shareLink = await createAnonymousViewLink(spItemId)
+            shareLink = await createAnonymousViewLink(spItemId, 'CourseCertificates')
             setCertShareLink(shareLink)
           } catch (err) {
             setCertShareLinkErr(err instanceof Error ? err.message : 'Could not create shareable link')
@@ -195,7 +195,7 @@ export function CertificatesPage() {
     setRegeneratingId(rec.id)
     setRegenerateErr(null)
     try {
-      const shareLink = await createAnonymousViewLink(rec.sharePointItemId)
+      const shareLink = await createAnonymousViewLink(rec.sharePointItemId, 'CourseCertificates')
       await updateDoc(doc(db, 'certificates', rec.id), {
         shareLink: shareLink.url,
         shareLinkExpiresAt: shareLink.expiresAt,

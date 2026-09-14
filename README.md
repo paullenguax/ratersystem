@@ -62,7 +62,7 @@ Role is determined by the `people` Firestore collection — the doc ID **must** 
 | `benchmark_items` | MCQ items for Benchmark Check — vocabulary/structure/comprehension constructs, reading/listening modalities |
 | `benchmark_results` / `benchmark_flags` | Candidate results and item flags from Benchmark Check (separate `lenguax-benchmark-32392` project, not this one — admin reads require the `mintBenchmarkAdminToken` auth bridge) |
 | `pronunciation_config/status` | Active languages for GPronTool |
-| `config/canvas` | Canvas API token, Canvas Sync course list, `excludedCourseIds`, `notificationEmail` for self-serve alerts |
+| `config/canvas` | Canvas API token, `courses` (curated `{id, name}[]` allow-list — drives Canvas Sync, self-serve gating, and the enroll wizard's course/section picker), `notificationEmail` for self-serve alerts |
 | `canvasEnrollmentLog` | Unified log of Canvas enrollments from both WooCommerce (`CanvasCohortEnrollment` WP plugin) and the manual `/admin/canvas-enroll` wizard |
 | `practice_sessions` / `practice_scores` | Ad-hoc live-course practice player (`/practice`), joined via a 6-character code; login is now optional (Canvas SSO) — see "Practice Sessions" below |
 | `storyline_tests` / `storyline_versions` / `storyline_parts` / `storyline_template` / `storyline_events` | Test Versions (Storyline Replacement) authoring + the exported player's full telemetry stream — see "Storyline Replacement" section below |
@@ -126,11 +126,13 @@ Certificate validation is public at `/validate/:certNumber` (no auth required).
 
 ### SharePoint save + shareable links (`src/lib/oneDrive.ts`, `src/lib/msal.ts`)
 
-Certificates, CAA 5012s and DGAC 87i's optionally upload to the SUPERADMIN SharePoint site (`lxuk.sharepoint.com/sites/SUPERADMIN`) via Microsoft Graph, using a per-staff-member delegated MSAL sign-in (`Files.ReadWrite.All`) from the "Connect"/"Disconnect" bar in the Certificates and Official Forms pages — there's no service account; uploads simply don't happen if nobody's connected. `SP_FOLDERS_CERT`/`SP_FOLDER_CAA`/`SP_FOLDER_DGAC` map form types to destination folders (e.g. cert type `'1'` → `Course Certificates/Rater`).
+Certificates upload to their own dedicated SharePoint site, `lxuk.sharepoint.com/sites/CourseCertificates` (site-level default sharing is "Anyone", separate from SUPERADMIN's policy). CAA 5012s and DGAC 87i's still upload to the SUPERADMIN site (`lxuk.sharepoint.com/sites/SUPERADMIN`) — these are unrelated official forms, not course certificates, and were deliberately left in place. Both go via Microsoft Graph using a per-staff-member delegated MSAL sign-in (`Files.ReadWrite.All`) from the "Connect"/"Disconnect" bar in the Certificates and Official Forms pages — there's no service account; uploads simply don't happen if nobody's connected, and a staff member needs SharePoint access to whichever site they're uploading to. `oneDrive.ts` resolves and caches a drive ID per site (`SharePointSite`, `'SUPERADMIN' | 'CourseCertificates'`) — every `uploadToSharePoint`/`createAnonymousViewLink` call must say which site it means, there's no default. `SP_FOLDERS_CERT`/`SP_FOLDER_CAA`/`SP_FOLDER_DGAC` map form types to destination folders relative to each site's document library root (e.g. cert type `'1'` → `Rater` on CourseCertificates; CAA/DGAC folders stay under their existing SUPERADMIN paths).
 
-For certificates specifically (not CAA/DGAC), once the PDF is uploaded, `createAnonymousViewLink` calls Graph's `createLink` action to also mint a **per-candidate**, read-only, no-sign-in link (`type: 'view'`, `scope: 'anonymous'`), defaulting to a 90-day expiry (Microsoft enforces a tenant-wide max on anonymous links, so don't assume a permanent one). The link and its actual (possibly tenant-clamped) expiry are stored on the `certificates` doc as `shareLink`/`shareLinkExpiresAt`, alongside `sharePointItemId` so the link can be regenerated later without re-uploading the file. Every link issued (create or regenerate) is also appended to `certificateShareLinkLog` for an audit trail. The Certificates page's records table shows expiry status and a regenerate action once a link exists (or a "Create" action if the record predates a link but has a stored `sharePointItemId`).
+For certificates specifically (not CAA/DGAC), once the PDF is uploaded, `createAnonymousViewLink` calls Graph's `createLink` action to also mint a **per-candidate**, read-only, no-sign-in link (`type: 'view'`, `scope: 'anonymous'`) on the CourseCertificates site, defaulting to a 90-day expiry (Microsoft enforces a tenant-wide max on anonymous links, so don't assume a permanent one) — this is deliberately kept even though the site's own default link type is also "Anyone", so every cert reliably gets a working link regardless of the site-level default. The link and its actual (possibly tenant-clamped) expiry are stored on the `certificates` doc as `shareLink`/`shareLinkExpiresAt`, alongside `sharePointItemId` so the link can be regenerated later without re-uploading the file. Every link issued (create or regenerate) is also appended to `certificateShareLinkLog` for an audit trail. The Certificates page's records table shows expiry status and a regenerate action once a link exists (or a "Create" action if the record predates a link but has a stored `sharePointItemId`).
 
-If `createLink` fails with a permissions/policy error, that means anonymous ("Anyone") links are disabled at the tenant or SUPERADMIN site level — it's a SharePoint admin setting (tenant sharing policy + site-level external sharing), not a code fix; the error surfaced in the UI says as much.
+If `createLink` fails with a permissions/policy error, that means anonymous ("Anyone") links are disabled at the tenant or the target site level — it's a SharePoint admin setting (tenant sharing policy + site-level external sharing), not a code fix; the error surfaced in the UI says as much.
+
+Certificates issued before this migration (2026-09) have `sharePointUrl`/`shareLink` values pointing at the old SUPERADMIN location — those links are expected to break and are not rewritten; only new certificates are affected.
 
 ## Canvas naming convention
 
@@ -139,7 +141,8 @@ If `createLink` fails with a permissions/policy error, that means anonymous ("An
 - **Course**: `Rater Course {Year}` / `Refresher Course {Year}` (e.g. "Rater Course 2026") — clone yearly
 - **Section**: `{Month} {Year}` for open monthly cohorts (e.g. "July 2026"), or the client/group name for closed cohorts (e.g. "Acme Airlines")
 - **SIS IDs are not used anywhere in this integration** — everything (this app, the WP plugin, self-serve) reads/writes Canvas's own numeric `course.id`/`section.id`. No need to set one when creating a section.
-- Set an **end date** on each section once its cohort finishes — `canvasSections()` auto-hides sections ended >7 days ago from every picker (enroll wizard, audits, self-serve), so this keeps them tidy without needing `config/canvas.excludedCourseIds` (that field is for hiding unrelated Lenguax courses from the account entirely, not for retiring old cohorts)
+- Set an **end date** on each section once its cohort finishes — `canvasSections()` auto-hides sections ended >7 days ago from every picker (enroll wizard, audits, self-serve), so this keeps them tidy without needing to touch `config/canvas.courses`
+- `canvasSections()` (the enroll wizard's course/section picker) only shows courses listed in `config/canvas.courses` — a course (e.g. a master/template clone) not added there never appears in the wizard, even if the Canvas API token can see it. Add a course there (Canvas Sync page → settings) to make it selectable for manual enrollment.
 - Add each year's cloned course to `config/canvas.courses` (via Canvas Sync's Settings panel) — this list is also the self-serve auto-provisioning failsafe's allowlist, so a course needs to be here before self-serve login works for its enrollees
 
 ## Cloud Functions (`functions/index.js`)
@@ -1418,4 +1421,4 @@ sidebar as "User Manual".
 
 ## Last updated
 
-2026-09-12
+2026-09-14

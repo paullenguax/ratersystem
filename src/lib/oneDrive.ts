@@ -3,21 +3,34 @@ import { getGraphToken } from './msal'
 export const SP_FOLDER_CAA  = 'UKCAA Candidates/Completed CAA5012 Forms'
 export const SP_FOLDER_DGAC = 'DGAC France Candidates/Completed DGAC Forms'
 export const SP_FOLDERS_CERT: Record<string, string> = {
-  '1': 'Course Certificates/Rater',
-  '2': 'Course Certificates/RaterInt',
-  '3': 'Course Certificates/Refresher',
-  '4': 'Course Certificates/Teacher',
-  '6': 'Course Certificates/RefresherInt',
+  '1': 'Rater',
+  '2': 'RaterInt',
+  '3': 'Refresher',
+  '4': 'Teacher',
+  '6': 'RefresherInt',
 }
 
-let cachedDriveId: string | null = null
+// CAA 5012 / DGAC 87i forms stay on SUPERADMIN. Course certificates live on
+// their own site so it can have an "Anyone" default sharing policy without
+// affecting SUPERADMIN. Each upload/link call must say which one it means —
+// there's no default, because sending a course cert to the wrong drive (or
+// vice versa) fails silently confusing rather than loudly.
+export type SharePointSite = 'SUPERADMIN' | 'CourseCertificates'
 
-async function getDriveId(token: string): Promise<string> {
-  if (cachedDriveId) return cachedDriveId
+const SITE_PATHS: Record<SharePointSite, string> = {
+  SUPERADMIN: 'lxuk.sharepoint.com:/sites/SUPERADMIN',
+  CourseCertificates: 'lxuk.sharepoint.com:/sites/CourseCertificates',
+}
+
+const driveIdCache = new Map<SharePointSite, string>()
+
+async function getDriveId(token: string, site: SharePointSite): Promise<string> {
+  const cached = driveIdCache.get(site)
+  if (cached) return cached
   const headers = { Authorization: `Bearer ${token}` }
 
   const siteRes = await fetch(
-    'https://graph.microsoft.com/v1.0/sites/lxuk.sharepoint.com:/sites/SUPERADMIN',
+    `https://graph.microsoft.com/v1.0/sites/${SITE_PATHS[site]}`,
     { headers }
   )
   if (!siteRes.ok) throw new Error(`Could not find SharePoint site (${siteRes.status})`)
@@ -30,7 +43,7 @@ async function getDriveId(token: string): Promise<string> {
   if (!driveRes.ok) throw new Error(`Could not find SharePoint drive (${driveRes.status})`)
   const { id: driveId } = await driveRes.json()
 
-  cachedDriveId = driveId
+  driveIdCache.set(site, driveId)
   return driveId
 }
 
@@ -39,9 +52,9 @@ export interface SharePointUploadResult {
   webUrl: string
 }
 
-export async function uploadToSharePoint(blob: Blob, filename: string, folder: string): Promise<SharePointUploadResult> {
+export async function uploadToSharePoint(blob: Blob, filename: string, folder: string, site: SharePointSite): Promise<SharePointUploadResult> {
   const token = await getGraphToken()
-  const driveId = await getDriveId(token)
+  const driveId = await getDriveId(token, site)
 
   const fullPath = `${folder}/${filename}`
   const encodedPath = fullPath.split('/').map(encodeURIComponent).join('/')
@@ -72,7 +85,7 @@ export async function uploadToSharePoint(blob: Blob, filename: string, folder: s
 // default/maximum expiry on anonymous links, so always set one explicitly —
 // don't assume a permanent link is possible. If this fails with a
 // permissions/policy error, anonymous links are disabled at the tenant or
-// SUPERADMIN site level — that's a SharePoint admin setting, not a code fix.
+// the target site level — that's a SharePoint admin setting, not a code fix.
 
 export const SHARE_LINK_DEFAULT_EXPIRY_DAYS = 90
 
@@ -81,9 +94,9 @@ export interface ShareLinkResult {
   expiresAt: string // ISO 8601 — the actual expiry Graph applied (may be clamped by tenant policy)
 }
 
-export async function createAnonymousViewLink(itemId: string, expiryDays = SHARE_LINK_DEFAULT_EXPIRY_DAYS): Promise<ShareLinkResult> {
+export async function createAnonymousViewLink(itemId: string, site: SharePointSite, expiryDays = SHARE_LINK_DEFAULT_EXPIRY_DAYS): Promise<ShareLinkResult> {
   const token = await getGraphToken()
-  const driveId = await getDriveId(token)
+  const driveId = await getDriveId(token, site)
   const requestedExpiry = new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000).toISOString()
 
   const res = await fetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/items/${itemId}/createLink`, {
@@ -105,7 +118,7 @@ export async function createAnonymousViewLink(itemId: string, expiryDays = SHARE
       throw new Error(
         `Could not create a shareable link (${res.status}): ${msg}\n\n` +
         `This usually means anonymous ("Anyone") links are blocked by SharePoint policy — ` +
-        `check that anonymous sharing is enabled both tenant-wide and on the SUPERADMIN site ` +
+        `check that anonymous sharing is enabled both tenant-wide and on the ${site} site ` +
         `(Site settings → Site permissions → external sharing). This needs a SharePoint admin ` +
         `to fix, not a code change.`
       )
