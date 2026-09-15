@@ -8,21 +8,24 @@ body {
   background: #f5f5f5;
 }
 
-/* The candidate window is what's shown to the candidate on a second
-   monitor — kept pure white so the polaroid cards don't sit on a visibly
-   different-colored page behind them. The examiner console keeps the
-   light-gray page background (set above) that sets its white card apart. */
+/* The candidate window's page sits light-gray, same treatment as the
+   examiner console (see body rule above) — so the white polaroid card
+   (bordered below) reads as a framed card, not a borderless sheet that
+   happens to fill the screen. */
 body.candidate-view {
-  background: #fff;
+  background: #f5f5f5;
 }
 
-/* Each panel IS the visible area — fills the whole candidate window with no
-   card chrome or centring margins stealing space (the complaint on a small
-   10" secondary screen). Only one panel is `visible` at a time; the rest
-   stack underneath at the same full-window size. */
+/* Each panel IS the visible area, inset from the window edge with a visible
+   white border/card so content has a calm margin instead of running edge to
+   edge (which read as oversized on a big secondary screen). Only one panel
+   is `visible` at a time; the rest stack underneath at the same size. The
+   inset also shrinks the box fitImageFrames()/fitInstructionsPanels() fit
+   content into, so auto-sized text/images land a bit smaller than before,
+   inside the border, rather than filling the whole window. */
 div.polaroid {
   position: fixed;
-  inset: 0;
+  inset: 3vmin;
   width: auto;
   margin: 0;
   transform: none;
@@ -34,6 +37,9 @@ div.polaroid {
   padding: 1.2vmin;
   box-sizing: border-box;
   overflow: hidden;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
 }
 
 .image-row {

@@ -363,6 +363,13 @@ volumeSlider?.addEventListener('input', () => {
   allAudios.forEach(a => { a.volume = masterVolume })
 })
 
+// Free-replay reference clips (Volume check, Part 3 example, a set's intro
+// primer) carry no maxPlays, so they get no play counter/lock — but a played
+// tick is still worth showing, purely so the examiner can confirm at a
+// glance they didn't skip it. Capped rather than uncapped so replaying it
+// doesn't just keep piling up checkmarks.
+const SOFT_TICK_CAP = 2
+
 function createAudioControls(clip: { label: string; url: string; maxPlays?: number }, onComplete: () => void): HTMLElement {
   const audio = new Audio(clip.url)
   audio.volume = masterVolume
@@ -412,14 +419,16 @@ function createAudioControls(clip: { label: string; url: string; maxPlays?: numb
     pauseBtn.textContent = isActive && audio.paused ? 'Resume' : 'Pause'
     indicator.classList.toggle('playing', isActive && !audio.paused)
     indicator.classList.toggle('paused', isActive && audio.paused)
+    const count = playCounts.get(clip.url) ?? 0
     if (limit !== undefined) {
-      const count = playCounts.get(clip.url) ?? 0
       countLabel.textContent = `${count}/${limit} plays`
       const over = count > limit
       ticksLabel.textContent = `${'✓'.repeat(Math.min(count, limit))}${over ? ' ❗' : ''}`
       ticksLabel.classList.toggle('audio-exclaim', over)
       playBtn.classList.toggle('audio-locked', atLimit() && !overrideArmed && activeAudio === null)
       againBtn.hidden = !atLimit() || overrideArmed || activeAudio !== null
+    } else {
+      ticksLabel.textContent = '✓'.repeat(Math.min(count, SOFT_TICK_CAP))
     }
   }
 
@@ -483,8 +492,8 @@ function createAudioControls(clip: { label: string; url: string; maxPlays?: numb
   })
 
   clipRegistry.push({ sync })
-  wrap.append(indicator, label, playBtn, pauseBtn, stopBtn)
-  if (limit !== undefined) wrap.append(ticksLabel, countLabel, againBtn)
+  wrap.append(indicator, label, playBtn, pauseBtn, stopBtn, ticksLabel)
+  if (limit !== undefined) wrap.append(countLabel, againBtn)
   sync()
   return wrap
 }

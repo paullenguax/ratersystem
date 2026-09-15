@@ -1066,6 +1066,37 @@ phase.
   recordings" page that doesn't match what `SampleCollectionPage.tsx` has
   ever actually done (a leftover from the manual's first-draft pass, per
   README's 2026-08-29 entry above).
+  **Interlocutor sample-collection feedback (2026-09-15)**: three fixes from
+  real-candidate sample collection using a plain (non-training) Practice
+  export. (a) `admin_checklist` (the Test Room Setup slide — screen-check
+  and volume-check buttons, see `renderChecklist()`) was in `SKIPPED_KINDS`
+  alongside `test_data_confirm`, so a plain Practice/Sample Collection run
+  never got the pre-test room/audio check that Live and a training run
+  always had; `SKIPPED_KINDS` in `practice.ts` now only skips
+  `test_data_confirm` (booking-only), so the checklist renders (un-gated,
+  same as the rest of a plain Practice run — Next isn't blocked on ticking
+  it, unlike a training run). (b) `createAudioControls()` (`practice.ts` and
+  `examiner.ts`) only ever appended `.audio-ticks` to the DOM for a clip
+  with `slotSpec.maxPlays` — so free-replay reference clips (Part 3 set
+  `Introduction`/intro primer, Volume check, Part 3 Example) showed no
+  played-confirmation at all, the actual complaint ("did I forget to play
+  the Introduction clip?"). Both files now always append `ticksLabel`; a
+  `maxPlays`-less clip's `sync()` sets it to `'✓'.repeat(Math.min(count,
+  SOFT_TICK_CAP))` (`SOFT_TICK_CAP = 2`) — ticks accumulate same as a
+  limited clip, but replaying past 2 doesn't add a third, and there's no
+  count label/lock/`↻` override, since these clips still replay freely.
+  (c) Candidate window text/pictures went from "too small" to "too big"
+  across earlier passes (see the 2026-09-04/08 entries above) because
+  `div.polaroid` ran edge-to-edge (`inset: 0`) on a same-color white page,
+  so `fitImageFrames()`/`fitInstructionsPanels()` always fit content to the
+  *entire* window. `player.css`: `body.candidate-view` background changed
+  from white to `#f5f5f5` (matching the examiner console's page), and
+  `div.polaroid` gained `inset: 3vmin` (from `0`) plus a `1px solid #ddd`
+  border/`border-radius: 10px`/subtle `box-shadow` — reads as a framed white
+  card on a gray page rather than a borderless full-bleed sheet, and the
+  inset shrinks the box the two fit functions measure against, landing
+  content a bit smaller than the full-bleed version without reintroducing
+  the earlier "too small" fixed-rem sizing.
 - **Live text for `versionType === 'live'` exports** (built 2026-08-20, plan
   at `/home/paul/.claude/plans/deep-wibbling-flurry.md`): a new
   `getStorylineLiveContent` Cloud Function (`functions/index.js`) lets
@@ -1421,4 +1452,4 @@ sidebar as "User Manual".
 
 ## Last updated
 
-2026-09-14
+2026-09-15

@@ -19,18 +19,22 @@ import teacLogo from './assets/teac-logo.png'
 // static content playback for a version marked Practice.
 //
 // Slide kinds that only make sense inside a real proctored booking
-// (confirm centre/examiner/candidate details, the examiner's private
-// room-setup checklist) are dropped entirely rather than rendered inert —
-// see SKIPPED_KINDS. accept_reject_test is kept, but re-rendered as a
-// simple non-interactive "here's which test this is" intro (see
-// BRANDED_KINDS/renderIntro) instead of the real accept/reject controls,
-// which depend on a real booking to mean anything.
+// (confirm centre/examiner/candidate details) are dropped entirely rather
+// than rendered inert — see SKIPPED_KINDS. accept_reject_test is kept, but
+// re-rendered as a simple non-interactive "here's which test this is" intro
+// (see BRANDED_KINDS/renderIntro) instead of the real accept/reject
+// controls, which depend on a real booking to mean anything.
+// admin_checklist (the Test Room Setup slide) is deliberately kept even in
+// a plain Practice run, not just a training run — its screen-check/volume-
+// check buttons are exactly the "can I hear/see this before we start"
+// check a real sample-collection sitting needs too, and it's rendered
+// un-gated here (see updateNavState) so it stays advisory, not a blocker.
 // Skipped in a normal Practice export — booking-only screens that mean
 // nothing without a real proctored sitting. A *training run* (flags.json
 // { trainingRun: true }, written by the "Export training run" button on a
-// Practice version) keeps them, gated, so an interlocutor rehearses the
+// Practice version) keeps them too, gated, so an interlocutor rehearses the
 // whole flow — see trainingRun below.
-const SKIPPED_KINDS = new Set(['test_data_confirm', 'admin_checklist'])
+const SKIPPED_KINDS = new Set(['test_data_confirm'])
 const BRANDED_KINDS = new Set(['accept_reject_test', 'test_data_confirm', 'admin_checklist'])
 
 // Set once flags.json resolves, before the first render. A training run
@@ -262,6 +266,13 @@ volumeSlider?.addEventListener('input', () => {
 volumeSlider?.addEventListener('change', () =>
   logEvent('volume_changed', `master volume ${Math.round(masterVolume * 100)}%`))
 
+// Free-replay reference clips (Volume check, Part 3 example, a set's intro
+// primer) carry no maxPlays, so they get no play counter/lock — but a played
+// tick is still worth showing, purely so whoever's running the test can
+// confirm at a glance they didn't skip it. Capped rather than uncapped so
+// replaying it doesn't just keep piling up checkmarks.
+const SOFT_TICK_CAP = 2
+
 function createAudioControls(
   clip: { label: string; url: string; maxPlays?: number },
   onComplete?: () => void,
@@ -313,14 +324,16 @@ function createAudioControls(
     pauseBtn.textContent = isActive && audio.paused ? 'Resume' : 'Pause'
     indicator.classList.toggle('playing', isActive && !audio.paused)
     indicator.classList.toggle('paused', isActive && audio.paused)
+    const count = playCounts.get(clip.url) ?? 0
     if (limit !== undefined) {
-      const count = playCounts.get(clip.url) ?? 0
       countLabel.textContent = `${count}/${limit} plays`
       const over = count > limit
       ticksLabel.textContent = `${'✓'.repeat(Math.min(count, limit))}${over ? ' ❗' : ''}`
       ticksLabel.classList.toggle('audio-exclaim', over)
       playBtn.classList.toggle('audio-locked', atLimit() && !overrideArmed && activeAudio === null)
       againBtn.hidden = !atLimit() || overrideArmed || activeAudio !== null
+    } else {
+      ticksLabel.textContent = '✓'.repeat(Math.min(count, SOFT_TICK_CAP))
     }
   }
 
@@ -370,8 +383,8 @@ function createAudioControls(
   })
 
   clipRegistry.push({ sync })
-  wrap.append(indicator, label, playBtn, pauseBtn, stopBtn)
-  if (limit !== undefined) wrap.append(ticksLabel, countLabel, againBtn)
+  wrap.append(indicator, label, playBtn, pauseBtn, stopBtn, ticksLabel)
+  if (limit !== undefined) wrap.append(countLabel, againBtn)
   sync()
   return wrap
 }
@@ -1008,8 +1021,9 @@ function renderCurrentSlide() {
     content.appendChild(heading)
     renderTextAndAudio(content, item)
     if (item.previewContent?.length) renderPreviewContent(content, item.previewContent)
-    // Booking-only screens — only reached in a training run (SKIPPED_KINDS
-    // filters them out of a plain Practice export).
+    // test_data_confirm is booking-only — only reached in a training run
+    // (SKIPPED_KINDS filters it out of a plain Practice export). The
+    // checklist (admin_checklist) is reached in both.
     if (item.kind === 'test_data_confirm') renderTestDataConfirm(content)
     if (item.checklistItems?.length) renderChecklist(content, item.checklistItems)
 
