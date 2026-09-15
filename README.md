@@ -1087,16 +1087,19 @@ phase.
   count label/lock/`↻` override, since these clips still replay freely.
   (c) Candidate window text/pictures went from "too small" to "too big"
   across earlier passes (see the 2026-09-04/08 entries above) because
-  `div.polaroid` ran edge-to-edge (`inset: 0`) on a same-color white page,
-  so `fitImageFrames()`/`fitInstructionsPanels()` always fit content to the
-  *entire* window. `player.css`: `body.candidate-view` background changed
-  from white to `#f5f5f5` (matching the examiner console's page), and
-  `div.polaroid` gained `inset: 3vmin` (from `0`) plus a `1px solid #ddd`
-  border/`border-radius: 10px`/subtle `box-shadow` — reads as a framed white
-  card on a gray page rather than a borderless full-bleed sheet, and the
-  inset shrinks the box the two fit functions measure against, landing
-  content a bit smaller than the full-bleed version without reintroducing
-  the earlier "too small" fixed-rem sizing.
+  `div.polaroid` ran edge-to-edge (`inset: 0`), so
+  `fitImageFrames()`/`fitInstructionsPanels()` always fit content to the
+  *entire* window. `player.css`: `div.polaroid` gained `inset: 3vmin` (from
+  `0`) — a plain even margin on all four sides, same white as the page
+  behind it — which shrinks the box the two fit functions measure against,
+  landing content a bit smaller than the full-bleed version without
+  reintroducing the earlier "too small" fixed-rem sizing. A same-day follow-
+  up tried a gray page + white bordered/shadowed "card" (`body.candidate-
+  view` → `#f5f5f5`, `div.polaroid` → `1px solid #ddd` border +
+  `border-radius` + `box-shadow`) but that was reverted in favor of the
+  plain white-on-white margin above — simpler, and the candidate window
+  never needed the framed-card treatment the examiner console's `.slide-
+  card` uses to stand apart from a differently-colored page.
 - **Live text for `versionType === 'live'` exports** (built 2026-08-20, plan
   at `/home/paul/.claude/plans/deep-wibbling-flurry.md`): a new
   `getStorylineLiveContent` Cloud Function (`functions/index.js`) lets

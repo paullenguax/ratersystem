@@ -8,21 +8,21 @@ body {
   background: #f5f5f5;
 }
 
-/* The candidate window's page sits light-gray, same treatment as the
-   examiner console (see body rule above) — so the white polaroid card
-   (bordered below) reads as a framed card, not a borderless sheet that
-   happens to fill the screen. */
+/* The candidate window is what's shown to the candidate on a second
+   monitor — kept pure white so the polaroid cards don't sit on a visibly
+   different-colored page behind them. */
 body.candidate-view {
-  background: #f5f5f5;
+  background: #fff;
 }
 
-/* Each panel IS the visible area, inset from the window edge with a visible
-   white border/card so content has a calm margin instead of running edge to
-   edge (which read as oversized on a big secondary screen). Only one panel
-   is `visible` at a time; the rest stack underneath at the same size. The
-   inset also shrinks the box fitImageFrames()/fitInstructionsPanels() fit
-   content into, so auto-sized text/images land a bit smaller than before,
-   inside the border, rather than filling the whole window. */
+/* Each panel IS the visible area. `inset: 3vmin` (rather than `0`) leaves a
+   plain even margin on all four sides so content doesn't run right up to
+   the physical screen edge (which read as oversized on a big secondary
+   screen) — same white as the page behind it, no card/border/shadow, just
+   breathing room. Only one panel is `visible` at a time; the rest stack
+   underneath at the same size. The inset also shrinks the box
+   fitImageFrames()/fitInstructionsPanels() fit content into, so auto-sized
+   text/images land a bit smaller than the old edge-to-edge version. */
 div.polaroid {
   position: fixed;
   inset: 3vmin;
@@ -37,9 +37,6 @@ div.polaroid {
   padding: 1.2vmin;
   box-sizing: border-box;
   overflow: hidden;
-  border: 1px solid #ddd;
-  border-radius: 10px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
 }
 
 .image-row {
