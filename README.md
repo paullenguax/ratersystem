@@ -1100,6 +1100,18 @@ phase.
   plain white-on-white margin above — simpler, and the candidate window
   never needed the framed-card treatment the examiner console's `.slide-
   card` uses to stand apart from a differently-colored page.
+  **Checklist volume-check audio not stopped on Next (2026-09-16)**: the Room
+  Setup checklist's 🔊 button (`renderChecklist()`, both `practice.ts` and
+  `examiner.ts`) played its clip via a bare `new Audio(url)` that was never
+  stored anywhere — unlike every other clip, which goes through
+  `createAudioControls()`'s single `activeAudio` and gets paused on every
+  slide change (see `renderCurrentSlide()`/`endSession()`). On an ungated
+  Practice/Sample Collection run in particular, clicking through slides
+  while that clip was still playing left it running in the background with
+  no way to stop it. Added a `checklistAudio` handle (paired with `?.pause()`
+  before starting a new one, so repeat clicks don't overlap either) and
+  paused it in the same two places `activeAudio` already gets paused in both
+  files.
 - **Live text for `versionType === 'live'` exports** (built 2026-08-20, plan
   at `/home/paul/.claude/plans/deep-wibbling-flurry.md`): a new
   `getStorylineLiveContent` Cloud Function (`functions/index.js`) lets
@@ -1455,4 +1467,4 @@ sidebar as "User Manual".
 
 ## Last updated
 
-2026-09-15
+2026-09-16

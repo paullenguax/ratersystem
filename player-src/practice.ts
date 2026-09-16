@@ -251,6 +251,11 @@ let masterVolume = 1
 const allAudios: HTMLAudioElement[] = []
 let activeAudio: HTMLAudioElement | null = null
 let clipRegistry: { sync: () => void }[] = []
+// The Room Setup checklist's volume-check button (see renderChecklist) plays
+// a one-off Audio it doesn't route through the single-active-audio console
+// above — it needs its own handle so a slide change can still stop it (an
+// ungated Practice run lets you click Next while it's still playing).
+let checklistAudio: HTMLAudioElement | null = null
 
 function refreshClipButtons() {
   for (const c of clipRegistry) c.sync()
@@ -821,8 +826,10 @@ function renderChecklist(container: HTMLElement, rawItems: (string | ChecklistIt
       if (url) {
         btn.title = 'Play the volume check clip'
         btn.addEventListener('click', () => {
+          checklistAudio?.pause()
           const audio = new Audio(url)
           audio.volume = masterVolume
+          checklistAudio = audio
           audio.play()
         })
       } else {
@@ -919,6 +926,7 @@ function endSession(message: string) {
   sessionEnded = true
   flushPhase()
   if (activeAudio) { activeAudio.pause(); activeAudio = null }
+  if (checklistAudio) { checklistAudio.pause(); checklistAudio = null }
   closeZoom()
   const card = document.getElementById('slide-card')
   if (card) {
@@ -976,6 +984,7 @@ function renderCurrentSlide() {
   }
 
   if (activeAudio) { activeAudio.pause(); activeAudio = null }
+  if (checklistAudio) { checklistAudio.pause(); checklistAudio = null }
   clipRegistry = []
   closeZoom()
   checkedItems = new Set()
