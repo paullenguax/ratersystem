@@ -1125,6 +1125,28 @@ phase.
   to reach an already-published template; do NOT use "Load example script"
   to push it, since that overwrites every slide and would stomp any other
   live-only edits made since the template was first seeded.
+  **`templateSeed.ts` fully resynced from live (2026-09-16)**: the user
+  exported `template.json` (StorylineTemplateEditorPage's "Export
+  template.json" button — a straight `{ slides: [...] }` dump of the saved
+  live document) and it was used to rewrite every slide in `templateSeed.ts`
+  verbatim, not just the Part 3 line above. Verified by extracting
+  `buildSeedTemplateSlides()`'s actual runtime output (`node
+  --experimental-strip-types`) and deep-diffing it against the export,
+  ignoring only `id`/`order` and key ordering — confirmed an exact field-by-
+  field match. Real drift found and fixed (not just wording/whitespace):
+  `startsTestTimer` had moved live from "Invite candidate" to "Preamble" (one
+  slide later than the seed had it) — a real behavioral difference, not a
+  typo, so it was transcribed as-is rather than "corrected" back; "Part 2 —
+  Section 2 recording"'s `candidateState` was `'Logo'` live vs `'Task2'` in
+  the seed, also transcribed as-is. Otherwise mostly additive: a "speaking
+  too quickly/fast" reminder sentence had been added to notes across ~10
+  slides, several slides gained blank-line paragraph breaks the seed still
+  lacked, "Take notes to explain **all** the details" gained a word, and the
+  closing slide's button label changed from "CLOSE THIS TEST" to "**✓
+  Finish**". This is a one-time snapshot, not an ongoing sync — see
+  [[feedback-storyline-template-script-edits]]: it will drift again as the
+  live template keeps being edited in the app, and the fix each time is the
+  same (export template.json, diff, resync), not a standing mechanism.
 - **Live text for `versionType === 'live'` exports** (built 2026-08-20, plan
   at `/home/paul/.claude/plans/deep-wibbling-flurry.md`): a new
   `getStorylineLiveContent` Cloud Function (`functions/index.js`) lets
