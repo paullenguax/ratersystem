@@ -1112,6 +1112,19 @@ phase.
   before starting a new one, so repeat clicks don't overlap either) and
   paused it in the same two places `activeAudio` already gets paused in both
   files.
+  **Part 3 script tweak (2026-09-16)**: "Do you have any questions?" moved
+  from the start of Set 1's script (it used to sit ahead of "OK, I will now
+  play Set 1.") to the Example slide's script, in `templateSeed.ts` — now
+  positioned directly under the Example's audio player. The Example slide
+  had no explicit `{audio}` token before (audio was appended after all text
+  via the no-token fallback in `renderTextAndAudio()`); it now ends `...
+  {audio}\nDo you have any questions?` so the prompt renders as its own
+  segment after the player instead of before it. As with the earlier
+  Part 2 script tweaks, this only updates the *seed* — it needs the
+  equivalent hand-edit in the live Template Editor (StorylineTemplateEditorPage)
+  to reach an already-published template; do NOT use "Load example script"
+  to push it, since that overwrites every slide and would stomp any other
+  live-only edits made since the template was first seeded.
 - **Live text for `versionType === 'live'` exports** (built 2026-08-20, plan
   at `/home/paul/.claude/plans/deep-wibbling-flurry.md`): a new
   `getStorylineLiveContent` Cloud Function (`functions/index.js`) lets

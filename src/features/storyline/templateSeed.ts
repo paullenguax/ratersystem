@@ -235,10 +235,16 @@ export function buildSeedTemplateSlides(): TemplateSlide[] {
         'You do not need to report the callsigns.\n' +
         'You will hear each recording once. If you want to hear the message again, just ask and I will play it ' +
         'once more only.\n' +
-        "Before we start, let's listen to an example so you know what to expect.",
+        "Before we start, let's listen to an example so you know what to expect.\n" +
+        '{audio}\n' +
+        'Do you have any questions?',
       // No maxPlays — the example is just to show the candidate what a
       // recording sounds like; only the 9 real Part 3 recordings (the three
-      // Sets below) are play-limited.
+      // Sets below) are play-limited. Explicit {audio} token (rather than
+      // relying on the no-token "audio renders after all text" fallback) so
+      // "Do you have any questions?" lands under the Example player instead
+      // of before it — moved here from Set 1 below, where it used to sit
+      // ahead of "OK, I will now play Set 1."
       slotSpec: { audio: 'single' },
     },
     {
@@ -251,7 +257,7 @@ export function buildSeedTemplateSlides(): TemplateSlide[] {
         'Use the prompt "Report the message" if candidates do not naturally respond themselves. Otherwise, stay ' +
         'silent. Avoid prompting candidates to repeat recordings - they should ask themselves.\n' +
         'You can only play the recordings a maximum of two times.',
-      scriptText: 'Do you have any questions?\nOK, I will now play Set 1.',
+      scriptText: 'OK, I will now play Set 1.',
       slotSpec: { audio: 'set', audioSetSize: 3, maxPlays: 2 },
     },
     {
