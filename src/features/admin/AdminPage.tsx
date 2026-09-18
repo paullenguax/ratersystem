@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { RefreshCw, Shuffle, BarChart2, Award, UserPlus, ClipboardList, Search, Mic2, Radio, History } from 'lucide-react'
+import { RefreshCw, Shuffle, Award, UserPlus, ClipboardList, Search, Mic2, Radio, History } from 'lucide-react'
 
 const tools = [
   {
@@ -31,12 +31,6 @@ const tools = [
     icon: Shuffle,
     label: 'Auto-assign Tests',
     description: 'Generate balanced test assignments: one anchor, difficulty spread, minimal overlap within cohort.',
-  },
-  {
-    to: '/admin/import-rasch',
-    icon: BarChart2,
-    label: 'Import Rasch Results',
-    description: 'Paste a Facets .out file to extract rater measures and Wright map data for Reports.',
   },
   {
     to: '/admin/import-historical-scores',

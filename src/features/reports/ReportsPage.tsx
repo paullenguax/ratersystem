@@ -1,14 +1,14 @@
 import { Fragment, useState, useMemo, useRef, useEffect } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore'
-import { Copy, Check, ChevronRight, Download } from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { collection, getDocs, query, orderBy, limit, addDoc, serverTimestamp } from 'firebase/firestore'
+import { Copy, Check, ChevronRight, Download, BarChart2 } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import type { Score, Person } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { WrightMap } from '@/components/WrightMap'
-import type { RaschRun } from '@/lib/parseFacets'
+import { parseFacetsOutput, type RaschRun } from '@/lib/parseFacets'
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -263,7 +263,15 @@ export function ReportsPage() {
   const [prevRaterNumber, setPrevRaterNumber] = useState('')
   const [prevMeasure, setPrevMeasure]   = useState('')
 
+  const [importOpen, setImportOpen]     = useState(false)
+  const [importText, setImportText]     = useState('')
+  const [importParsed, setImportParsed] = useState<RaschRun | null>(null)
+  const [importError, setImportError]   = useState('')
+  const [importSaving, setImportSaving] = useState(false)
+  const [importSaved, setImportSaved]   = useState(false)
+
   const svgRef = useRef<SVGSVGElement>(null)
+  const queryClient = useQueryClient()
 
   const { data: scores = [] } = useQuery({
     queryKey: ['scores'],
@@ -451,6 +459,49 @@ export function ReportsPage() {
     setRaterNumberField(found?.raterNumber ? String(found.raterNumber) : '')
   }
 
+  function handleImportParse() {
+    setImportError('')
+    setImportSaved(false)
+    try {
+      const result = parseFacetsOutput(importText)
+      if (result.raters.length === 0) {
+        setImportError('No rater rows found. Make sure the text includes Table 7 from the Facets output.')
+        setImportParsed(null)
+      } else {
+        setImportParsed(result)
+      }
+    } catch (e) {
+      setImportError(String(e))
+      setImportParsed(null)
+    }
+  }
+
+  async function handleImportSave() {
+    if (!importParsed) return
+    setImportSaving(true)
+    try {
+      await addDoc(collection(db, 'rasch_runs'), {
+        importedAt: serverTimestamp(),
+        raterCount: importParsed.raters.length,
+        meanMeasure: importParsed.meanMeasure,
+        reliability: importParsed.reliability,
+        separation: importParsed.separation,
+        rmse: importParsed.rmse,
+        raters: importParsed.raters,
+        criteria: importParsed.criteria,
+        candidateDensity: importParsed.candidateDensity,
+      })
+      setImportSaved(true)
+      setImportText('')
+      setImportParsed(null)
+      await queryClient.invalidateQueries({ queryKey: ['rasch_runs', 'latest'] })
+    } catch (e) {
+      setImportError(String(e))
+    } finally {
+      setImportSaving(false)
+    }
+  }
+
   function handleDownloadMap() {
     const svg = svgRef.current
     if (!svg) return
@@ -519,6 +570,65 @@ export function ReportsPage() {
       <div>
         <h1 className="text-2xl font-semibold">Reports</h1>
         <p className="text-muted-foreground text-sm mt-1">Generate a feedback email for a rater.</p>
+      </div>
+
+      <div className="rounded-lg border">
+        <button
+          className="w-full flex items-center justify-between px-4 py-2.5 text-sm font-medium"
+          onClick={() => setImportOpen(o => !o)}
+        >
+          <span className="flex items-center gap-2">
+            <BarChart2 className="size-4" />
+            Import Rasch results
+          </span>
+          <ChevronRight className={`size-4 text-muted-foreground transition-transform ${importOpen ? 'rotate-90' : ''}`} />
+        </button>
+        {importOpen && (
+          <div className="border-t px-4 py-4 space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Paste the full Facets <code>.out</code> file. Table 7 (rater measures) and Table 6 (Wright map) will be extracted and become the active run as soon as it's saved.
+            </p>
+            <textarea
+              value={importText}
+              onChange={e => { setImportText(e.target.value); setImportParsed(null); setImportSaved(false); setImportError('') }}
+              placeholder="Paste the full contents of the .out file here…"
+              rows={8}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs font-mono resize-y"
+            />
+            <div className="flex items-center gap-3">
+              <Button size="sm" onClick={handleImportParse} disabled={!importText.trim()}>
+                Parse file
+              </Button>
+              {importParsed && (
+                <Button size="sm" variant="outline" onClick={handleImportSave} disabled={importSaving}>
+                  {importSaving ? 'Saving…' : 'Save to Firestore'}
+                </Button>
+              )}
+              {importSaved && <span className="text-xs text-green-700">Saved — this run is now active.</span>}
+            </div>
+            {importError && <p className="text-xs text-red-600">{importError}</p>}
+            {importParsed && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-1 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Raters</span>
+                  <span className="font-mono font-semibold">{importParsed.raters.length}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Criteria</span>
+                  <span className="font-mono font-semibold">{importParsed.criteria.length}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Reliability</span>
+                  <span className="font-mono">{importParsed.reliability.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">RMSE</span>
+                  <span className="font-mono">{importParsed.rmse.toFixed(2)}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
