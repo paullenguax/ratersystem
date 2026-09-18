@@ -126,6 +126,7 @@ function buildEmail(params: {
   candidateStats: CandidateStat[]
   paraOverrides: Record<string, string>
   handWave: Record<string, boolean>
+  isRefresher: boolean
   measure: string
   infit: string
   outcome: 'pass' | 'advisory' | 'fail'
@@ -135,8 +136,11 @@ function buildEmail(params: {
   prevMeasure: string
   raterNumberField: string
 }): string {
-  const { rater, candidateStats, paraOverrides, handWave, measure, infit, outcome, advisoryText,
+  const { rater, candidateStats, paraOverrides, handWave, isRefresher, measure, infit, outcome, advisoryText,
           isRepeater, prevRaterNumber, prevMeasure, raterNumberField } = params
+  const courseLink = isRefresher
+    ? 'https://www.lenguax.com/product/online-aviation-english-rater-refresher-course/'
+    : 'https://www.lenguax.com/product/online-aviation-english-rater-course/'
   const firstName = rater.name.split(' ')[0]
   const raterNum = raterNumberField || (rater.raterNumber ?? '[RATER NUMBER]')
 
@@ -216,7 +220,7 @@ function buildEmail(params: {
     '',
     `If you wish to do this in "public", so to speak, you can do so here:`,
     '',
-    `https://www.lenguax.com/product/online-aviation-english-rater-course/`,
+    courseLink,
     '',
     `It would help us to help interest in the course grow.`,
     '',
@@ -256,6 +260,7 @@ export function ReportsPage() {
   const [advisoryText, setAdvisoryText] = useState('')
   const [paraOverrides, setParaOverrides] = useState<Record<string, string>>({})
   const [handWave, setHandWave] = useState<Record<string, boolean>>({})
+  const [isRefresher, setIsRefresher] = useState(false)
   const [expanded, setExpanded]         = useState<Set<string>>(new Set())
   const [copied, setCopied]             = useState(false)
   const [isRepeater, setIsRepeater]     = useState(false)
@@ -331,10 +336,15 @@ export function ReportsPage() {
     return { id: raterId, name: nameFromScores, email: '', role: 'trainee', status: 'active' }
   }, [people, raterId, scores])
 
+  // Prefer the people doc's stored raterNumber, but fall back to whatever's
+  // typed in the (visible, editable) Rater number field — so correcting a
+  // missing/wrong stored number still drives the lookup, not just the email text.
   const raschData = useMemo(() => {
-    if (!latestRun || !rater?.raterNumber) return null
-    return latestRun.raters.find(r => r.raterNumber === rater.raterNumber) ?? null
-  }, [latestRun, rater])
+    if (!latestRun) return null
+    const num = rater?.raterNumber ?? (raterNumberField ? parseInt(raterNumberField, 10) : NaN)
+    if (num == null || isNaN(num)) return null
+    return latestRun.raters.find(r => r.raterNumber === num) ?? null
+  }, [latestRun, rater, raterNumberField])
 
   // Auto-fill measure/infit when rasch data is available for this rater
   useEffect(() => {
@@ -422,9 +432,9 @@ export function ReportsPage() {
 
   const emailText = useMemo(() => {
     if (!rater || candidateStats.length === 0) return ''
-    return buildEmail({ rater, candidateStats, paraOverrides, handWave, measure, infit, outcome, advisoryText,
+    return buildEmail({ rater, candidateStats, paraOverrides, handWave, isRefresher, measure, infit, outcome, advisoryText,
                         isRepeater, raterNumberField, prevRaterNumber, prevMeasure })
-  }, [rater, candidateStats, paraOverrides, handWave, measure, infit, outcome, advisoryText,
+  }, [rater, candidateStats, paraOverrides, handWave, isRefresher, measure, infit, outcome, advisoryText,
       isRepeater, raterNumberField, prevRaterNumber, prevMeasure])
 
   function toggleExpanded(testDocId: string) {
@@ -445,6 +455,7 @@ export function ReportsPage() {
     setInfit('')
     setOutcome('pass')
     setAdvisoryText('')
+    setIsRefresher(false)
   }
 
   function changeRater(id: string) {
@@ -455,6 +466,8 @@ export function ReportsPage() {
     setIsRepeater(false)
     setPrevRaterNumber('')
     setPrevMeasure('')
+    setMeasure('')
+    setInfit('')
     const found = people.find(p => p.id === id)
     setRaterNumberField(found?.raterNumber ? String(found.raterNumber) : '')
   }
@@ -627,6 +640,20 @@ export function ReportsPage() {
                 </div>
               </div>
             )}
+            {importParsed && importParsed.criteria.length > 0 && (
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">
+                  Criteria found ({importParsed.criteria.length}) — check this matches the 6 ICAO dimensions
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {importParsed.criteria.map(c => (
+                    <span key={c.name} className="text-xs border rounded px-2 py-0.5 font-mono">
+                      {c.name} {c.logit > 0 ? '+' : ''}{c.logit.toFixed(0)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -662,6 +689,15 @@ export function ReportsPage() {
               </select>
             </div>
           </div>
+
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              checked={isRefresher}
+              onChange={e => setIsRefresher(e.target.checked)}
+            />
+            Refresher course (links to the refresher course page, not the initial one)
+          </label>
 
           {candidateStats.length > 0 && (<>
 
