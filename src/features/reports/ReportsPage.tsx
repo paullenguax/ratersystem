@@ -261,6 +261,7 @@ export function ReportsPage() {
   const [paraOverrides, setParaOverrides] = useState<Record<string, string>>({})
   const [handWave, setHandWave] = useState<Record<string, boolean>>({})
   const [isRefresher, setIsRefresher] = useState(false)
+  const [glossaryOpen, setGlossaryOpen] = useState(false)
   const [expanded, setExpanded]         = useState<Set<string>>(new Set())
   const [copied, setCopied]             = useState(false)
   const [isRepeater, setIsRepeater]     = useState(false)
@@ -1082,6 +1083,87 @@ export function ReportsPage() {
           )}
         </div>
 
+      </div>
+
+      <div className="rounded-lg border">
+        <button
+          className="w-full flex items-center justify-between px-4 py-2.5 text-sm font-medium"
+          onClick={() => setGlossaryOpen(o => !o)}
+        >
+          <span>What do these stats mean?</span>
+          <ChevronRight className={`size-4 text-muted-foreground transition-transform ${glossaryOpen ? 'rotate-90' : ''}`} />
+        </button>
+        {glossaryOpen && (
+          <div className="border-t px-4 py-4 space-y-3 text-xs">
+            <p className="text-muted-foreground">
+              "Rater" here means a single rater's estimate from this Facets run — "senior raters" and "candidates" are a
+              separate comparison (the score comparison table above), not part of this glossary.
+            </p>
+            <dl className="space-y-2.5">
+              <div>
+                <dt className="font-semibold">Measure</dt>
+                <dd className="text-muted-foreground">
+                  Severity/leniency in logits, relative to the group mean (0). Positive = stricter than average,
+                  negative = more lenient. Target band ±1.
+                </dd>
+              </div>
+              <div>
+                <dt className="font-semibold">S.E. (Standard Error)</dt>
+                <dd className="text-muted-foreground">
+                  Precision of the Measure estimate — smaller is more precise. Mostly driven by how many ratings
+                  that rater has contributed.
+                </dd>
+              </div>
+              <div>
+                <dt className="font-semibold">Infit MnSq / ZStd</dt>
+                <dd className="text-muted-foreground">
+                  "Information-weighted" fit — sensitive to unexpected ratings on candidates near this rater's own
+                  typical severity. Target band 0.7–1.3 for MnSq. Above the band reads as more erratic than expected;
+                  below it reads as more rigid/uniform than expected (over-predictable). ZStd is the standardized
+                  version — beyond roughly ±2 is a statistically meaningful misfit even if MnSq looks borderline.
+                </dd>
+              </div>
+              <div>
+                <dt className="font-semibold">Outfit MnSq / ZStd</dt>
+                <dd className="text-muted-foreground">
+                  "Outlier-sensitive" fit — picks up rare, surprising individual ratings that Infit's weighting can
+                  smooth over. Same 0.7–1.3 band and same erratic/rigid direction reading is used here as a working
+                  convention, not a universal rule — adjust if it doesn't hold up in practice.
+                </dd>
+              </div>
+              <div>
+                <dt className="font-semibold">Discrimination</dt>
+                <dd className="text-muted-foreground">
+                  How well this rater's scores actually differentiate between candidates of different ability,
+                  relative to what the model expects (expected ≈ 1.0). Flagged below 0.5. Negative means the rater's
+                  scores tend to go against the general pattern — worth checking for reversed or miskeyed scoring.
+                </dd>
+              </div>
+              <div>
+                <dt className="font-semibold">PtMea / PtExp</dt>
+                <dd className="text-muted-foreground">
+                  Observed vs. expected point-measure correlation — how well this rater's scores track overall
+                  candidate ability. Flagged when the observed correlation sits notably below what was expected
+                  (gap ≥ 0.15 here), a sign of erratic or inconsistent scoring.
+                </dd>
+              </div>
+              <div>
+                <dt className="font-semibold">Reliability (top of the import panel)</dt>
+                <dd className="text-muted-foreground">
+                  A cohort-level number, not per-rater — how reliably the model can tell raters apart by severity.
+                  0–1, higher means the spread of strict-to-lenient raters is real, not noise.
+                </dd>
+              </div>
+              <div>
+                <dt className="font-semibold">RMSE (top of the import panel)</dt>
+                <dd className="text-muted-foreground">
+                  Also cohort-level — the average precision of severity estimates across every rater in this run.
+                  Smaller is tighter overall; roughly tracks the typical S.E. you'll see per rater.
+                </dd>
+              </div>
+            </dl>
+          </div>
+        )}
       </div>
     </div>
   )
