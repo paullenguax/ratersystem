@@ -1118,33 +1118,56 @@ export function ReportsPage() {
                 <dt className="font-semibold">Infit MnSq / ZStd</dt>
                 <dd className="text-muted-foreground">
                   "Information-weighted" fit — sensitive to unexpected ratings on candidates near this rater's own
-                  typical severity. Target band 0.7–1.3 for MnSq. Above the band reads as more erratic than expected;
-                  below it reads as more rigid/uniform than expected (over-predictable). ZStd is the standardized
-                  version — beyond roughly ±2 is a statistically meaningful misfit even if MnSq looks borderline.
+                  typical severity. Ideal is 1.0. A commonly used general-purpose range is 0.5–1.5 ("productive for
+                  measurement"); this page uses a tighter 0.7–1.3 band, which is a convention specifically used for
+                  high-stakes rater panels. Above the band reads as more erratic/unpredictable than expected — above
+                  roughly 2.0 is where it's generally treated as seriously distorting rather than just "watch it."
+                  Below the band reads as more rigid/uniform than expected (over-predictable) — this direction is
+                  usually considered less threatening to fairness than the high-erratic direction, since it means
+                  duller discrimination between candidates rather than actively wrong decisions. ZStd is the
+                  standardized version — beyond roughly ±2 is a statistically meaningful misfit even if MnSq
+                  looks borderline.
                 </dd>
               </div>
               <div>
                 <dt className="font-semibold">Outfit MnSq / ZStd</dt>
                 <dd className="text-muted-foreground">
-                  "Outlier-sensitive" fit — picks up rare, surprising individual ratings that Infit's weighting can
-                  smooth over. Same 0.7–1.3 band and same erratic/rigid direction reading is used here as a working
-                  convention, not a universal rule — adjust if it doesn't hold up in practice.
+                  "Outlier-sensitive" fit — picks up rare, surprising individual ratings that Infit's information
+                  weighting can smooth over. Same 0.7–1.3 band and erratic/rigid direction reading as Infit is used
+                  here as a working convention, not a settled rule — adjust if it doesn't hold up in practice.
                 </dd>
               </div>
               <div>
                 <dt className="font-semibold">Discrimination</dt>
                 <dd className="text-muted-foreground">
-                  How well this rater's scores actually differentiate between candidates of different ability,
-                  relative to what the model expects (expected ≈ 1.0). Flagged below 0.5. Negative means the rater's
-                  scores tend to go against the general pattern — worth checking for reversed or miskeyed scoring.
+                  How sharply this rater's scores differentiate between candidates of different ability, relative to
+                  what the model expects. Ideal/expected is 1.0. Below 1.0 (but still positive) means flatter than
+                  expected — the rater isn't spreading candidates out as much as their real ability differences
+                  warrant (central tendency / restricted range — mostly giving the same one or two scores regardless
+                  of who's actually better). Near zero means essentially no relationship between this rater's scores
+                  and candidate ability. <strong>Negative</strong> is the real alarm: it means this rater's ranking
+                  of candidates runs opposite the panel's — worth checking it isn't a data-entry or reversed-scale
+                  error before treating it as genuine rater behaviour. <strong>Above 1.0</strong> means sharper/more
+                  decisive differentiation than the panel norm — not automatically a problem: it can mean genuinely
+                  picking up on real distinctions others are softening, or it can mean a narrower, more binary mental
+                  model of the scale than intended (not using the full granularity), or with only ~24 observations it
+                  can just be this particular batch of candidates spanning an unusually wide ability range. High
+                  discrimination mechanically tends to pair with <em>low</em> Infit/Outfit (the overfit/rigid
+                  direction above), not high — that's the same underlying pattern showing up twice, not two separate
+                  problems. Unlike Infit/Outfit, there's no widely agreed symmetric "in-band" range for this in the
+                  measurement literature — the sign (negative vs. positive) matters more than the exact number.
                 </dd>
               </div>
               <div>
                 <dt className="font-semibold">PtMea / PtExp</dt>
                 <dd className="text-muted-foreground">
                   Observed vs. expected point-measure correlation — how well this rater's scores track overall
-                  candidate ability. Flagged when the observed correlation sits notably below what was expected
-                  (gap ≥ 0.15 here), a sign of erratic or inconsistent scoring.
+                  candidate ability. This mostly serves as a secondary confirmation of misfit already visible in
+                  Infit/Outfit, rather than an independent hard rule — there's no standard numeric gap size in the
+                  literature the way there is for MnSq bands. The one genuinely independent strong signal is
+                  <strong> PtMea itself being negative</strong>, regardless of PtExp: this rater's scores don't even
+                  positively track candidate ability. A gap where PtMea sits notably below PtExp (this page flags a
+                  gap ≥ 0.15) is worth a look but is best read alongside Infit/Outfit, not on its own.
                 </dd>
               </div>
               <div>
@@ -1162,6 +1185,37 @@ export function ReportsPage() {
                 </dd>
               </div>
             </dl>
+            <div className="border-t pt-3 mt-1">
+              <p className="font-semibold mb-1.5">Common combinations, for deciding what feedback to give</p>
+              <ul className="text-muted-foreground space-y-1.5 list-disc pl-4">
+                <li>
+                  <strong>Severity/leniency only</strong> — Measure outside ±1, everything else normal. A
+                  consistent, well-behaved rater whose scale is just shifted. Feedback: recalibrate the anchor,
+                  not the method.
+                </li>
+                <li>
+                  <strong>Central tendency / restricted range</strong> — Discrimination well below 1, Infit/Outfit
+                  possibly low too. Avoids the extremes of the scale. Feedback: encourage fuller use of the scale,
+                  point to specific candidates who deserved a more extreme score.
+                </li>
+                <li>
+                  <strong>Randomness / inconsistency</strong> — Infit and/or Outfit MnSq above the band (worse
+                  above ~2), often with positive ZStd. Scores don't follow a stable pattern. Feedback: this is the
+                  one to take most seriously — the rater's judgement isn't predictable even to itself.
+                </li>
+                <li>
+                  <strong>Reversal</strong> — Discrimination negative and/or PtMea negative. Ranks candidates
+                  opposite the consensus. Feedback: verify the data first (reversed scale, mis-entry), then treat
+                  as a priority conversation if it's confirmed genuine.
+                </li>
+                <li>
+                  <strong>Overfit / rigid</strong> — Infit and Outfit both notably below 1.0, Discrimination often
+                  above 1.0 (this is one pattern showing up in two stats, not two problems). Unusually predictable
+                  or decisive. Not necessarily wrong, but worth checking whether they're using the scale's
+                  intended granularity or defaulting to a narrower internal rubric.
+                </li>
+              </ul>
+            </div>
           </div>
         )}
       </div>
