@@ -7,6 +7,9 @@ export interface RaschRater {
   infitZStd: number
   outfitMnSq: number
   outfitZStd: number
+  discrimination: number
+  ptMea: number
+  ptExp: number
 }
 
 export interface RaschCriterion {
@@ -70,6 +73,8 @@ function parseTable7(text: string): { raters: RaschRater[]; meanMeasure: number;
       const s1 = nums(parts[1] ?? '') // score, count, obsvdAvg, fairAvg
       const s2 = nums(parts[2] ?? '') // measure, se
       const s3 = nums(parts[3] ?? '') // infitMnSq, infitZStd, outfitMnSq, outfitZStd
+      const s4 = nums(parts[4] ?? '') // discrimination
+      const s5 = nums(parts[5] ?? '') // ptMea, ptExp
 
       if (s2.length < 2 || s3.length < 4) continue
 
@@ -82,6 +87,9 @@ function parseTable7(text: string): { raters: RaschRater[]; meanMeasure: number;
         infitZStd: s3[1],
         outfitMnSq: s3[2],
         outfitZStd: s3[3],
+        discrimination: s4[0] ?? NaN,
+        ptMea: s5[0] ?? NaN,
+        ptExp: s5[1] ?? NaN,
       })
       void s1 // totalScore/count available if needed later
     }

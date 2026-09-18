@@ -139,6 +139,9 @@ export function ImportRaschPage() {
                         <th className="px-2 py-1 text-right font-medium">Measure</th>
                         <th className="px-2 py-1 text-right font-medium">SE</th>
                         <th className="px-2 py-1 text-right font-medium">Infit</th>
+                        <th className="px-2 py-1 text-right font-medium">Outfit</th>
+                        <th className="px-2 py-1 text-right font-medium">Discrm</th>
+                        <th className="px-2 py-1 text-right font-medium">PtMea/PtExp</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -149,6 +152,9 @@ export function ImportRaschPage() {
                           <td className="px-2 py-1 text-right font-mono">{r.measure.toFixed(2)}</td>
                           <td className="px-2 py-1 text-right font-mono">{r.se.toFixed(2)}</td>
                           <td className="px-2 py-1 text-right font-mono">{r.infitMnSq.toFixed(2)}</td>
+                          <td className="px-2 py-1 text-right font-mono">{r.outfitMnSq.toFixed(2)}</td>
+                          <td className="px-2 py-1 text-right font-mono">{r.discrimination.toFixed(2)}</td>
+                          <td className="px-2 py-1 text-right font-mono">{r.ptMea.toFixed(2)}/{r.ptExp.toFixed(2)}</td>
                         </tr>
                       ))}
                     </tbody>

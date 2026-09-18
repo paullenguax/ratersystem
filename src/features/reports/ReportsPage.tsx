@@ -13,13 +13,16 @@ import type { RaschRun } from '@/lib/parseFacets'
 // ── helpers ────────────────────────────────────────────────────────────────
 
 const DIMS = [
-  { key: 'pronunciation' as const, abbr: 'PRO' },
-  { key: 'structure'     as const, abbr: 'STR' },
-  { key: 'vocabulary'    as const, abbr: 'VOC' },
-  { key: 'fluency'       as const, abbr: 'FLU' },
-  { key: 'comprehension' as const, abbr: 'COM' },
-  { key: 'interactions'  as const, abbr: 'INT' },
+  { key: 'pronunciation' as const, abbr: 'PRO', label: 'Pronunciation' },
+  { key: 'structure'     as const, abbr: 'STR', label: 'Structure' },
+  { key: 'vocabulary'    as const, abbr: 'VOC', label: 'Vocabulary' },
+  { key: 'fluency'       as const, abbr: 'FLU', label: 'Fluency' },
+  { key: 'comprehension' as const, abbr: 'COM', label: 'Comprehension' },
+  { key: 'interactions'  as const, abbr: 'INT', label: 'Interactions' },
 ]
+
+const SUBTLE_DELTA = 0.3
+const NOTABLE_DELTA = 0.8
 
 function mean(vals: number[]) {
   return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null
@@ -34,6 +37,27 @@ function scoreColour(n: number) {
   return 'text-red-700'
 }
 
+function exportSeniorScoresCsv(candidateStats: CandidateStat[], srScoresByTest: Map<string, Score[]>, raterName: string) {
+  const header = ['Candidate', 'Candidate Name', 'Test', 'Senior Rater', 'Pronunciation', 'Structure', 'Vocabulary', 'Fluency', 'Comprehension', 'Interactions', 'Overall']
+  const rows = candidateStats.flatMap(stat =>
+    (srScoresByTest.get(stat.testDocId) ?? []).map(s => [
+      stat.label,
+      stat.candidateName,
+      s.testNumber ?? '',
+      s.raterName,
+      s.pronunciation, s.structure, s.vocabulary,
+      s.fluency, s.comprehension, s.interactions,
+      s.overallLevel,
+    ]),
+  )
+  const csv = [header, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
+  const blob = new Blob([csv], { type: 'text/csv' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = `senior-scores-${raterName.replace(/\s+/g, '-')}-${new Date().toISOString().split('T')[0]}.csv`
+  a.click()
+}
+
 // ── types ──────────────────────────────────────────────────────────────────
 
 interface CandidateStat {
@@ -41,29 +65,58 @@ interface CandidateStat {
   candidateName: string
   testDocId: string
   raterScore: Score
-  allScores: Score[]    // ALL scores for this test across all sessions
+  allScores: Score[]      // ALL scores for this test across all sessions
   avgOverall: number
   delta: number
+  srScores: Score[]       // senior-rater (+ admin) scores only, same test — the reliable comparison
+  srAvgOverall: number | null
+  srDelta: number | null
 }
 
 // ── per-candidate auto-paragraph ───────────────────────────────────────────
+// Anchored to senior-rater consensus, not the full trainee-inclusive average —
+// the bulk of scores are from trainees and are less reliable as a benchmark.
 
-function autoPara(stat: CandidateStat): string {
-  const { label, raterScore, allScores, avgOverall, delta } = stat
-  const avg = avgOverall.toFixed(1)
+function criterionBreakdown(stat: CandidateStat): string {
+  let worst: { label: string; srMean: number; delta: number } | null = null
+  for (const d of DIMS) {
+    const srMean = mean(stat.srScores.map(s => s[d.key] as number))
+    if (srMean == null) continue
+    const delta = (stat.raterScore[d.key] as number) - srMean
+    if (Math.abs(delta) >= NOTABLE_DELTA && (!worst || Math.abs(delta) > Math.abs(worst.delta))) {
+      worst = { label: d.label, srMean, delta }
+    }
+  }
+  if (!worst) return ''
+  return worst.delta > 0
+    ? ` This is mainly driven by ${worst.label}, where senior raters averaged ${worst.srMean.toFixed(1)} against your score.`
+    : ` This is mainly driven by ${worst.label}, where senior raters averaged ${worst.srMean.toFixed(1)}, higher than your score.`
+}
+
+function autoPara(stat: CandidateStat, handWaved = false): string {
+  const { label, raterScore, srScores, srAvgOverall, srDelta } = stat
   const their = raterScore.overallLevel
-  const n = allScores.length
-  const raters = `${n} rater${n !== 1 ? 's' : ''}`
 
-  if (Math.abs(delta) < 0.3)
+  if (srDelta == null) {
+    const avgAll = stat.avgOverall.toFixed(1)
+    const nAll = stat.allScores.length
+    return `Candidate ${label}: your overall score of ${their} — no senior-rater scores are available for this candidate yet, so this compares against all ${nAll} rater${nAll !== 1 ? 's' : ''} (average ${avgAll}).`
+  }
+
+  const avg = srAvgOverall!.toFixed(1)
+  const n = srScores.length
+  const raters = `${n} senior rater${n !== 1 ? 's' : ''}`
+  const criterionNote = handWaved ? '' : criterionBreakdown(stat)
+
+  if (Math.abs(srDelta) < SUBTLE_DELTA)
     return `Candidate ${label}: your overall score of ${their} is closely in line with the general consensus (average ${avg} across ${raters}).`
-  if (delta >= 0.3 && delta < 0.8)
+  if (srDelta >= SUBTLE_DELTA && srDelta < NOTABLE_DELTA)
     return `Candidate ${label}: your overall score of ${their} is a little more generous than the average of ${avg} across ${raters}, though this is not unreasonable.`
-  if (delta >= 0.8)
-    return `Candidate ${label}: your overall score of ${their} is notably more generous than the average of ${avg} across ${raters}.`
-  if (delta <= -0.3 && delta > -0.8)
+  if (srDelta >= NOTABLE_DELTA)
+    return `Candidate ${label}: your overall score of ${their} is notably more generous than the average of ${avg} across ${raters}.${criterionNote}`
+  if (srDelta <= -SUBTLE_DELTA && srDelta > -NOTABLE_DELTA)
     return `Candidate ${label}: your overall score of ${their} is a little stricter than the average of ${avg} across ${raters}.`
-  return `Candidate ${label}: your overall score of ${their} is notably stricter than the average of ${avg} across ${raters}.`
+  return `Candidate ${label}: your overall score of ${their} is notably stricter than the average of ${avg} across ${raters}.${criterionNote}`
 }
 
 // ── email builder ──────────────────────────────────────────────────────────
@@ -72,6 +125,7 @@ function buildEmail(params: {
   rater: Person
   candidateStats: CandidateStat[]
   paraOverrides: Record<string, string>
+  handWave: Record<string, boolean>
   measure: string
   infit: string
   outcome: 'pass' | 'advisory' | 'fail'
@@ -81,7 +135,7 @@ function buildEmail(params: {
   prevMeasure: string
   raterNumberField: string
 }): string {
-  const { rater, candidateStats, paraOverrides, measure, infit, outcome, advisoryText,
+  const { rater, candidateStats, paraOverrides, handWave, measure, infit, outcome, advisoryText,
           isRepeater, prevRaterNumber, prevMeasure, raterNumberField } = params
   const firstName = rater.name.split(' ')[0]
   const raterNum = raterNumberField || (rater.raterNumber ?? '[RATER NUMBER]')
@@ -94,16 +148,16 @@ function buildEmail(params: {
   const infitInRange   = !isNaN(infitNum)   && infitNum   >= 0.7 && infitNum   <= 1.3
 
   const candidateParas = candidateStats
-    .map(s => paraOverrides[s.label] ?? autoPara(s))
+    .map(s => paraOverrides[s.label] ?? autoPara(s, handWave[s.label]))
     .join('\n\n')
 
-  const notable = candidateStats.filter(s => Math.abs(s.delta) >= 0.5)
+  const notable = candidateStats.filter(s => s.srDelta != null && Math.abs(s.srDelta) >= 0.5 && !handWave[s.label])
   let overallLine: string
   if (notable.length === 0) {
     overallLine = 'Overall, your scores seem very close to the general consensus in each case.'
   } else {
     const parts = notable.map(s =>
-      `${s.delta > 0 ? 'more generous' : 'stricter'} than the average rater to Candidate ${s.label}`
+      `${s.srDelta! > 0 ? 'more generous' : 'stricter'} than the average rater to Candidate ${s.label}`
     )
     overallLine = `Overall, your scores seem very close to the general consensus in each case, although you were ${parts.join(', and ')}.`
   }
@@ -201,6 +255,7 @@ export function ReportsPage() {
   const [outcome, setOutcome]           = useState<'pass' | 'advisory' | 'fail'>('pass')
   const [advisoryText, setAdvisoryText] = useState('')
   const [paraOverrides, setParaOverrides] = useState<Record<string, string>>({})
+  const [handWave, setHandWave] = useState<Record<string, boolean>>({})
   const [expanded, setExpanded]         = useState<Set<string>>(new Set())
   const [copied, setCopied]             = useState(false)
   const [isRepeater, setIsRepeater]     = useState(false)
@@ -297,24 +352,8 @@ export function ReportsPage() {
       })
   }, [scores, sessionIds, raterId])
 
-  // Per-candidate stats — allScores drawn from ALL sessions for that test
-  const candidateStats = useMemo((): CandidateStat[] => {
-    return raterScores.map((rs, i) => {
-      const allScores = scores.filter(s => s.testDocId === rs.testDocId)
-      const avgOverall = allScores.reduce((sum, s) => sum + s.overallLevel, 0) / allScores.length
-      return {
-        label: String.fromCharCode(65 + i),
-        candidateName: rs.candidateName,
-        testDocId: rs.testDocId,
-        raterScore: rs,
-        allScores,
-        avgOverall,
-        delta: rs.overallLevel - avgOverall,
-      }
-    })
-  }, [scores, raterScores])
-
-  // Senior-rater scores per test for expanded rows
+  // Senior-rater scores per test — used both for the expanded table rows and
+  // as the comparison basis for auto-generated candidate commentary
   const srScoresByTest = useMemo(() => {
     const m = new Map<string, Score[]>()
     const testDocIds = new Set(raterScores.map(s => s.testDocId))
@@ -335,6 +374,28 @@ export function ReportsPage() {
     return m
   }, [scores, raterScores, srRaterIds, raterId])
 
+  // Per-candidate stats — allScores drawn from ALL sessions for that test
+  const candidateStats = useMemo((): CandidateStat[] => {
+    return raterScores.map((rs, i) => {
+      const allScores = scores.filter(s => s.testDocId === rs.testDocId)
+      const avgOverall = allScores.reduce((sum, s) => sum + s.overallLevel, 0) / allScores.length
+      const srScores = srScoresByTest.get(rs.testDocId) ?? []
+      const srAvgOverall = mean(srScores.map(s => s.overallLevel))
+      return {
+        label: String.fromCharCode(65 + i),
+        candidateName: rs.candidateName,
+        testDocId: rs.testDocId,
+        raterScore: rs,
+        allScores,
+        avgOverall,
+        delta: rs.overallLevel - avgOverall,
+        srScores,
+        srAvgOverall,
+        srDelta: srAvgOverall == null ? null : rs.overallLevel - srAvgOverall,
+      }
+    })
+  }, [scores, raterScores, srScoresByTest])
+
   // Summary means
   const raterMeans = useMemo(() => {
     if (!raterScores.length) return null
@@ -353,9 +414,9 @@ export function ReportsPage() {
 
   const emailText = useMemo(() => {
     if (!rater || candidateStats.length === 0) return ''
-    return buildEmail({ rater, candidateStats, paraOverrides, measure, infit, outcome, advisoryText,
+    return buildEmail({ rater, candidateStats, paraOverrides, handWave, measure, infit, outcome, advisoryText,
                         isRepeater, raterNumberField, prevRaterNumber, prevMeasure })
-  }, [rater, candidateStats, paraOverrides, measure, infit, outcome, advisoryText,
+  }, [rater, candidateStats, paraOverrides, handWave, measure, infit, outcome, advisoryText,
       isRepeater, raterNumberField, prevRaterNumber, prevMeasure])
 
   function toggleExpanded(testDocId: string) {
@@ -370,6 +431,7 @@ export function ReportsPage() {
     setSessionName(name)
     setRaterId('')
     setParaOverrides({})
+    setHandWave({})
     setExpanded(new Set())
     setMeasure('')
     setInfit('')
@@ -380,6 +442,7 @@ export function ReportsPage() {
   function changeRater(id: string) {
     setRaterId(id)
     setParaOverrides({})
+    setHandWave({})
     setExpanded(new Set())
     setIsRepeater(false)
     setPrevRaterNumber('')
@@ -436,6 +499,20 @@ export function ReportsPage() {
   const infitNum   = parseFloat(infit)
   const measureInRange = !isNaN(measureNum) && measureNum >= -1  && measureNum <= 1
   const infitInRange   = !isNaN(infitNum)   && infitNum   >= 0.7 && infitNum   <= 1.3
+  const hasSeniorScores = candidateStats.some(s => (srScoresByTest.get(s.testDocId)?.length ?? 0) > 0)
+
+  // Additional fit indicators — parsed from Facets but not yet used to drive any
+  // wording, just surfaced so a trainer (or later, a synthesis tool) can see them.
+  // Thresholds are a starting convention, not house policy — adjust if needed.
+  const outfitNum = raschData?.outfitMnSq
+  const outfitInRange = outfitNum != null && !isNaN(outfitNum) && outfitNum >= 0.7 && outfitNum <= 1.3
+  const outfitTooHigh = outfitNum != null && !isNaN(outfitNum) && outfitNum > 1.3
+  const discrimNum = raschData?.discrimination
+  const discrimOk = discrimNum != null && !isNaN(discrimNum) && discrimNum >= 0.5
+  const ptMeaNum = raschData?.ptMea
+  const ptExpNum = raschData?.ptExp
+  const correlationOk = ptMeaNum != null && ptExpNum != null && !isNaN(ptMeaNum) && !isNaN(ptExpNum)
+    && ptMeaNum >= 0 && (ptExpNum - ptMeaNum) < 0.15
 
   return (
     <div className="space-y-6">
@@ -480,7 +557,18 @@ export function ReportsPage() {
 
             {/* Score comparison table — AssignmentReview style */}
             <div className="space-y-1.5">
-              <p className="text-sm font-medium">Score comparison</p>
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium">Score comparison</p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!hasSeniorScores}
+                  onClick={() => exportSeniorScoresCsv(candidateStats, srScoresByTest, rater?.name ?? 'rater')}
+                >
+                  <Download className="size-4 mr-1.5" />
+                  Export senior scores
+                </Button>
+              </div>
               <div className="rounded-md border overflow-x-auto">
                 <table className="w-full text-sm border-collapse">
                   <thead>
@@ -640,18 +728,28 @@ export function ReportsPage() {
                   </label>
                   <Textarea
                     rows={3}
-                    value={paraOverrides[stat.label] ?? autoPara(stat)}
+                    value={paraOverrides[stat.label] ?? autoPara(stat, handWave[stat.label])}
                     onChange={e => setParaOverrides(p => ({ ...p, [stat.label]: e.target.value }))}
                     className="text-sm resize-none"
                   />
-                  {paraOverrides[stat.label] !== undefined && (
-                    <button
-                      className="text-xs text-muted-foreground hover:text-foreground"
-                      onClick={() => setParaOverrides(p => { const n = { ...p }; delete n[stat.label]; return n })}
-                    >
-                      ↺ Reset to auto
-                    </button>
-                  )}
+                  <div className="flex items-center gap-3">
+                    {paraOverrides[stat.label] !== undefined && (
+                      <button
+                        className="text-xs text-muted-foreground hover:text-foreground"
+                        onClick={() => setParaOverrides(p => { const n = { ...p }; delete n[stat.label]; return n })}
+                      >
+                        ↺ Reset to auto
+                      </button>
+                    )}
+                    <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={handWave[stat.label] ?? false}
+                        onChange={e => setHandWave(h => ({ ...h, [stat.label]: e.target.checked }))}
+                      />
+                      Hand-wave (skip criterion detail)
+                    </label>
+                  </div>
                 </div>
               ))}
             </div>
@@ -690,6 +788,40 @@ export function ReportsPage() {
                   )}
                 </div>
               </div>
+
+              {raschData && (
+                <div className="grid grid-cols-3 gap-3 pt-1">
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Outfit MnSq</label>
+                    <p className="font-mono text-sm">{raschData.outfitMnSq.toFixed(2)}</p>
+                    <p className={`text-xs ${outfitInRange ? 'text-green-700' : 'text-red-600'}`}>
+                      {outfitInRange
+                        ? '✓ inside 0.7–1.3'
+                        : outfitTooHigh
+                          ? '✗ outside 0.7–1.3 — more erratic than expected'
+                          : '✗ outside 0.7–1.3 — more rigid/uniform than expected'}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Discrimination</label>
+                    <p className="font-mono text-sm">{raschData.discrimination.toFixed(2)}</p>
+                    <p className={`text-xs ${discrimOk ? 'text-green-700' : 'text-red-600'}`}>
+                      {discrimOk
+                        ? '✓ typical'
+                        : (discrimNum ?? 0) < 0
+                          ? '✗ negative — check for reversed scoring'
+                          : '✗ low — may not be discriminating between candidates'}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">PtMea / PtExp</label>
+                    <p className="font-mono text-sm">{raschData.ptMea.toFixed(2)} / {raschData.ptExp.toFixed(2)}</p>
+                    <p className={`text-xs ${correlationOk ? 'text-green-700' : 'text-red-600'}`}>
+                      {correlationOk ? '✓ close to expected' : '✗ observed correlation notably below expected'}
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Wright map */}
