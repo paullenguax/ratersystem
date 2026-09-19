@@ -691,7 +691,15 @@ phase.
   `vite.config.player.ts`'s comment for the full history).
   **Offline media guarantee (2026-09-02)** — `player-src/shared/preloadMedia.ts`:
   `preloadMediaToBlobs(items, onProgress)` fetches every recording/picture
-  into an in-memory **Blob** (4 tries each, `cache: 'force-cache'`),
+  into an in-memory **Blob** (4 tries each, `cache: 'force-cache'`, **capped
+  at 4 concurrent fetches** since 2026-09-19 — firing all 20-30+ of a real
+  test's media requests at once blew past the browser's ~6-connections-per-
+  host limit, so files queued behind each other could burn through all 4
+  retries just waiting for a turn, surfacing as "could not be cached" for a
+  perfectly reachable URL under load — this is why a flagged clip always
+  played fine when checked individually with no contention. Distinct from,
+  and not caught by, `StorylineMediaCheckPage`'s link checker, which only
+  flags genuinely-dead Storage tokens),
   `applyMediaBlobs()` rewrites the item URLs to `URL.createObjectURL()`
   copies (kept for the page's life, never revoked). examiner.ts/practice.ts
   run this on boot while the examiner works through the pre-test screens;

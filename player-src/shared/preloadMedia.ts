@@ -17,6 +17,24 @@ function collectUrls(items: StorylineItem[]): string[] {
   return [...urls]
 }
 
+// Browsers cap concurrent connections per host at ~6 — firing every media
+// fetch at once (as this used to) means a full test's worth of images/audio
+// (20-30+ files) queue up and starve each other, so a clip can burn through
+// all its retries just waiting for a turn that never comes in time, even
+// though the URL itself is perfectly reachable (this is why the affected
+// clip "plays fine" when checked individually with no contention). Capping
+// at 4 leaves headroom under the browser's own limit instead of relying
+// purely on fetchWithRetry's backoff to paper over self-inflicted queuing.
+async function withConcurrency<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+  let next = 0
+  async function worker() {
+    while (next < items.length) {
+      await fn(items[next++])
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
+}
+
 async function fetchWithRetry(url: string, tries = 4): Promise<Blob> {
   let lastErr: unknown
   for (let i = 0; i < tries; i++) {
@@ -48,18 +66,16 @@ export async function preloadMediaToBlobs(
   const failed: string[] = []
   let done = 0
   onProgress?.(0, urls.length, 0)
-  await Promise.all(
-    urls.map(async url => {
-      try {
-        blobs.set(url, await fetchWithRetry(url))
-      } catch {
-        failed.push(url)
-      } finally {
-        done++
-        onProgress?.(done, urls.length, failed.length)
-      }
-    }),
-  )
+  await withConcurrency(urls, 4, async url => {
+    try {
+      blobs.set(url, await fetchWithRetry(url))
+    } catch {
+      failed.push(url)
+    } finally {
+      done++
+      onProgress?.(done, urls.length, failed.length)
+    }
+  })
   return { blobs, failed }
 }
 
