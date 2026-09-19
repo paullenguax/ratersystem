@@ -9,7 +9,7 @@ export function TakeTestPage() {
           <div className="flex flex-col items-center gap-3">
             <img src={logo} alt="Lenguax" className="w-16 h-16 object-contain" />
             <div>
-              <p className="text-lg font-semibold text-[#00528C] leading-tight">Take your rater exam</p>
+              <p className="text-lg font-semibold text-[#00528C] leading-tight">Take your assignment</p>
               <p className="text-sm text-muted-foreground leading-tight mt-1">
                 Sign in with your Canvas account to begin. You'll be given 4 tests to score.
               </p>
