@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { collection, getDocs, getDoc, addDoc, doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'
 import { ref, listAll, deleteObject } from 'firebase/storage'
@@ -49,6 +49,7 @@ function statusVariant(status: StorylinePart['status']) {
 export function StorylinePartsPage() {
   const queryClient = useQueryClient()
   const { user } = useAuth()
+  const navigate = useNavigate()
 
   // Filters live in the URL, not plain useState — so clicking into a Part
   // to edit it and then going back (in-app arrow or the browser's own Back)
@@ -118,8 +119,13 @@ export function StorylinePartsPage() {
       .sort((a, b) => a.partNumber - b.partNumber || a.label.localeCompare(b.label))
   }, [parts, filter, statusFilter, categoryFilter, testTypeFilter, showArchived, search])
 
+  // Navigates straight into the new draft's editor rather than leaving the
+  // admin on this page: the Status/Part-number/search filters here are easy
+  // to have set to something (e.g. "Published") that hides a freshly-created
+  // draft, which made the button look completely broken — it was silently
+  // succeeding just out of view.
   async function handleNewPart() {
-    await addDoc(collection(db, 'storyline_parts'), {
+    const ref = await addDoc(collection(db, 'storyline_parts'), {
       partNumber: newPartNumber,
       label: `Part ${newPartNumber} draft`,
       status: 'draft',
@@ -128,6 +134,7 @@ export function StorylinePartsPage() {
       createdAt: serverTimestamp(),
     })
     queryClient.invalidateQueries({ queryKey: ['storyline_parts'] })
+    navigate(`/test-versions/parts/${ref.id}/edit`)
   }
 
   async function handleDuplicate(part: StorylinePart) {

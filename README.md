@@ -348,7 +348,13 @@ phase.
   the filter state you left, instead of resetting to defaults. Not
   persisted to the URL: `newPartNumber` (which Part number "New Part"
   will create) and `editingTestTypesId` (which row's tag-editor is
-  expanded) — transient per-visit UI state, not filters. `StorylineThemeRulesPage`
+  expanded) — transient per-visit UI state, not filters. **"New Part" now
+  navigates straight into the new draft's editor** (added 2026-09-19) instead
+  of leaving the admin on the list — the new doc is always `status: 'draft'`,
+  so if the Status/Part-number/search filters were left on something else
+  (e.g. "Published"), the freshly-created row was silently filtered out of
+  view, making the button look completely broken with no console error (it
+  had actually succeeded). `StorylineThemeRulesPage`
   (`/test-versions/themes`) manages the shared theme vocabulary and
   unmixable Part-1/4 pairs (see "Dynamic Part-pooling" below).
   `StorylineActivityPage` (`/test-versions/activity`, "Test activity" from the
@@ -1509,4 +1515,4 @@ sidebar as "User Manual".
 
 ## Last updated
 
-2026-09-18
+2026-09-19
