@@ -16,9 +16,9 @@ interface Props {
 }
 
 const W = 690
-const H = 680
+const H = 694
 const TOP = 62
-const BOT = 44
+const BOT = 58
 
 const AXIS_X = 40
 const CAND_X0 = 48, CAND_MAX = 100
@@ -136,7 +136,8 @@ export const WrightMap = forwardRef<SVGSVGElement, Props>(function WrightMap(
       <text x={RATER_X0 + 120} y={38} textAnchor="middle" fontSize={9} fill="#94a3b8">↑ stricter</text>
       <text x={CRIT_X0 + 40} y={22} textAnchor="middle" fontSize={11} fontWeight="bold" fill="#334155">Criteria</text>
       <text x={CRIT_X0 + 40} y={38} textAnchor="middle" fontSize={9} fill="#94a3b8">↑ harder</text>
-      <text x={SCALE_X0 + SCALE_W / 2} y={22} textAnchor="middle" fontSize={11} fontWeight="bold" fill="#334155">ICAO</text>
+      <text x={SCALE_X0 + SCALE_W / 2} y={22} textAnchor="middle" fontSize={11} fontWeight="bold" fill="#334155">Candidate</text>
+      <text x={SCALE_X0 + SCALE_W / 2} y={36} textAnchor="middle" fontSize={11} fontWeight="bold" fill="#334155">level</text>
       <text x={AXIS_X - 6} y={38} textAnchor="end" fontSize={9} fill="#94a3b8">logit</text>
       <text x={RATER_X0 + 120} y={H - BOT + 16} textAnchor="middle" fontSize={9} fill="#94a3b8">↓ more lenient</text>
 
@@ -234,8 +235,11 @@ export const WrightMap = forwardRef<SVGSVGElement, Props>(function WrightMap(
       ))}
 
       {/* Key */}
-      <text x={W / 2} y={H - 10} textAnchor="middle" fontSize={9} fill="#94a3b8">
-        Rater bars: raters per ¼ logit · dashed line: average rater · red bar: ±1 standard error · ICAO: level expected for an average rater
+      <text x={W / 2} y={H - 22} textAnchor="middle" fontSize={9} fill="#94a3b8">
+        Rater bars: raters per ¼ logit · dashed line: average rater · red bar: ±1 standard error
+      </text>
+      <text x={W / 2} y={H - 8} textAnchor="middle" fontSize={9} fill="#94a3b8">
+        Candidate level: the ICAO level a candidate at that height would typically receive from an average rater
       </text>
     </svg>
   )
