@@ -33,7 +33,9 @@ function levelColour(n: number) {
 
 // ── Rasch export ───────────────────────────────────────────────────────────
 
-function exportRaschCSV(scores: Score[], sessionId: string, people: Person[]) {
+// Output is Facets-ready as-is: comma-separated, and every non-data line
+// (notes, rater key, column header) starts with ';' so Facets skips it
+function buildRaschExport(scores: Score[], sessionId: string, people: Person[]) {
   const rows = scores.filter(s => {
     if (s.testNumber == null) return false
     if (s.published) return true
@@ -73,26 +75,26 @@ function exportRaschCSV(scores: Score[], sessionId: string, people: Person[]) {
   })
 
   const lines: string[] = [
-    `! Rasch export — ${new Date().toISOString().split('T')[0]}`,
-    `! ${rows.length} observations`,
-    `! ${sessionName ? `Published + current event: ${sessionName}` : 'Published scores only'}`,
-    `! Historical raters use permanent numbers · Current raters use temp numbers`,
-    `! Returnees appear twice (permanent # for history, temp # for current event)`,
-    `!`,
-    `! Rater key — historical:`,
+    `; Rasch export — ${new Date().toISOString().split('T')[0]}`,
+    `; ${rows.length} observations`,
+    `; ${sessionName ? `Published + current event: ${sessionName}` : 'Published scores only'}`,
+    `; Historical raters use permanent numbers · Current raters use temp numbers`,
+    `; Returnees appear twice (permanent # for history, temp # for current event)`,
+    `;`,
+    `; Rater key — historical:`,
     ...historicalRaters.map(([id, name]) => {
-      const tag = returneeIds.has(id) ? '  [returnee — also has temp # below]' : ''
-      return `! ${permNumById.get(id)}\t${name}${tag}`
+      const tag = returneeIds.has(id) ? `returnee — now Rater ${tempNumById.get(id)} in this event` : ''
+      return `; ${permNumById.get(id)},${name},${tag}`
     }),
-    `!`,
-    `! Rater key — current event (temp numbers):`,
+    `;`,
+    `; Rater key — current event (temp numbers):`,
     ...currentRaters.map(([id, name]) => {
-      const tag = returneeIds.has(id) ? '  [returnee]' : newRaterIds.has(id) ? '  [new]' : ''
-      return `! ${tempNumById.get(id)}\t${name}${tag}`
+      const tag = returneeIds.has(id) ? `returnee — previously Rater ${permNumById.get(id) ?? '(no number assigned yet)'}` : newRaterIds.has(id) ? 'new' : ''
+      return `; ${tempNumById.get(id)},${name},${tag}`
     }),
-    `!`,
-    ['candidate', 'rater', '1-6a', 'varPronunciation', 'varStructure',
-      'varVocabulary', 'varFluency', 'varComprehension', 'varInteraction'].join('\t'),
+    `;`,
+    [';candidate', 'rater', '1-6a', 'varPronunciation', 'varStructure',
+      'varVocabulary', 'varFluency', 'varComprehension', 'varInteraction'].join(','),
     ...[...rows].sort((a, b) => {
       const isCurrA = !a.published && !!sessionId && a.sessionId === sessionId
       const isCurrB = !b.published && !!sessionId && b.sessionId === sessionId
@@ -108,17 +110,75 @@ function exportRaschCSV(scores: Score[], sessionId: string, people: Person[]) {
         '1-6a',
         s.pronunciation, s.structure, s.vocabulary,
         s.fluency, s.comprehension, s.interactions,
-      ].join('\t')
+      ].join(',')
     }),
   ]
 
-  const blob = new Blob([lines.join('\n')], { type: 'text/tab-separated-values;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
+  const nums = rows.map(s => {
+    const isCurrent = !s.published && sessionId && s.sessionId === sessionId
+    return isCurrent ? (tempNumById.get(s.raterId) ?? 0) : (permNumById.get(s.raterId) ?? 0)
+  })
+  return {
+    lines,
+    maxCandidate: Math.max(1, ...rows.map(s => s.testNumber ?? 0)),
+    maxRater: Math.max(1, ...nums),
+    // Plain characters only — it's written into the spec's data= line
+    fileName: sessionName ? `rasch-${sessionName.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '')}.csv` : 'rasch-published.csv',
+  }
+}
+
+function download(text: string, fileName: string, type: string) {
+  const url = URL.createObjectURL(new Blob([text], { type }))
   const a = document.createElement('a')
   a.href = url
-  a.download = sessionName ? `rasch-${sessionName}.csv` : 'rasch-published.csv'
+  a.download = fileName
   a.click()
   URL.revokeObjectURL(url)
+}
+
+function exportRaschCSV(scores: Score[], sessionId: string, people: Person[]) {
+  const { lines, fileName } = buildRaschExport(scores, sessionId, people)
+  download(lines.join('\n'), fileName, 'text/csv;charset=utf-8;')
+}
+
+// Facets specification file matching the export — element ranges come from the
+// data, so new candidates/raters are never silently dropped ("Responses not
+// matched to any model are ignored" in Table 2)
+function exportFacetsSpec(scores: Score[], sessionId: string, people: Person[]) {
+  const { maxCandidate, maxRater, fileName } = buildRaschExport(scores, sessionId, people)
+  const spec = [
+    'Title = Lenguax Rating',
+    'Facets = 3 \t; three facets, candidate, rater, and rating criteria',
+    'Positive = 1\t; the first facet positively oriented',
+    'Noncentered= 1\t; the first facet is a floating one',
+    'Vertical = 1*, 2N, 3A\t; put the control for the "rulers" in Table 6 here, if not default',
+    'Arrange = mN\t; put the order for the measure Table 7 here',
+    '',
+    'Models=?,?,?,R6 ; one shared 6-category rating scale',
+    '*',
+    '',
+    'Labels=',
+    '1,candidate',
+    `1-${maxCandidate}`,
+    '',
+    '*',
+    '2, rater',
+    `1-${maxRater}`,
+    '*',
+    '',
+    '3, criteria',
+    '1= Pronunciation',
+    '2= Structure',
+    '3= Vocabulary',
+    '4= Fluency',
+    '5= Comprehension',
+    '6= Interactions',
+    '',
+    '*',
+    `data= ${fileName}`,
+    '',
+  ].join('\r\n')
+  download(spec, 'lenguax rating.txt', 'text/plain;charset=utf-8;')
 }
 
 // ── Assign permanent rater numbers ─────────────────────────────────────────
@@ -307,6 +367,16 @@ export function ScoresPage() {
           >
             <Download className="size-4 mr-2" />
             Export Rasch CSV
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => exportFacetsSpec(scores, exportSessionId, people)}
+            disabled={scores.length === 0}
+            title="Facets specification file with candidate/rater ranges matching the export"
+          >
+            <Download className="size-4 mr-2" />
+            Facets spec
           </Button>
           <Button onClick={openAdd}>
             <Plus className="size-4 mr-2" /> Add score
