@@ -17,10 +17,20 @@ export interface RaschCriterion {
   logit: number
 }
 
+// Lower edge of each ICAO level on the candidate logit scale (Table 8.1's
+// "Expectation: Measure at -0.5" column — the "---" marks in Table 6.0's Scale)
+export interface ScaleBoundary {
+  level: number
+  logit: number
+}
+
 export interface RaschRun {
   raters: RaschRater[]
   criteria: RaschCriterion[]
   candidateDensity: { logit: number; count: number }[]
+  // Added later — absent on older rasch_runs docs
+  candidateMeasures?: number[]
+  scaleBoundaries?: ScaleBoundary[]
   meanMeasure: number
   reliability: number
   separation: number
@@ -31,15 +41,19 @@ function nums(s: string): number[] {
   return (s.match(/-?\d*\.?\d+/g) ?? []).map(Number)
 }
 
-function parseTable7(text: string): { raters: RaschRater[]; meanMeasure: number; reliability: number; separation: number; rmse: number } {
+// Parses a "Table 7.x.1 <facet> Measurement Report" — same layout for
+// candidates, raters and criteria; the last column is "Num name"
+function parseTable7(text: string, facet: string): { raters: RaschRater[]; meanMeasure: number; reliability: number; separation: number; rmse: number } {
   const raters: RaschRater[] = []
   let meanMeasure = 0, reliability = 0, separation = 0, rmse = 0
 
-  // Find Table 7 section
-  const t7Start = text.search(/Table 7\.\d+\.\d+\s+rater Measurement Report/i)
+  const t7Start = text.search(new RegExp(`Table 7\\.\\d+\\.\\d+\\s+${facet} Measurement Report`, 'i'))
   if (t7Start < 0) return { raters, meanMeasure, reliability, separation, rmse }
 
-  const section = text.slice(t7Start, t7Start + 50000)
+  // Stop at the next table so summary-line regexes can't match a later one
+  const rest = text.slice(t7Start + 10)
+  const nextTable = rest.search(/\nTable \d/)
+  const section = text.slice(t7Start, nextTable < 0 ? t7Start + 100000 : t7Start + 10 + nextTable)
   const lines = section.split('\n')
 
   let inData = false
@@ -192,8 +206,33 @@ function parseTable6(text: string): { criteria: RaschCriterion[]; candidateDensi
   return { criteria, candidateDensity }
 }
 
+function parseScaleBoundaries(text: string): ScaleBoundary[] {
+  const start = text.search(/Table 8\.1\s+Category Statistics/i)
+  if (start < 0) return []
+  const lines = text.slice(start, start + 5000).split('\n')
+  const out: ScaleBoundary[] = []
+  for (const line of lines) {
+    // |  3    3470      3470   20%  22%|   .42 ... | -2.68    .06|   -.91   -2.73| ...
+    const m = line.match(/^\|\s*(\d+)\s+\d+\s+\d+\s+\d+%/)
+    if (!m) continue
+    const parts = line.split('|')
+    const expectation = nums(parts[4] ?? '') // [measure at category, measure at -0.5]
+    if (expectation.length >= 2) out.push({ level: parseInt(m[1]), logit: expectation[1] })
+  }
+  return out
+}
+
 export function parseFacetsOutput(text: string): RaschRun {
-  const { raters, meanMeasure, reliability, separation, rmse } = parseTable7(text)
-  const { criteria, candidateDensity } = parseTable6(text)
-  return { raters, criteria, candidateDensity, meanMeasure, reliability, separation, rmse }
+  const { raters, meanMeasure, reliability, separation, rmse } = parseTable7(text, 'rater')
+  const { criteria: rulerCriteria, candidateDensity } = parseTable6(text)
+  const candidateMeasures = parseTable7(text, 'candidate').raters.map(c => c.measure)
+  const scaleBoundaries = parseScaleBoundaries(text)
+
+  // Table 7.3.1 has exact criteria measures; Table 6.0 only gives whole-logit rows
+  const exactCriteria = parseTable7(text, 'criteria').raters
+  const criteria = exactCriteria.length
+    ? exactCriteria.map(c => ({ name: c.raterName, logit: c.measure }))
+    : rulerCriteria
+
+  return { raters, criteria, candidateDensity, candidateMeasures, scaleBoundaries, meanMeasure, reliability, separation, rmse }
 }

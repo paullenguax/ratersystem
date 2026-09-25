@@ -526,6 +526,8 @@ export function ReportsPage() {
         raters: importParsed.raters,
         criteria: importParsed.criteria,
         candidateDensity: importParsed.candidateDensity,
+        candidateMeasures: importParsed.candidateMeasures ?? [],
+        scaleBoundaries: importParsed.scaleBoundaries ?? [],
       })
       setImportSaved(true)
       setImportText('')
@@ -544,8 +546,9 @@ export function ReportsPage() {
     const serializer = new XMLSerializer()
     const svgStr = serializer.serializeToString(svg)
     const canvas = document.createElement('canvas')
-    canvas.width = 340 * 2
-    canvas.height = 520 * 2
+    const { width, height } = svg.viewBox.baseVal
+    canvas.width = width * 2
+    canvas.height = height * 2
     const ctx = canvas.getContext('2d')!
     const img = new Image()
     const blob = new Blob([svgStr], { type: 'image/svg+xml' })
@@ -671,7 +674,7 @@ export function ReportsPage() {
                 <div className="flex flex-wrap gap-2">
                   {importParsed.criteria.map(c => (
                     <span key={c.name} className="text-xs border rounded px-2 py-0.5 font-mono">
-                      {c.name} {c.logit > 0 ? '+' : ''}{c.logit.toFixed(0)}
+                      {c.name} {c.logit > 0 ? '+' : ''}{c.logit.toFixed(2)}
                     </span>
                   ))}
                 </div>
@@ -1011,8 +1014,14 @@ export function ReportsPage() {
                     measure={raschData.measure}
                     se={raschData.se}
                     meanMeasure={latestRun.meanMeasure}
+                    raterMeasures={latestRun.raters.map(r => r.measure)}
+                    candidateMeasures={latestRun.candidateMeasures}
                     candidateDensity={latestRun.candidateDensity}
                     criteria={latestRun.criteria}
+                    scaleBoundaries={latestRun.scaleBoundaries}
+                    previous={isRepeater && prevRaterNumber && !isNaN(parseFloat(prevMeasure))
+                      ? { raterNumber: prevRaterNumber, measure: parseFloat(prevMeasure) }
+                      : undefined}
                   />
                 </div>
               </div>
