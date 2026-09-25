@@ -2,7 +2,6 @@ import { forwardRef } from 'react'
 import type { RaschCriterion, ScaleBoundary } from '@/lib/parseFacets'
 
 interface Props {
-  raterName: string
   raterNumber: number
   measure: number
   se: number
@@ -75,7 +74,7 @@ function spread(desired: number[], gap: number, minY: number, maxY: number): num
 const signed = (n: number) => `${n > 0 ? '+' : ''}${n.toFixed(2)}`
 
 export const WrightMap = forwardRef<SVGSVGElement, Props>(function WrightMap(
-  { raterName, raterNumber, measure, se, meanMeasure, raterMeasures, candidateMeasures,
+  { raterNumber, measure, se, meanMeasure, raterMeasures, candidateMeasures,
     candidateDensity, criteria, scaleBoundaries, previous },
   ref,
 ) {
@@ -203,7 +202,7 @@ export const WrightMap = forwardRef<SVGSVGElement, Props>(function WrightMap(
             <circle cx={MARK_X} cy={cy} r={5.5} fill="#dc2626" />
             <line x1={MARK_X + 6} y1={cy} x2={LABEL_X - 4} y2={ly} stroke="#fca5a5" strokeWidth={0.75} />
             <text x={LABEL_X} y={ly - 2} fontSize={11} fontWeight="bold" fill="#0f172a">
-              {raterName.split(' ')[0]} · Rater {raterNumber}
+              Rater {raterNumber}
             </text>
             <text x={LABEL_X} y={ly + 11} fontSize={10} fill="#475569">
               {signed(measure)} ± {se.toFixed(2)} · stricter than {pct}%

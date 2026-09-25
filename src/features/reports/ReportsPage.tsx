@@ -1009,7 +1009,6 @@ export function ReportsPage() {
                 <div className="border rounded-md p-2 inline-block bg-white">
                   <WrightMap
                     ref={svgRef}
-                    raterName={rater.name}
                     raterNumber={raschData.raterNumber}
                     measure={raschData.measure}
                     se={raschData.se}
