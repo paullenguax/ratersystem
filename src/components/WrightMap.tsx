@@ -130,15 +130,15 @@ export const WrightMap = forwardRef<SVGSVGElement, Props>(function WrightMap(
 
       {/* Column headers */}
       <text x={CAND_X0 + CAND_MAX / 2} y={22} textAnchor="middle" fontSize={11} fontWeight="bold" fill="#334155">Candidates</text>
-      <text x={CAND_X0 + CAND_MAX / 2} y={38} textAnchor="middle" fontSize={9} fill="#94a3b8">↑ stronger</text>
+      <text x={CAND_X0 + CAND_MAX / 2} y={38} textAnchor="middle" fontSize={9} fill="#64748b">↑ stronger</text>
       <text x={RATER_X0 + 120} y={22} textAnchor="middle" fontSize={11} fontWeight="bold" fill="#334155">Raters ({raterMeasures.length})</text>
-      <text x={RATER_X0 + 120} y={38} textAnchor="middle" fontSize={9} fill="#94a3b8">↑ stricter</text>
+      <text x={RATER_X0 + 120} y={38} textAnchor="middle" fontSize={9} fill="#64748b">↑ stricter</text>
       <text x={CRIT_X0 + 40} y={22} textAnchor="middle" fontSize={11} fontWeight="bold" fill="#334155">Criteria</text>
-      <text x={CRIT_X0 + 40} y={38} textAnchor="middle" fontSize={9} fill="#94a3b8">↑ harder</text>
+      <text x={CRIT_X0 + 40} y={38} textAnchor="middle" fontSize={9} fill="#64748b">↑ harder</text>
       <text x={SCALE_X0 + SCALE_W / 2} y={22} textAnchor="middle" fontSize={11} fontWeight="bold" fill="#334155">Candidate</text>
       <text x={SCALE_X0 + SCALE_W / 2} y={36} textAnchor="middle" fontSize={11} fontWeight="bold" fill="#334155">level</text>
-      <text x={AXIS_X - 6} y={38} textAnchor="end" fontSize={9} fill="#94a3b8">logit</text>
-      <text x={RATER_X0 + 120} y={H - BOT + 16} textAnchor="middle" fontSize={9} fill="#94a3b8">↓ more lenient</text>
+      <text x={AXIS_X - 6} y={38} textAnchor="end" fontSize={9} fill="#64748b">logit</text>
+      <text x={RATER_X0 + 120} y={H - BOT + 16} textAnchor="middle" fontSize={9} fill="#64748b">↓ more lenient</text>
 
       {/* Gridlines + axis */}
       {Array.from({ length: hi - lo + 1 }, (_, i) => lo + i).map(l => (
@@ -148,7 +148,7 @@ export const WrightMap = forwardRef<SVGSVGElement, Props>(function WrightMap(
           <text x={AXIS_X - 8} y={y(l) + 3.5} textAnchor="end" fontSize={10} fill="#64748b">{l}</text>
         </g>
       ))}
-      <line x1={AXIS_X} y1={TOP} x2={AXIS_X} y2={H - BOT} stroke="#94a3b8" strokeWidth={1.5} />
+      <line x1={AXIS_X} y1={TOP} x2={AXIS_X} y2={H - BOT} stroke="#64748b" strokeWidth={1.5} />
       {[RATER_X0 - 12, CRIT_X0 - 8].map(x => (
         <line key={x} x1={x} y1={TOP} x2={x} y2={H - BOT} stroke="#e2e8f0" strokeWidth={1} />
       ))}
@@ -159,9 +159,17 @@ export const WrightMap = forwardRef<SVGSVGElement, Props>(function WrightMap(
           key={b.bottom}
           x={CAND_X0} y={y(b.top) + 0.5}
           width={Math.max(2, (b.count / candMax) * CAND_MAX)} height={Math.max(1, y(b.bottom) - y(b.top) - 1)}
-          fill="#64748b" opacity={0.35} rx={1.5}
+          fill="#64748b" rx={1.5}
         />
       ))}
+
+      {/* Target range: rater measures within ±1 logit. The fill is decorative
+          (1.05:1 on white); the dashed edges and label carry the meaning */}
+      <rect x={RATER_X0 - 12} y={y(1)} width={CRIT_X0 - RATER_X0 + 4} height={y(-1) - y(1)} fill="#ecfdf5" />
+      {[1, -1].map(l => (
+        <line key={l} x1={RATER_X0 - 12} y1={y(l)} x2={CRIT_X0 - 8} y2={y(l)} stroke="#047857" strokeWidth={1} strokeDasharray="5 3" />
+      ))}
+      <text x={CRIT_X0 - 14} y={y(1) + 13} textAnchor="end" fontSize={9} fontWeight="bold" fill="#047857">target range ±1</text>
 
       {/* Raters */}
       {[...raterBins].map(([i, count]) => (
@@ -169,7 +177,8 @@ export const WrightMap = forwardRef<SVGSVGElement, Props>(function WrightMap(
           key={i}
           x={RATER_X0} y={y((i + 1) * RATER_BIN) + 0.5}
           width={Math.max(2, (count / raterMax) * RATER_MAX)} height={Math.max(1, y(i * RATER_BIN) - y((i + 1) * RATER_BIN) - 1)}
-          fill={i === ownBin ? '#fca5a5' : '#93c5fd'} rx={1.5}
+          fill={i === ownBin ? '#dc2626' : '#3b82f6'} rx={1.5}
+          stroke={i === ownBin ? '#450a0a' : 'none'} strokeWidth={1.5}
         />
       ))}
 
@@ -183,7 +192,7 @@ export const WrightMap = forwardRef<SVGSVGElement, Props>(function WrightMap(
         return (
           <g>
             <circle cx={MARK_X - 8} cy={y(previous.measure)} r={5} fill="#ffffff" stroke="#64748b" strokeWidth={2} />
-            <line x1={MARK_X - 2} y1={y(previous.measure)} x2={LABEL_X - 4} y2={ly} stroke="#cbd5e1" strokeWidth={0.75} />
+            <line x1={MARK_X - 2} y1={y(previous.measure)} x2={LABEL_X - 4} y2={ly} stroke="#64748b" strokeWidth={0.75} />
             <text x={LABEL_X} y={ly - 2} fontSize={10} fill="#475569">Previously Rater {previous.raterNumber}</text>
             <text x={LABEL_X} y={ly + 11} fontSize={10} fill="#64748b">{signed(previous.measure)}</text>
           </g>
@@ -200,7 +209,7 @@ export const WrightMap = forwardRef<SVGSVGElement, Props>(function WrightMap(
             <line x1={MARK_X - 5} y1={yHi} x2={MARK_X + 5} y2={yHi} stroke="#dc2626" strokeWidth={2} />
             <line x1={MARK_X - 5} y1={yLo} x2={MARK_X + 5} y2={yLo} stroke="#dc2626" strokeWidth={2} />
             <circle cx={MARK_X} cy={cy} r={5.5} fill="#dc2626" />
-            <line x1={MARK_X + 6} y1={cy} x2={LABEL_X - 4} y2={ly} stroke="#fca5a5" strokeWidth={0.75} />
+            <line x1={MARK_X + 6} y1={cy} x2={LABEL_X - 4} y2={ly} stroke="#dc2626" strokeWidth={0.75} />
             <text x={LABEL_X} y={ly - 2} fontSize={11} fontWeight="bold" fill="#0f172a">
               Rater {raterNumber}
             </text>
@@ -215,7 +224,7 @@ export const WrightMap = forwardRef<SVGSVGElement, Props>(function WrightMap(
       {criteria.map((c, i) => (
         <g key={c.name}>
           <circle cx={CRIT_X0} cy={y(c.logit)} r={2.5} fill="#64748b" />
-          <line x1={CRIT_X0 + 3} y1={y(c.logit)} x2={CRIT_LABEL_X - 3} y2={critLabelY[i]} stroke="#cbd5e1" strokeWidth={0.75} />
+          <line x1={CRIT_X0 + 3} y1={y(c.logit)} x2={CRIT_LABEL_X - 3} y2={critLabelY[i]} stroke="#64748b" strokeWidth={0.75} />
           <text x={CRIT_LABEL_X} y={critLabelY[i] + 3.5} fontSize={10} fill="#475569">{c.name}</text>
         </g>
       ))}
@@ -234,10 +243,10 @@ export const WrightMap = forwardRef<SVGSVGElement, Props>(function WrightMap(
       ))}
 
       {/* Key */}
-      <text x={W / 2} y={H - 22} textAnchor="middle" fontSize={9} fill="#94a3b8">
-        Rater bars: raters per ¼ logit · dashed line: average rater · red bar: ±1 standard error
+      <text x={W / 2} y={H - 22} textAnchor="middle" fontSize={9} fill="#64748b">
+        Bars: raters per ¼ logit (outlined: this rater) · green band: target range ±1 · grey dashed line: average rater · red: ±1 standard error
       </text>
-      <text x={W / 2} y={H - 8} textAnchor="middle" fontSize={9} fill="#94a3b8">
+      <text x={W / 2} y={H - 8} textAnchor="middle" fontSize={9} fill="#64748b">
         Candidate level: the ICAO level a candidate at that height would typically receive from an average rater
       </text>
     </svg>
