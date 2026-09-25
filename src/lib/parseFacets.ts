@@ -149,8 +149,11 @@ function parseTable6(text: string): { criteria: RaschCriterion[]; candidateDensi
   for (let i = headerIdx + 2; i < lines.length; i++) {
     const line = lines[i]
     if (!line) continue
-    // End of table
-    if (line.trim().startsWith('+---') && i > headerIdx + 5) break
+    // End of table: the closing border, or the footer separator/repeated header
+    // (|-----+----- then |Measr| * = 2 |-rater ...) that Facets prints before it
+    const t = line.trim()
+    if (t.startsWith('+---') && i > headerIdx + 5) break
+    if (/^\|-{3,}\+/.test(t) || t.startsWith('|Measr|')) break
     if (!line.startsWith('|') && !line.startsWith('*') && !line.startsWith(':')) continue
 
     // Extract logit measure (first column)
@@ -170,7 +173,8 @@ function parseTable6(text: string): { criteria: RaschCriterion[]; candidateDensi
       const critSection = line.slice(raterEnd + 1, critEnd).replace(/[|+*:]/g, ' ').trim()
       if (critSection) {
         // Split on 2+ spaces to separate multiple criteria on same row
-        const names = critSection.split(/\s{2,}/).map(n => n.trim()).filter(Boolean)
+        const names = critSection.split(/\s{2,}/).map(n => n.trim())
+          .filter(n => n && !/^[-−]+$/.test(n) && !/^[-−]?criteri/i.test(n))
         for (const name of names) {
           if (!criteriaSet.has(name)) {
             criteriaSet.add(name)

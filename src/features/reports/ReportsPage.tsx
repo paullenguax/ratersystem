@@ -337,21 +337,43 @@ export function ReportsPage() {
     return { id: raterId, name: nameFromScores, email: '', role: 'trainee', status: 'active' }
   }, [people, raterId, scores])
 
-  // Prefer the people doc's stored raterNumber, but fall back to whatever's
-  // typed in the (visible, editable) Rater number field — so correcting a
-  // missing/wrong stored number still drives the lookup, not just the email text.
+  // The Rater number field drives the lookup. It's prefilled from the people
+  // doc's stored raterNumber, but a returning rater gets a new number per
+  // rating event (e.g. 235 → 412), so whatever's typed there wins.
   const raschData = useMemo(() => {
     if (!latestRun) return null
-    const num = rater?.raterNumber ?? (raterNumberField ? parseInt(raterNumberField, 10) : NaN)
+    const num = raterNumberField ? parseInt(raterNumberField, 10) : (rater?.raterNumber ?? NaN)
     if (num == null || isNaN(num)) return null
     return latestRun.raters.find(r => r.raterNumber === num) ?? null
   }, [latestRun, rater, raterNumberField])
 
-  // Auto-fill measure/infit when rasch data is available for this rater
+  // Auto-fill measure/infit whenever the looked-up rater changes (overwriting
+  // values from a previous number); manual edits stick until it changes again
   useEffect(() => {
-    if (raschData && !measure) setMeasure(String(raschData.measure))
-    if (raschData && !infit)   setInfit(String(raschData.infitMnSq))
-  }, [raschData]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (!raschData) return
+    setMeasure(String(raschData.measure))
+    setInfit(String(raschData.infitMnSq))
+  }, [raschData])
+
+  // Same for a returning rater's previous number, if it's in the run
+  const prevRaschData = useMemo(() => {
+    if (!latestRun || !prevRaterNumber) return null
+    const num = parseInt(prevRaterNumber, 10)
+    return latestRun.raters.find(r => r.raterNumber === num) ?? null
+  }, [latestRun, prevRaterNumber])
+
+  useEffect(() => {
+    if (prevRaschData) setPrevMeasure(String(prevRaschData.measure))
+  }, [prevRaschData])
+
+  function toggleRepeater(checked: boolean) {
+    setIsRepeater(checked)
+    // Suggest the stored number as the previous one when it differs from this event's
+    const stored = rater?.raterNumber
+    if (checked && !prevRaterNumber && stored && String(stored) !== raterNumberField) {
+      setPrevRaterNumber(String(stored))
+    }
+  }
 
   const srRaterIds = useMemo(
     () => new Set(people.filter(p => p.role === 'senior_rater' || p.role === 'admin').map(p => p.id)),
@@ -536,7 +558,7 @@ export function ReportsPage() {
         if (!png) return
         const a = document.createElement('a')
         a.href = URL.createObjectURL(png)
-        a.download = `wright-map-${rater?.raterNumber ?? 'rater'}.png`
+        a.download = `wright-map-${raschData?.raterNumber ?? 'rater'}.png`
         a.click()
       }, 'image/png')
     }
@@ -985,7 +1007,7 @@ export function ReportsPage() {
                   <WrightMap
                     ref={svgRef}
                     raterName={rater.name}
-                    raterNumber={rater.raterNumber!}
+                    raterNumber={raschData.raterNumber}
                     measure={raschData.measure}
                     se={raschData.se}
                     meanMeasure={latestRun.meanMeasure}
@@ -1028,7 +1050,7 @@ export function ReportsPage() {
                 <input
                   type="checkbox"
                   checked={isRepeater}
-                  onChange={e => setIsRepeater(e.target.checked)}
+                  onChange={e => toggleRepeater(e.target.checked)}
                 />
                 Returning rater (has previous certification)
               </label>
