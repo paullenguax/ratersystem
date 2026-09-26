@@ -6,6 +6,8 @@ import type { Score, Person, Test, StandardizationScore } from '@/types'
 import { buildRaschData, toAnalysisInput, simpleAnalysisInput, buildDriftInput } from '@/lib/rasch/raschData'
 import { useRaschJob } from '@/lib/rasch/useRaschJob'
 import { AnalysisStatus, RatersPanel, TestsPanel, ScalePanel, ReturningPanel } from './RaschPanels'
+import { AnchorsPanel } from './AnchorsPanel'
+import { useRaschBaseline } from '@/lib/rasch/baseline'
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -63,13 +65,14 @@ function Bar({ value, max, colour = 'bg-primary' }: { value: number; max: number
   )
 }
 
-type Tab = 'overview' | 'raters' | 'tests' | 'scale' | 'returning' | 'standardization'
+type Tab = 'overview' | 'raters' | 'tests' | 'scale' | 'returning' | 'anchors' | 'standardization'
 const TABS: [Tab, string][] = [
   ['overview', 'Overview'],
   ['raters', 'Raters'],
   ['tests', 'Tests'],
   ['scale', 'Scale & criteria'],
   ['returning', 'Returning raters'],
+  ['anchors', 'Anchors'],
   ['standardization', 'Standardization'],
 ]
 
@@ -139,18 +142,24 @@ export function StatisticsPage() {
 
   // ── Rasch analyses (web worker) ─────────────────────────────────────────
   // Same data as the Facets export / Reports: published scores + the chosen event
+  // When a baseline is frozen, runs are anchored to it (fixed scale over time)
+  const { data: baseline = null, isLoading: baselineLoading } = useRaschBaseline()
   const raschData = useMemo(() => buildRaschData(scores, sessionIds, people), [scores, sessionIds, people])
   const mainJob = useMemo(
-    () => (raschData.rows.length && tab !== 'overview' && tab !== 'standardization'
-      ? { kind: 'analyze' as const, input: toAnalysisInput(raschData, scores) }
+    () => (raschData.rows.length && !baselineLoading && tab !== 'overview' && tab !== 'standardization'
+      ? { kind: 'analyze' as const, input: { ...toAnalysisInput(raschData, scores), baseline } }
       : null),
-    [raschData, scores, tab === 'overview' || tab === 'standardization'], // eslint-disable-line react-hooks/exhaustive-deps
+    [raschData, scores, baseline, baselineLoading, tab === 'overview' || tab === 'standardization'], // eslint-disable-line react-hooks/exhaustive-deps
   )
   const main = useRaschJob(mainJob)
 
   const driftJob = useMemo(
-    () => (tab === 'returning' && scores.length ? { kind: 'drift' as const, input: buildDriftInput(scores) } : null),
-    [scores, tab === 'returning'], // eslint-disable-line react-hooks/exhaustive-deps
+    () => {
+      if (tab !== 'returning' || !scores.length || baselineLoading) return null
+      const input = buildDriftInput(scores)
+      return { kind: 'drift' as const, input: { ...input, analysis: { ...input.analysis, baseline } } }
+    },
+    [scores, baseline, baselineLoading, tab === 'returning'], // eslint-disable-line react-hooks/exhaustive-deps
   )
   const drift = useRaschJob(driftJob)
 
@@ -338,7 +347,7 @@ export function StatisticsPage() {
       </>)
       )}
 
-      {(tab === 'raters' || tab === 'tests' || tab === 'scale') && (
+      {(tab === 'raters' || tab === 'tests' || tab === 'scale' || tab === 'anchors') && (
         <div className="space-y-4">
           <AnalysisStatus loading={main.loading} error={main.error} analysis={main.data} scope={scope} />
           {main.data && tab === 'raters' && (
@@ -348,6 +357,9 @@ export function StatisticsPage() {
             <TestsPanel analysis={main.data} onSave={saveCalibration} saving={calSaving} savedAt={calSaved} canSave={!main.loading} />
           )}
           {main.data && tab === 'scale' && <ScalePanel analysis={main.data} />}
+          {main.data && tab === 'anchors' && (
+            <AnchorsPanel analysis={main.data} publishedOnly={!sessionName} baseline={baseline} scores={scores} people={people} />
+          )}
         </div>
       )}
 

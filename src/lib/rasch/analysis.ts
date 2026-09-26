@@ -6,7 +6,29 @@ import { CRITERIA, type RaschDataRow } from './raschData'
 // saved to Firestore (and shared with Facets imports), plus the richer
 // per-rater / per-test detail the Statistics page shows.
 
+// A frozen frame of reference: anchor tests' measures plus the criteria and
+// rating-scale steps at the time it was frozen. Runs anchored to it keep "0"
+// meaning the same thing over time, so population-wide drift becomes visible.
+export interface RaschBaseline {
+  name: string
+  createdAt: string // ISO date
+  tests: { number: number; measure: number }[]
+  criteria: { id: number; measure: number }[]
+  thresholds: { category: number; value: number }[]
+}
+
+export interface AnchorCheck {
+  number: number
+  anchorMeasure: number
+  displacement: number
+  ratings: number
+  drifted: boolean // |displacement| > ANCHOR_DRIFT
+}
+
+export const ANCHOR_DRIFT = 0.5
+
 export interface AnalysisInput {
+  baseline?: RaschBaseline | null
   rows: RaschDataRow[]
   raterNames: [number, string][]
   currentRaters?: number[]                       // rater numbers belonging to the selected event
@@ -98,6 +120,10 @@ export interface RaschAnalysis {
   excludedRows: number
   raterSummary: { reliability: number; separation: number; rmse: number }
   testSummary: { reliability: number; separation: number; rmse: number }
+  baselineName: string | null
+  anchorChecks: AnchorCheck[]
+  // Criteria and scale steps are anchored too; their largest displacement
+  scaleDisplacement: number
 }
 
 // Tendencies worth mentioning: statistically clear AND at least half a level per rating
@@ -111,13 +137,23 @@ const SPECS = [
   { name: 'rater', positive: false, centered: true },
   { name: 'criteria', positive: false, centered: true },
 ]
+// Anchored runs: the anchors fix the origin, so raters float
+const ANCHORED_SPECS = SPECS.map(s => ({ ...s, centered: false }))
 
 export function analyze(input: AnalysisInput): RaschAnalysis {
   const usable = input.rows.filter(r => r.rater > 0)
   const observations: MfrmObservation[] = usable.flatMap(r =>
     r.scores.map((score, c) => ({ elements: [r.candidate, r.rater, c + 1], score })))
 
-  const result = estimateMfrm(SPECS, observations)
+  const baseline = input.baseline ?? null
+  const specs = baseline ? ANCHORED_SPECS : SPECS
+  const result = estimateMfrm(specs, observations, baseline ? {
+    anchors: new Map([
+      [0, new Map(baseline.tests.map(t => [t.number, t.measure]))],
+      [2, new Map(baseline.criteria.map(c => [c.id, c.measure]))],
+    ]),
+    anchorThresholds: new Map(baseline.thresholds.map(t => [t.category, t.value])),
+  } : {})
   const [candF, raterF, critF] = result.facets
   const names = new Map(input.raterNames)
   const current = new Set(input.currentRaters ?? [])
@@ -136,7 +172,7 @@ export function analyze(input: AnalysisInput): RaschAnalysis {
   unexpected.sort((a, b) => Math.abs(b.z) - Math.abs(a.z))
 
   // Rater × criterion habits
-  const tendencies: CriterionTendency[] = estimateBias(SPECS, observations, result, 1, 2)
+  const tendencies: CriterionTendency[] = estimateBias(specs, observations, result, 1, 2)
     .map(b => ({
       rater: b.a, criterion: crit(b.b), count: b.count,
       avgDiff: r2((b.observedScore - b.expectedScore) / b.count),
@@ -270,14 +306,27 @@ export function analyze(input: AnalysisInput): RaschAnalysis {
     rmse: r2(raterF.summary.rmse),
     unexpected,
     tendencies,
+    baselineName: baseline?.name ?? null,
   }
 
   const summ = (s: typeof raterF.summary) => ({
     reliability: r2(s.reliabilityPop), separation: r2(s.separationPop), rmse: r2(s.rmse),
   })
 
+  const anchorChecks: AnchorCheck[] = candF.elements.filter(e => e.anchored).map(e => ({
+    number: e.id,
+    anchorMeasure: r2(e.measure),
+    displacement: r2(e.displacement),
+    ratings: e.count,
+    drifted: Math.abs(e.displacement) > ANCHOR_DRIFT,
+  }))
+  const scaleDisplacement = r2(Math.max(0, ...critF.elements.filter(e => e.anchored).map(e => Math.abs(e.displacement))))
+
   return {
     run, raters, tests, criteria,
+    baselineName: baseline?.name ?? null,
+    anchorChecks,
+    scaleDisplacement,
     categories: result.categories,
     thresholdsOrdered,
     observations: result.observationsUsed,

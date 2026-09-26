@@ -53,6 +53,7 @@ export function AnalysisStatus({ loading, error, analysis, scope }: {
   return (
     <p className="text-xs text-muted-foreground">
       {scope} · {analysis.observations.toLocaleString()} ratings ·{' '}
+      {analysis.baselineName ? <>anchored to <strong>{analysis.baselineName}</strong>{analysis.anchorChecks.some(c => c.drifted) && <span className="text-red-700"> (an anchor has drifted — see Anchors)</span>} · </> : ''}
       {analysis.converged
         ? `converged in ${analysis.iterations} iterations`
         : <span className="text-red-700">did not converge — treat with caution</span>}

@@ -35,6 +35,10 @@ export interface MfrmElement {
   ptMea: number
   ptExp: number
   extreme: 'min' | 'max' | null
+  anchored: boolean
+  // Anchored elements only: how far the current data would move this element
+  // from its anchor value (one Newton step, logits) — Facets' "Displacement"
+  displacement: number
 }
 
 export interface MfrmFacetSummary {
@@ -80,6 +84,12 @@ export interface MfrmResult {
 }
 
 export interface MfrmOptions {
+  // Fixed measures, keyed by element id, one map per facet (facet index → map).
+  // Anchored elements aren't re-estimated; a facet with any anchors isn't centred.
+  anchors?: Map<number, Map<number, number>>
+  // Fixed Andrich thresholds by category (bottom category omitted). Used only
+  // when every step in the data's category range has a value.
+  anchorThresholds?: Map<number, number>
   maxIterations?: number
   convergenceLogit?: number     // max change in any measure/threshold
   convergenceScore?: number     // max |observed − expected| raw score for any element
@@ -168,6 +178,8 @@ export function estimateMfrm(
     convergenceLogit = 1e-6,
     convergenceScore = 1e-4,
     extremeAdjustment = 0.3,
+    anchors = new Map<number, Map<number, number>>(),
+    anchorThresholds,
   } = options
   const F = specs.length
   const sign = specs.map(s => (s.positive ? 1 : -1))
@@ -200,9 +212,19 @@ export function estimateMfrm(
 
   // Initial values: thresholds from adjacent category frequencies, measures 0
   const measure = ids.map(list => new Float64Array(list.length))
+  const isAnchored = ids.map((list, f) => list.map(id => anchors.get(f)?.has(id) ?? false))
+  ids.forEach((list, f) => list.forEach((id, i) => { if (isAnchored[f][i]) measure[f][i] = anchors.get(f)!.get(id)! }))
+  const centre = specs.map((s, f) => s.centered && !isAnchored[f].some(Boolean))
+
   const thr = new Array<number>(M).fill(0)
-  for (let k = 1; k < M; k++) thr[k] = Math.log(Math.max(0.5, catCount[k - 1]) / Math.max(0.5, catCount[k]))
-  centreThresholds(thr)
+  const thresholdsAnchored = !!anchorThresholds &&
+    Array.from({ length: M - 1 }, (_, k) => anchorThresholds.has(minCat + k + 1)).every(Boolean)
+  if (thresholdsAnchored) {
+    for (let k = 1; k < M; k++) thr[k] = anchorThresholds!.get(minCat + k)!
+  } else {
+    for (let k = 1; k < M; k++) thr[k] = Math.log(Math.max(0.5, catCount[k - 1]) / Math.max(0.5, catCount[k]))
+    centreThresholds(thr)
+  }
 
   const eta = new Float64Array(N)
   const probs = new Array<number>(M)
@@ -236,6 +258,7 @@ export function estimateMfrm(
         variance[f][i] += e2 - e * e
       }
       for (let i = 0; i < ids[f].length; i++) {
+        if (isAnchored[f][i]) continue
         const resid = target[f][i] - expScore[f][i]
         if (Math.abs(resid) > maxResidual) maxResidual = Math.abs(resid)
         let step = sign[f] * resid / Math.max(variance[f][i], 1e-9)
@@ -243,13 +266,14 @@ export function estimateMfrm(
         measure[f][i] += step
         if (Math.abs(step) > maxChange) maxChange = Math.abs(step)
       }
-      if (specs[f].centered) {
+      if (centre[f]) {
         const mean = measure[f].reduce((a, b) => a + b, 0) / measure[f].length
         for (let i = 0; i < measure[f].length; i++) measure[f][i] -= mean
       }
     }
 
     // Thresholds: Newton step on each F_k using counts at or above k
+    if (!thresholdsAnchored) {
     computeEta()
     const expAbove = new Array<number>(M).fill(0)
     const infoAbove = new Array<number>(M).fill(0)
@@ -270,6 +294,7 @@ export function estimateMfrm(
       if (Math.abs(step) > maxChange) maxChange = Math.abs(step)
     }
     centreThresholds(thr)
+    }
 
     if (maxChange < convergenceLogit && maxResidual < convergenceScore) { converged = true; iterations++; break }
   }
@@ -305,6 +330,7 @@ export function estimateMfrm(
       members[i].push(n)
     }
 
+    const E_sum = (list: number[]) => list.reduce((a, n) => a + E[n], 0)
     const elements: MfrmElement[] = ids[f].map((id, i) => {
       const count = cnt[f][i]
       const outfit = sumZ2[i] / count
@@ -367,6 +393,8 @@ export function estimateMfrm(
         ptMea,
         ptExp,
         extreme: extreme[f][i],
+        anchored: isAnchored[f][i],
+        displacement: isAnchored[f][i] ? sign[f] * (raw[f][i] - E_sum(members[i])) / sumW[i] : 0,
       }
     })
 

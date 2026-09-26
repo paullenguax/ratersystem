@@ -11,6 +11,7 @@ import { WrightMap } from '@/components/WrightMap'
 import { parseFacetsOutput, type RaschRun } from '@/lib/parseFacets'
 import { buildRaschData, toAnalysisInput } from '@/lib/rasch/raschData'
 import { analyze } from '@/lib/rasch/analysis'
+import { useRaschBaseline } from '@/lib/rasch/baseline'
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -281,6 +282,7 @@ export function ReportsPage() {
   const [importSaving, setImportSaving] = useState(false)
   const [importSaved, setImportSaved]   = useState(false)
   const [importMode, setImportMode]     = useState<'inhouse' | 'facets'>('inhouse')
+  const { data: baseline = null } = useRaschBaseline()
   const [analysisEvent, setAnalysisEvent] = useState('')
   const [analysisInfo, setAnalysisInfo] = useState<{
     source: 'in-house' | 'facets'; observations?: number; iterations?: number; converged?: boolean; excludedRows?: number
@@ -559,7 +561,7 @@ export function ReportsPage() {
         setImportError('No scores to analyse.')
         return
       }
-      const a = analyze(toAnalysisInput(data, scores))
+      const a = analyze({ ...toAnalysisInput(data, scores), baseline })
       setImportParsed(a.run)
       setAnalysisInfo({
         source: 'in-house',
@@ -591,6 +593,7 @@ export function ReportsPage() {
         scaleBoundaries: importParsed.scaleBoundaries ?? [],
         unexpected: importParsed.unexpected ?? [],
         tendencies: importParsed.tendencies ?? [],
+        baselineName: importParsed.baselineName ?? null,
         source: analysisInfo?.source ?? 'facets',
         ...(analysisInfo?.source === 'in-house' ? { event: analysisEvent || null } : {}),
       })
@@ -731,6 +734,7 @@ export function ReportsPage() {
                 {importParsed && analysisInfo?.source === 'in-house' && (
                   <p className={`text-xs ${analysisInfo.converged ? 'text-muted-foreground' : 'text-red-600'}`}>
                     {analysisInfo.observations?.toLocaleString()} ratings ·{' '}
+                    {importParsed.baselineName ? `anchored to ${importParsed.baselineName} · ` : ''}
                     {analysisInfo.converged ? `converged in ${analysisInfo.iterations} iterations` : 'did not converge — treat with caution'}
                     {!!analysisInfo.excludedRows && (
                       <span className="text-amber-700">

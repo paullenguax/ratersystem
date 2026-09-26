@@ -34,6 +34,7 @@ export interface RaschRun {
   // In-house runs only: individual unexpected scores and rater × criterion habits
   unexpected?: import('./rasch/analysis').UnexpectedScore[]
   tendencies?: import('./rasch/analysis').CriterionTendency[]
+  baselineName?: string | null // in-house runs anchored to a frozen baseline
   meanMeasure: number
   reliability: number
   separation: number

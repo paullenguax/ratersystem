@@ -569,6 +569,21 @@ export interface Test {
   calibratedOutfit?: number
   calibratedRaters?: number
   calibratedAt?: Timestamp
+  // Anchor panel (Statistics → Anchors): agreed benchmark scores, and whether
+  // this recording is one of the anchors a Rasch baseline is frozen on
+  benchmark?: {
+    pronunciation: number
+    structure: number
+    vocabulary: number
+    fluency: number
+    comprehension: number
+    interactions: number
+    overall: number
+    eventName: string
+    panel: string[]
+    agreedAt: Timestamp
+  }
+  anchor?: boolean
   notes?: string
   createdAt?: Timestamp
 }
