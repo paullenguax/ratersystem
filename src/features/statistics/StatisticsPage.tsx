@@ -206,6 +206,9 @@ export function StatisticsPage() {
           calibratedOutfit: t.outfitMnSq,
           calibratedRaters: t.raters,
           calibratedAt: serverTimestamp(),
+          // Drives Auto-assign / self-serve easy-mid-hard tiers and the anchor choice
+          canonicalDifficulty: t.ratingDifficulty,
+          canonicalSE: t.ratingDifficulty == null ? null : t.se,
         })
         n++
       }

@@ -250,6 +250,18 @@ const CRIT_ABBR: Record<string, string> = {
   Pronunciation: 'PRO', Structure: 'STR', Vocabulary: 'VOC', Fluency: 'FLU', Comprehension: 'COM', Interactions: 'INT',
 }
 
+// Tiers split the pool into roughly thirds (±0.43 on a standardised score)
+export const DIFFICULTY_TIER = 0.43
+
+export function DifficultyBadge({ value }: { value: number | null | undefined }) {
+  if (value == null) return <span className="text-[11px] text-muted-foreground">uncal.</span>
+  const [label, cls] =
+    value < -DIFFICULTY_TIER ? ['easy', 'text-green-800 bg-green-50'] :
+    value > DIFFICULTY_TIER ? ['hard', 'text-red-800 bg-red-50'] :
+    ['mid', 'text-blue-800 bg-blue-50']
+  return <span className={`text-[11px] font-medium px-1.5 py-px rounded ${cls}`} title={`Rating difficulty ${value > 0 ? '+' : ''}${value.toFixed(2)}`}>{label}</span>
+}
+
 export function testFlags(t: TestStat): { label: string; tone: 'bad' | 'warn' | 'info' }[] {
   const flags: { label: string; tone: 'bad' | 'warn' | 'info' }[] = []
   if (t.infitMnSq > FIT_HIGH || t.outfitMnSq > FIT_HIGH) flags.push({ label: 'Raters disagree', tone: 'bad' })
@@ -320,6 +332,7 @@ export function TestsPanel({ analysis, onSave, saving, savedAt, canSave, testPre
                 {Object.values(CRIT_ABBR).join(' · ')}
               </th>
               <th className="text-center px-2 py-2 font-medium" title="Candidate ability (logits)">Measure</th>
+              <th className="text-center px-2 py-2 font-medium" title="How hard this recording is to rate correctly: closeness of the deciding criterion to a level boundary + rater disagreement. Drives the easy/mid/hard tiers when tests are assigned. Needs 10+ raters.">To rate</th>
               <th className="text-center px-2 py-2 font-medium" title="How much raters disagree about this recording, beyond what the model expects">Infit / Outfit</th>
               <th className="text-left px-2 py-2 font-medium">Flags</th>
             </tr>
@@ -346,6 +359,9 @@ export function TestsPanel({ analysis, onSave, saving, savedAt, canSave, testPre
                   </td>
                   <td className="px-2 py-2 text-center font-mono text-xs">
                     {signed(t.measure)} <span className="text-muted-foreground">±{t.se.toFixed(2)}</span>
+                  </td>
+                  <td className="px-2 py-2 text-center">
+                    <DifficultyBadge value={t.ratingDifficulty} />
                   </td>
                   <td className="px-2 py-2 text-center font-mono text-xs">
                     <span className={fitClass(t.infitMnSq)}>{t.infitMnSq.toFixed(2)}</span>

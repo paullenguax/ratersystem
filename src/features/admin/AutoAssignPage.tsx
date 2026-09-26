@@ -130,11 +130,13 @@ function DiffBadge({ test }: { test: Test }) {
   if (test.canonicalDifficulty == null) {
     return <span className="text-[10px] text-muted-foreground">uncal.</span>
   }
+  // canonicalDifficulty is a standardised "hard to rate" score (Statistics → Tests);
+  // ±0.43 splits it into roughly thirds, matching the selection tiers
   const d = test.canonicalDifficulty
   const [label, colour] =
-    d < -1   ? ['easy',   'text-green-700 bg-green-50']  :
-    d < 1    ? ['mid',    'text-blue-700  bg-blue-50']   :
-               ['hard',   'text-red-700   bg-red-50']
+    d < -0.43 ? ['easy',   'text-green-700 bg-green-50']  :
+    d <= 0.43 ? ['mid',    'text-blue-700  bg-blue-50']   :
+                ['hard',   'text-red-700   bg-red-50']
   return (
     <span className={`text-[10px] font-medium px-1 rounded ${colour}`}>{label}</span>
   )
@@ -389,7 +391,7 @@ export function AutoAssignPage() {
 
           <div className="text-xs text-muted-foreground space-y-0.5">
             <p><span className="text-purple-700 font-medium">anchor</span> = well-calibrated test (low measurement error); returnees get one they've heard before</p>
-            <p>Difficulty: <span className="text-green-700">easy</span> / <span className="text-blue-700">mid</span> / <span className="text-red-700">hard</span> based on Rasch canonical difficulty · <span>uncal.</span> = not yet calibrated</p>
+            <p>Difficulty: <span className="text-green-700">easy</span> / <span className="text-blue-700">mid</span> / <span className="text-red-700">hard</span> = how hard each recording is to rate (boundary closeness + rater disagreement; set from Statistics → Tests) · <span>uncal.</span> = fewer than 10 raters or not yet calibrated</p>
             <p>Tests are distributed to minimise how many raters in this cohort share the same recording.</p>
           </div>
         </div>

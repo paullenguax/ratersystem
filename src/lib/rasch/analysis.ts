@@ -67,7 +67,14 @@ export interface TestStat {
   infitMnSq: number
   outfitMnSq: number
   unexpected: number
+  // How hard the recording is to rate correctly (null when too few raters to
+  // judge): standardised mix of closeness to a level boundary and rater
+  // disagreement. Written to test_bank.canonicalDifficulty for the
+  // easy/mid/hard tiers in Auto-assign and the self-serve exam.
+  ratingDifficulty: number | null
 }
+
+export const MIN_RATERS_FOR_DIFFICULTY = 10
 
 export interface CriterionStat {
   name: string
@@ -206,8 +213,30 @@ export function analyze(input: AnalysisInput): RaschAnalysis {
       infitMnSq: r2(e.infitMnSq),
       outfitMnSq: r2(e.outfitMnSq),
       unexpected: unexpectedPerTest.get(e.id) ?? 0,
+      ratingDifficulty: null,
     }
   })
+
+  // Rating difficulty, among tests with enough raters to judge:
+  //  boundary: 1 when the deciding criterion sits exactly on a level boundary (x.5), 0 mid-level
+  //  disagreement: the larger of infit/outfit
+  // Each is standardised across those tests, summed, then standardised again.
+  const judged = tests.filter(t => t.raters >= MIN_RATERS_FOR_DIFFICULTY)
+  if (judged.length >= 3) {
+    const z = (xs: number[]) => {
+      const m = xs.reduce((a, b) => a + b, 0) / xs.length
+      const sd = Math.sqrt(xs.reduce((a, b) => a + (b - m) ** 2, 0) / xs.length) || 1
+      return xs.map(x => (x - m) / sd)
+    }
+    const boundary = judged.map(t => {
+      const lowest = Math.min(...t.criterionFair.map(c => c.fair))
+      return 1 - Math.min(1, Math.abs(lowest - (Math.floor(lowest) + 0.5)) / 0.5)
+    })
+    const disagreement = judged.map(t => Math.max(t.infitMnSq, t.outfitMnSq))
+    const zb = z(boundary), zd = z(disagreement)
+    const combined = z(judged.map((_, i) => zb[i] + zd[i]))
+    judged.forEach((t, i) => { t.ratingDifficulty = r2(combined[i]) })
+  }
 
   const criteria: CriterionStat[] = critF.elements.map(e => ({
     name: crit(e.id), measure: r2(e.measure), se: r2(e.se), fairAvg: r2(e.fairAvg),
