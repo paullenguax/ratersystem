@@ -560,6 +560,15 @@ export interface Test {
   dayLabel?: string
   canonicalDifficulty?: number | null
   canonicalSE?: number | null
+  // From the in-house Rasch analysis (Statistics → Tests → Save calibration)
+  calibratedLevel?: number       // ICAO overall an average rater would award
+  calibratedMeasure?: number     // candidate ability, logits
+  calibratedSE?: number
+  calibratedFairAvg?: number
+  calibratedInfit?: number
+  calibratedOutfit?: number
+  calibratedRaters?: number
+  calibratedAt?: Timestamp
   notes?: string
   createdAt?: Timestamp
 }

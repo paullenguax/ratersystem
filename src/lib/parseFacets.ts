@@ -31,6 +31,9 @@ export interface RaschRun {
   // Added later — absent on older rasch_runs docs
   candidateMeasures?: number[]
   scaleBoundaries?: ScaleBoundary[]
+  // In-house runs only: individual unexpected scores and rater × criterion habits
+  unexpected?: import('./rasch/analysis').UnexpectedScore[]
+  tendencies?: import('./rasch/analysis').CriterionTendency[]
   meanMeasure: number
   reliability: number
   separation: number

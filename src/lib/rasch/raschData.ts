@@ -1,4 +1,5 @@
 import type { Score, Person } from '@/types'
+import type { AnalysisInput } from './analysis'
 
 // Builds the rating data for a Rasch run: all published scores plus the
 // (unpublished) scores of the chosen event. Shared by the Facets export on the
@@ -94,5 +95,84 @@ export function buildRaschData(scores: Score[], sessionIds: string[], people: Pe
     raterNames,
     maxCandidate: Math.max(1, ...dataRows.map(r => r.candidate)),
     maxRater: Math.max(1, ...dataRows.map(r => r.rater)),
+  }
+}
+
+// Plain, worker-cloneable input for analyze()
+export function toAnalysisInput(data: RaschData, scores: Score[]): AnalysisInput {
+  return {
+    rows: data.rows,
+    raterNames: [...data.raterNames],
+    currentRaters: data.currentKey.map(k => k.number).filter((n): n is number => n != null),
+    tests: testsOf(scores),
+  }
+}
+
+// ── other data shapes ──────────────────────────────────────────────────────
+
+type ScoreLike = Pick<Score, 'raterId' | 'raterName' | 'testNumber' | 'candidateName' | 'testType' | 'sessionName' | 'createdAt'
+  | 'pronunciation' | 'structure' | 'vocabulary' | 'fluency' | 'comprehension' | 'interactions'>
+
+const scoresOf = (s: ScoreLike): RaschDataRow['scores'] =>
+  [s.pronunciation, s.structure, s.vocabulary, s.fluency, s.comprehension, s.interactions]
+
+function testsOf(scores: ScoreLike[]): [number, { name: string; testType: string }][] {
+  const tests = new Map<number, { name: string; testType: string }>()
+  for (const s of scores) {
+    if (s.testNumber != null && !tests.has(s.testNumber)) tests.set(s.testNumber, { name: s.candidateName, testType: s.testType })
+  }
+  return [...tests]
+}
+
+// One element per person, numbered by name — for pools with no permanent
+// rater numbers (standardization)
+export function simpleAnalysisInput(scores: ScoreLike[]): AnalysisInput {
+  const usable = scores.filter(s => s.testNumber != null)
+  const people = [...new Map(usable.map(s => [s.raterId, s.raterName])).entries()]
+    .sort((a, b) => a[1].localeCompare(b[1]))
+  const num = new Map(people.map(([id], i) => [id, i + 1]))
+  return {
+    rows: usable.map(s => ({ candidate: s.testNumber!, rater: num.get(s.raterId)!, scores: scoresOf(s) })),
+    raterNames: people.map(([, name], i) => [i + 1, name]),
+    tests: testsOf(usable),
+  }
+}
+
+// Drift: one element per (person, event), so a returnee's severity can be
+// compared across certifications on the same scale
+export interface DriftElement {
+  raterId: string
+  name: string
+  session: string
+  order: number // earliest score time in that event, for chronological display
+}
+
+export interface DriftInput {
+  analysis: AnalysisInput
+  elements: [number, DriftElement][]
+}
+
+export function buildDriftInput(scores: ScoreLike[]): DriftInput {
+  const usable = scores.filter(s => s.testNumber != null && s.sessionName)
+  const keyOf = (s: ScoreLike) => `${s.raterId}|${s.sessionName}`
+  const first = new Map<string, { s: ScoreLike; order: number }>()
+  for (const s of usable) {
+    const t = s.createdAt?.seconds ?? Number.MAX_SAFE_INTEGER
+    const cur = first.get(keyOf(s))
+    if (!cur || t < cur.order) first.set(keyOf(s), { s, order: t })
+  }
+  const keys = [...first.keys()].sort()
+  const num = new Map(keys.map((k, i) => [k, i + 1]))
+  const elements: [number, DriftElement][] = keys.map(k => {
+    const { s, order } = first.get(k)!
+    return [num.get(k)!, { raterId: s.raterId, name: s.raterName, session: s.sessionName, order }]
+  })
+  return {
+    analysis: {
+      rows: usable.map(s => ({ candidate: s.testNumber!, rater: num.get(keyOf(s))!, scores: scoresOf(s) })),
+      raterNames: elements.map(([n, e]) => [n, e.name]),
+      tests: testsOf(usable),
+    },
+    elements,
   }
 }

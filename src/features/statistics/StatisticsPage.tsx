@@ -1,8 +1,11 @@
 import { useState, useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { collection, getDocs } from 'firebase/firestore'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { collection, getDocs, writeBatch, doc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import type { Score, Person } from '@/types'
+import type { Score, Person, Test, StandardizationScore } from '@/types'
+import { buildRaschData, toAnalysisInput, simpleAnalysisInput, buildDriftInput } from '@/lib/rasch/raschData'
+import { useRaschJob } from '@/lib/rasch/useRaschJob'
+import { AnalysisStatus, RatersPanel, TestsPanel, ScalePanel, ReturningPanel } from './RaschPanels'
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -24,13 +27,8 @@ function sd(vals: number[]): number {
   return Math.sqrt(vals.reduce((s, v) => s + (v - m) ** 2, 0) / (vals.length - 1))
 }
 function fmt1(n: number) { return n.toFixed(1) }
-function fmt2(n: number) { return n.toFixed(2) }
 function pct(n: number)  { return `${Math.round(n * 100)}%` }
 
-function deltaColour(d: number) {
-  if (Math.abs(d) < 0.2) return 'text-muted-foreground'
-  return d > 0 ? 'text-amber-600' : 'text-blue-600'
-}
 
 // Pairwise agreement rate (within ±1) on overall level
 function pairwiseAgreement(scores: Score[]): { rate: number; pairs: number; tests: number } {
@@ -65,11 +63,24 @@ function Bar({ value, max, colour = 'bg-primary' }: { value: number; max: number
   )
 }
 
+type Tab = 'overview' | 'raters' | 'tests' | 'scale' | 'returning' | 'standardization'
+const TABS: [Tab, string][] = [
+  ['overview', 'Overview'],
+  ['raters', 'Raters'],
+  ['tests', 'Tests'],
+  ['scale', 'Scale & criteria'],
+  ['returning', 'Returning raters'],
+  ['standardization', 'Standardization'],
+]
+
 // ── page ───────────────────────────────────────────────────────────────────
 
 export function StatisticsPage() {
   const [sessionName, setSessionName] = useState('')
-  const [srOnly, setSrOnly] = useState(false)
+  const [tab, setTab] = useState<Tab>('overview')
+  const [calSaving, setCalSaving] = useState(false)
+  const [calSaved, setCalSaved] = useState('')
+  const queryClient = useQueryClient()
 
   const { data: scores = [], isLoading } = useQuery({
     queryKey: ['scores'],
@@ -105,11 +116,6 @@ export function StatisticsPage() {
     [scores, sessionIds, sessionName],
   )
 
-  const srIds = useMemo(
-    () => new Set(people.filter(p => p.role === 'senior_rater' || p.role === 'admin').map(p => p.id)),
-    [people],
-  )
-
   // Overview
   const raterCount  = useMemo(() => new Set(filtered.map(s => s.raterId)).size,  [filtered])
   const testCount   = useMemo(() => new Set(filtered.map(s => s.testDocId)).size, [filtered])
@@ -131,51 +137,87 @@ export function StatisticsPage() {
   // Agreement rate
   const agreement = useMemo(() => pairwiseAgreement(filtered), [filtered])
 
-  // Per-rater stats (exclude admins/SRs for trainee view, but show all)
-  const sessionMean = mean(filtered.map(s => s.overallLevel))
-  const raterStats = useMemo(() => {
-    const byRater = new Map<string, Score[]>()
-    filtered.forEach(s => {
-      if (!byRater.has(s.raterId)) byRater.set(s.raterId, [])
-      byRater.get(s.raterId)!.push(s)
-    })
-    return [...byRater.entries()]
-      .map(([raterId, scores]) => {
-        const raterMean = mean(scores.map(s => s.overallLevel))
-        const dimMeans  = Object.fromEntries(DIMS.map(d => [d.key, mean(scores.map(s => s[d.key] as number))]))
-        return {
-          raterId,
-          name: scores[0].raterName,
-          n: scores.length,
-          mean: raterMean,
-          delta: raterMean - sessionMean,
-          dimMeans,
-          isSR: srIds.has(raterId),
-        }
-      })
-      .sort((a, b) => a.name.localeCompare(b.name))
-  }, [filtered, sessionMean, srIds])
+  // ── Rasch analyses (web worker) ─────────────────────────────────────────
+  // Same data as the Facets export / Reports: published scores + the chosen event
+  const raschData = useMemo(() => buildRaschData(scores, sessionIds, people), [scores, sessionIds, people])
+  const mainJob = useMemo(
+    () => (raschData.rows.length && tab !== 'overview' && tab !== 'standardization'
+      ? { kind: 'analyze' as const, input: toAnalysisInput(raschData, scores) }
+      : null),
+    [raschData, scores, tab === 'overview' || tab === 'standardization'], // eslint-disable-line react-hooks/exhaustive-deps
+  )
+  const main = useRaschJob(mainJob)
 
-  // Returnee detection: raters appearing in >1 named session
-  const returneeStats = useMemo(() => {
-    const byRater = new Map<string, Map<string, number[]>>() // raterId → sessionName → overallLevels
-    scores.forEach(s => {
-      if (!byRater.has(s.raterId)) byRater.set(s.raterId, new Map())
-      const sessions = byRater.get(s.raterId)!
-      if (!sessions.has(s.sessionName)) sessions.set(s.sessionName, [])
-      sessions.get(s.sessionName)!.push(s.overallLevel)
-    })
-    return [...byRater.entries()]
-      .filter(([, sessions]) => sessions.size > 1)
-      .map(([raterId, sessions]) => ({
-        raterId,
-        name: scores.find(s => s.raterId === raterId)?.raterName ?? raterId,
-        sessions: [...sessions.entries()]
-          .map(([name, levels]) => ({ name, mean: mean(levels), n: levels.length }))
-          .sort((a, b) => a.name.localeCompare(b.name)),
-      }))
-      .sort((a, b) => a.name.localeCompare(b.name))
+  const driftJob = useMemo(
+    () => (tab === 'returning' && scores.length ? { kind: 'drift' as const, input: buildDriftInput(scores) } : null),
+    [scores, tab === 'returning'], // eslint-disable-line react-hooks/exhaustive-deps
+  )
+  const drift = useRaschJob(driftJob)
+
+  const { data: stdScores = [] } = useQuery({
+    queryKey: ['standardization_scores'],
+    enabled: tab === 'standardization',
+    queryFn: async () =>
+      (await getDocs(collection(db, 'standardization_scores'))).docs.map(d => ({ id: d.id, ...d.data() }) as StandardizationScore),
+  })
+  const stdInput = useMemo(() => simpleAnalysisInput(stdScores), [stdScores])
+  const stdTestNames = useMemo(() => new Map((stdInput.tests ?? []).map(([n, t]) => [n, t.name])), [stdInput])
+  const stdViable = new Set(stdInput.rows.map(r => r.rater)).size >= 2 && new Set(stdInput.rows.map(r => r.candidate)).size >= 2
+  const stdJob = useMemo(
+    () => (tab === 'standardization' && stdViable ? { kind: 'analyze' as const, input: stdInput } : null),
+    [stdInput, stdViable, tab],
+  )
+  const std = useRaschJob(stdJob)
+
+  const seniorNumbers = useMemo(
+    () => new Set(people.filter(p => (p.role === 'senior_rater' || p.role === 'admin') && p.raterNumber).map(p => p.raterNumber!)),
+    [people],
+  )
+  const testNames = useMemo(() => {
+    const m = new Map<number, string>()
+    for (const s of scores) if (s.testNumber != null && !m.has(s.testNumber)) m.set(s.testNumber, s.candidateName)
+    return m
   }, [scores])
+  const eventRaterIds = useMemo(
+    () => new Set(scores.filter(s => sessionIds.includes(s.sessionId)).map(s => s.raterId)),
+    [scores, sessionIds],
+  )
+  const scope = sessionName ? `Published scores + ${sessionName}` : 'Published scores'
+
+  // Writes each rater-course test's calibration onto its test_bank doc (matched by test number)
+  async function saveCalibration() {
+    if (!main.data) return
+    setCalSaving(true)
+    setCalSaved('')
+    try {
+      const bank = (await getDocs(collection(db, 'test_bank'))).docs.map(d => ({ id: d.id, ...d.data() }) as Test)
+      const byNumber = new Map(bank.filter(t => t.category !== 'standardization' && t.testId != null).map(t => [t.testId!, t.id]))
+      const batch = writeBatch(db)
+      let n = 0
+      for (const t of main.data.tests) {
+        const id = byNumber.get(t.number)
+        if (!id) continue
+        batch.update(doc(db, 'test_bank', id), {
+          calibratedLevel: t.level,
+          calibratedMeasure: t.measure,
+          calibratedSE: t.se,
+          calibratedFairAvg: t.fairAvg,
+          calibratedInfit: t.infitMnSq,
+          calibratedOutfit: t.outfitMnSq,
+          calibratedRaters: t.raters,
+          calibratedAt: serverTimestamp(),
+        })
+        n++
+      }
+      await batch.commit()
+      await queryClient.invalidateQueries({ queryKey: ['tests'] })
+      setCalSaved(`Saved calibration for ${n} test${n !== 1 ? 's' : ''}.`)
+    } catch (e) {
+      setCalSaved(`Save failed: ${String(e)}`)
+    } finally {
+      setCalSaving(false)
+    }
+  }
 
   if (isLoading) return <p className="text-sm text-muted-foreground p-4">Loading…</p>
 
@@ -184,7 +226,7 @@ export function StatisticsPage() {
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-semibold">Statistics</h1>
-          <p className="text-muted-foreground text-sm mt-1">Inter-rater reliability and score distribution.</p>
+          <p className="text-muted-foreground text-sm mt-1">Score distribution, rater and test Rasch analysis.</p>
         </div>
         <div className="flex items-center gap-2">
           <label className="text-sm text-muted-foreground whitespace-nowrap">Session</label>
@@ -199,7 +241,20 @@ export function StatisticsPage() {
         </div>
       </div>
 
-      {filtered.length === 0 ? (
+      <div className="flex flex-wrap gap-1 border-b">
+        {TABS.map(([val, label]) => (
+          <button
+            key={val}
+            onClick={() => setTab(val)}
+            className={`px-3 py-2 text-sm -mb-px border-b-2 ${tab === val ? 'border-primary font-medium' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'overview' && (
+      filtered.length === 0 ? (
         <p className="text-sm text-muted-foreground">No scores found.</p>
       ) : (<>
 
@@ -277,109 +332,51 @@ export function StatisticsPage() {
           )}
         </div>
 
-        {/* Rater summary table */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between gap-4">
-            <h2 className="text-base font-semibold">Rater summary</h2>
-            <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={srOnly}
-                onChange={e => setSrOnly(e.target.checked)}
-                className="rounded border-input"
-              />
-              Senior raters &amp; admins only
-            </label>
-          </div>
-          <div className="rounded-md border overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/40 border-b">
-                <tr>
-                  <th className="text-left px-3 py-2 font-medium text-muted-foreground">Rater</th>
-                  <th className="text-center px-2 py-2 font-medium text-muted-foreground w-10">N</th>
-                  <th className="text-center px-2 py-2 font-medium w-16">OVL avg</th>
-                  <th className="text-center px-2 py-2 font-medium w-16">vs mean</th>
-                  {DIMS.map(d => (
-                    <th key={d.key} className="text-center px-2 py-2 font-medium text-muted-foreground text-xs w-10">
-                      {d.abbr}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {(srOnly ? raterStats.filter(r => r.isSR) : raterStats).map(r => (
-                  <tr key={r.raterId} className="border-t hover:bg-muted/20">
-                    <td className="px-3 py-2">
-                      {r.name}
-                      {r.isSR && <span className="ml-1.5 text-[10px] text-muted-foreground border rounded px-1">SR</span>}
-                    </td>
-                    <td className="px-2 py-2 text-center text-muted-foreground text-xs">{r.n}</td>
-                    <td className="px-2 py-2 text-center font-mono font-semibold">{fmt1(r.mean)}</td>
-                    <td className={`px-2 py-2 text-center font-mono text-sm font-medium ${deltaColour(r.delta)}`}>
-                      {r.delta > 0 ? '+' : ''}{fmt2(r.delta)}
-                    </td>
-                    {DIMS.map(d => (
-                      <td key={d.key} className="px-2 py-2 text-center font-mono text-xs text-muted-foreground">
-                        {fmt1(r.dimMeans[d.key] ?? 0)}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-              {filtered.length > 0 && (
-                <tfoot className="border-t-2 bg-muted/20">
-                  <tr>
-                    <td className="px-3 py-2 text-xs text-muted-foreground font-medium">Session mean</td>
-                    <td className="px-2 py-2 text-center text-xs text-muted-foreground">{filtered.length}</td>
-                    <td className="px-2 py-2 text-center font-mono font-bold">{fmt1(sessionMean)}</td>
-                    <td />
-                    {DIMS.map(d => (
-                      <td key={d.key} className="px-2 py-2 text-center font-mono text-xs text-muted-foreground">
-                        {fmt1(mean(filtered.map(s => s[d.key] as number)))}
-                      </td>
-                    ))}
-                  </tr>
-                </tfoot>
-              )}
-            </table>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            <span className="text-amber-600">amber = generous</span> · <span className="text-blue-600">blue = strict</span> vs session mean
-          </p>
+      </>)
+      )}
+
+      {(tab === 'raters' || tab === 'tests' || tab === 'scale') && (
+        <div className="space-y-4">
+          <AnalysisStatus loading={main.loading} error={main.error} analysis={main.data} scope={scope} />
+          {main.data && tab === 'raters' && (
+            <RatersPanel key={sessionName} analysis={main.data} hasEvent={!!sessionName} seniorNumbers={seniorNumbers} testNames={testNames} />
+          )}
+          {main.data && tab === 'tests' && (
+            <TestsPanel analysis={main.data} onSave={saveCalibration} saving={calSaving} savedAt={calSaved} canSave={!main.loading} />
+          )}
+          {main.data && tab === 'scale' && <ScalePanel analysis={main.data} />}
         </div>
+      )}
 
-        {/* Returnees */}
-        {returneeStats.length > 0 && (
-          <div className="space-y-3">
-            <h2 className="text-base font-semibold">Returnee mean scores across sessions</h2>
-            <div className="rounded-md border overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/40 border-b">
-                  <tr>
-                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">Rater</th>
-                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">Session</th>
-                    <th className="text-center px-2 py-2 font-medium text-muted-foreground w-10">N</th>
-                    <th className="text-center px-2 py-2 font-medium w-20">Mean OVL</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {returneeStats.flatMap(r =>
-                    r.sessions.map((s, i) => (
-                      <tr key={`${r.raterId}-${s.name}`} className="border-t hover:bg-muted/20">
-                        <td className="px-3 py-2">{i === 0 ? r.name : ''}</td>
-                        <td className="px-3 py-2 text-muted-foreground text-xs">{s.name}</td>
-                        <td className="px-2 py-2 text-center text-xs text-muted-foreground">{s.n}</td>
-                        <td className="px-2 py-2 text-center font-mono font-semibold">{fmt1(s.mean)}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+      {tab === 'returning' && (
+        <div className="space-y-4">
+          {drift.error && <p className="text-sm text-red-700">Analysis failed: {drift.error}</p>}
+          {drift.loading && !drift.data && <p className="text-sm text-muted-foreground">Running Rasch analysis…</p>}
+          {drift.data && <ReturningPanel drift={drift.data} highlight={sessionName ? eventRaterIds : new Set()} />}
+        </div>
+      )}
 
-      </>)}
+      {tab === 'standardization' && (
+        <div className="space-y-4">
+          {!stdViable ? (
+            <p className="text-sm text-muted-foreground">
+              Needs standardization scores from at least 2 examiners on at least 2 tests before an analysis is meaningful.
+            </p>
+          ) : (
+            <>
+              <AnalysisStatus loading={std.loading} error={std.error} analysis={std.data} scope="All standardization scores" />
+              {std.data && (
+                <>
+                  <h2 className="text-base font-semibold">Examiners</h2>
+                  <RatersPanel analysis={std.data} hasEvent={false} seniorNumbers={new Set()} testNames={stdTestNames} testPrefix="S" />
+                  <h2 className="text-base font-semibold pt-4">Standardization tests</h2>
+                  <TestsPanel analysis={std.data} testPrefix="S" />
+                </>
+              )}
+            </>
+          )}
+        </div>
+      )}
     </div>
   )
 }

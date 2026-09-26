@@ -71,6 +71,12 @@ export interface MfrmResult {
   iterations: number
   converged: boolean
   observationsUsed: number
+  // Per observation, in input order: model expected score and variance.
+  // Standardised residual = (score − expected) / √variance (Facets Table 4)
+  expected: Float64Array
+  variance: Float64Array
+  thresholds: number[] // Andrich thresholds, index 0 unused
+  minCategory: number
 }
 
 export interface MfrmOptions {
@@ -387,7 +393,85 @@ export function estimateMfrm(
     measureAtHalfBelow: k === 0 ? null : measureForExpected(minCat + k - 0.5, thr, minCat),
   }))
 
-  return { facets, categories, iterations, converged, observationsUsed: N }
+  return {
+    facets, categories, iterations, converged, observationsUsed: N,
+    expected: E, variance: W, thresholds: [...thr], minCategory: minCat,
+  }
+}
+
+// ── bias / interaction analysis (Facets Tables 13–14) ─────────────────────
+//
+// With every main measure held at its estimate, estimates one extra logit
+// term per combination of an element from facet A and one from facet B —
+// e.g. "this rater on this criterion". Positive = scored higher than the
+// main measures predict (Facets' Bias direction = plus).
+
+export interface MfrmBias {
+  a: number              // element id in facet A
+  b: number              // element id in facet B
+  count: number
+  observedScore: number
+  expectedScore: number
+  bias: number           // logits
+  se: number
+  t: number
+}
+
+export function estimateBias(
+  specs: MfrmFacetSpec[],
+  observations: MfrmObservation[],
+  result: MfrmResult,
+  facetA: number,
+  facetB: number,
+  extremeAdjustment = 0.5, // Facets' second Xtreme= value
+): MfrmBias[] {
+  const sign = specs.map(s => (s.positive ? 1 : -1))
+  const measures = result.facets.map(f => new Map(f.elements.map(e => [e.id, e.measure])))
+  const thr = result.thresholds
+  const minCat = result.minCategory
+  const maxCat = minCat + thr.length - 1
+  const buf = new Array<number>(thr.length)
+
+  const groups = new Map<string, { a: number; b: number; eta: number[]; x: number[] }>()
+  observations.forEach(o => {
+    const key = `${o.elements[facetA]}|${o.elements[facetB]}`
+    let g = groups.get(key)
+    if (!g) groups.set(key, g = { a: o.elements[facetA], b: o.elements[facetB], eta: [], x: [] })
+    g.eta.push(o.elements.reduce((acc, id, f) => acc + sign[f] * measures[f].get(id)!, 0))
+    g.x.push(o.score)
+  })
+
+  const out: MfrmBias[] = []
+  for (const g of groups.values()) {
+    const n = g.x.length
+    let obs = g.x.reduce((a, b) => a + b, 0)
+    const expected0 = g.eta.reduce((acc, e) => acc + expectedScore(e, thr, minCat, buf), 0)
+    if (obs <= n * minCat) obs += extremeAdjustment
+    else if (obs >= n * maxCat) obs -= extremeAdjustment
+
+    let bias = 0, info = 0
+    for (let it = 0; it < 100; it++) {
+      let e = 0
+      info = 0
+      for (const eta of g.eta) {
+        categoryProbs(eta + bias, thr, buf)
+        let m = 0, m2 = 0
+        for (let k = 0; k < thr.length; k++) { const c = minCat + k; m += c * buf[k]; m2 += c * c * buf[k] }
+        e += m; info += m2 - m * m
+      }
+      const step = Math.max(-1, Math.min(1, (obs - e) / Math.max(info, 1e-9)))
+      bias += step
+      if (Math.abs(step) < 1e-6) break
+    }
+    const se = 1 / Math.sqrt(Math.max(info, 1e-9))
+    out.push({
+      a: g.a, b: g.b, count: n,
+      observedScore: g.x.reduce((a, b) => a + b, 0),
+      expectedScore: expected0,
+      bias, se, t: bias / se,
+    })
+  }
+  return out
 }
 
 function centreThresholds(thr: number[]) {

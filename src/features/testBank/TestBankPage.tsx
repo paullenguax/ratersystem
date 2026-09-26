@@ -79,6 +79,25 @@ export function TestBankPage() {
       ),
     },
     {
+      accessorKey: 'calibratedLevel',
+      header: 'Level',
+      sortUndefined: 'last',
+      cell: ({ row }) => {
+        const t = row.original
+        if (t.calibratedLevel == null) return <span className="text-muted-foreground/50 text-xs">—</span>
+        const disagree = (t.calibratedInfit ?? 1) > 1.3 || (t.calibratedOutfit ?? 1) > 1.3
+        return (
+          <span
+            className="text-sm"
+            title={`Rasch-calibrated: level an average rater would award (fair avg ${t.calibratedFairAvg?.toFixed(2)}, ${t.calibratedRaters} raters). Statistics → Tests.`}
+          >
+            <span className="font-semibold">{t.calibratedLevel}</span>
+            {disagree && <span className="ml-1.5 text-[11px] text-red-700" title="Raters disagree about this recording more than expected">⚠ disagree</span>}
+          </span>
+        )
+      },
+    },
+    {
       id: 'category',
       header: 'Category',
       enableSorting: false,

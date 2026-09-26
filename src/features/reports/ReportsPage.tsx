@@ -9,8 +9,8 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { WrightMap } from '@/components/WrightMap'
 import { parseFacetsOutput, type RaschRun } from '@/lib/parseFacets'
-import { buildRaschData } from '@/lib/rasch/raschData'
-import { runRaschAnalysis } from '@/lib/rasch/runAnalysis'
+import { buildRaschData, toAnalysisInput } from '@/lib/rasch/raschData'
+import { analyze } from '@/lib/rasch/analysis'
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -137,9 +137,10 @@ function buildEmail(params: {
   prevRaterNumber: string
   prevMeasure: string
   raterNumberField: string
+  habitSentence: string
 }): string {
   const { rater, candidateStats, paraOverrides, handWave, isRefresher, measure, infit, outcome, advisoryText,
-          isRepeater, prevRaterNumber, prevMeasure, raterNumberField } = params
+          isRepeater, prevRaterNumber, prevMeasure, raterNumberField, habitSentence } = params
   const courseLink = isRefresher
     ? 'https://www.lenguax.com/product/online-aviation-english-rater-refresher-course/'
     : 'https://www.lenguax.com/product/online-aviation-english-rater-course/'
@@ -201,6 +202,7 @@ function buildEmail(params: {
     '',
     overallLine,
     '',
+    ...(habitSentence ? [habitSentence, ''] : []),
     `Statistically (see attachment) this seems to be the case. If you find it difficult to understand, I invite you to look at Module 9 on the course, which explains the data I'm about to share.`,
     '',
     `You are Rater ${raterNum}, and the table shows a Rasch analysis of your scores. You can see in the column labelled "measure" an indication of how "strict" or "relaxed" your rating is. You can see it says ${measureVal}. A positive number means "strict" compared to the average, and a negative number means "relaxed".`,
@@ -270,6 +272,7 @@ export function ReportsPage() {
   const [raterNumberField, setRaterNumberField] = useState('')
   const [prevRaterNumber, setPrevRaterNumber] = useState('')
   const [prevMeasure, setPrevMeasure]   = useState('')
+  const [includeHabits, setIncludeHabits] = useState(false)
 
   const [importOpen, setImportOpen]     = useState(false)
   const [importText, setImportText]     = useState('')
@@ -460,12 +463,33 @@ export function ReportsPage() {
     return { dims, overall: mean(allForTests.map(s => s.overallLevel)), n: allForTests.length }
   }, [scores, raterScores])
 
+  // In-house runs carry unexpected scores and criterion habits; Facets imports don't
+  const raterHabits = useMemo(
+    () => (raschData && latestRun?.tendencies ? latestRun.tendencies.filter(t => t.rater === raschData.raterNumber) : []),
+    [raschData, latestRun],
+  )
+  const raterUnexpected = useMemo(
+    () => (raschData && latestRun?.unexpected ? latestRun.unexpected.filter(u => u.rater === raschData.raterNumber) : []),
+    [raschData, latestRun],
+  )
+  const candidateLabelByTest = useMemo(
+    () => new Map(candidateStats.map(c => [c.raterScore.testNumber, c.label])),
+    [candidateStats],
+  )
+  const habitSentence = useMemo(() => {
+    if (!raterHabits.length) return ''
+    const parts = raterHabits.map(h =>
+      `${h.avgDiff > 0 ? 'more generous' : 'stricter'} than expected on ${h.criterion} (by about ${Math.abs(h.avgDiff).toFixed(1)} of a level per candidate)`)
+    return `Looking at the individual criteria, your scores were ${parts.join(', and ')}, compared with your overall pattern of scoring.`
+  }, [raterHabits])
+
   const emailText = useMemo(() => {
     if (!rater || candidateStats.length === 0) return ''
     return buildEmail({ rater, candidateStats, paraOverrides, handWave, isRefresher, measure, infit, outcome, advisoryText,
-                        isRepeater, raterNumberField, prevRaterNumber, prevMeasure })
+                        isRepeater, raterNumberField, prevRaterNumber, prevMeasure,
+                        habitSentence: includeHabits ? habitSentence : '' })
   }, [rater, candidateStats, paraOverrides, handWave, isRefresher, measure, infit, outcome, advisoryText,
-      isRepeater, raterNumberField, prevRaterNumber, prevMeasure])
+      isRepeater, raterNumberField, prevRaterNumber, prevMeasure, includeHabits, habitSentence])
 
   function toggleExpanded(testDocId: string) {
     setExpanded(prev => {
@@ -495,6 +519,7 @@ export function ReportsPage() {
     setHandWave({})
     setExpanded(new Set())
     setIsRepeater(false)
+    setIncludeHabits(false)
     setPrevRaterNumber('')
     setPrevMeasure('')
     setMeasure('')
@@ -534,14 +559,14 @@ export function ReportsPage() {
         setImportError('No scores to analyse.')
         return
       }
-      const { run, result, excludedRows } = runRaschAnalysis(data)
-      setImportParsed(run)
+      const a = analyze(toAnalysisInput(data, scores))
+      setImportParsed(a.run)
       setAnalysisInfo({
         source: 'in-house',
-        observations: result.observationsUsed,
-        iterations: result.iterations,
-        converged: result.converged,
-        excludedRows,
+        observations: a.observations,
+        iterations: a.iterations,
+        converged: a.converged,
+        excludedRows: a.excludedRows,
       })
     } catch (e) {
       setImportError(String(e))
@@ -564,6 +589,8 @@ export function ReportsPage() {
         candidateDensity: importParsed.candidateDensity,
         candidateMeasures: importParsed.candidateMeasures ?? [],
         scaleBoundaries: importParsed.scaleBoundaries ?? [],
+        unexpected: importParsed.unexpected ?? [],
+        tendencies: importParsed.tendencies ?? [],
         source: analysisInfo?.source ?? 'facets',
         ...(analysisInfo?.source === 'in-house' ? { event: analysisEvent || null } : {}),
       })
@@ -1084,6 +1111,48 @@ export function ReportsPage() {
                     <p className={`text-xs ${correlationOk ? 'text-green-700' : 'text-red-600'}`}>
                       {correlationOk ? '✓ close to expected' : '✗ observed correlation notably below expected'}
                     </p>
+                  </div>
+                </div>
+              )}
+
+              {raschData && latestRun?.tendencies && (
+                <div className="rounded-md border px-3 py-2.5 space-y-2 text-sm">
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground">Criterion habits</p>
+                    {raterHabits.length === 0 ? (
+                      <p className="text-xs text-green-700">✓ No clear habit on any single criterion</p>
+                    ) : (
+                      <>
+                        <ul className="space-y-0.5">
+                          {raterHabits.map(h => (
+                            <li key={h.criterion}>
+                              <strong>{h.criterion}</strong>: {h.avgDiff > 0 ? 'more generous' : 'stricter'} by about{' '}
+                              {Math.abs(h.avgDiff).toFixed(1)} of a level per rating
+                              <span className="text-xs text-muted-foreground"> (t = {h.t.toFixed(1)})</span>
+                            </li>
+                          ))}
+                        </ul>
+                        <label className="flex items-center gap-2 text-xs cursor-pointer">
+                          <input type="checkbox" checked={includeHabits} onChange={e => setIncludeHabits(e.target.checked)} />
+                          Mention in email
+                        </label>
+                      </>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground">Unexpected individual scores</p>
+                    {raterUnexpected.length === 0 ? (
+                      <p className="text-xs text-green-700">✓ None — every score was within what the model expects</p>
+                    ) : (
+                      <ul className="space-y-0.5">
+                        {raterUnexpected.map((u, i) => (
+                          <li key={i}>
+                            {candidateLabelByTest.has(u.candidate) ? `Candidate ${candidateLabelByTest.get(u.candidate)}` : `Test #${u.candidate}`},{' '}
+                            {u.criterion}: gave <strong>{u.score}</strong>, expected about {u.expected.toFixed(1)}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                 </div>
               )}
