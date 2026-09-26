@@ -9,6 +9,8 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { WrightMap } from '@/components/WrightMap'
 import { parseFacetsOutput, type RaschRun } from '@/lib/parseFacets'
+import { buildRaschData } from '@/lib/rasch/raschData'
+import { runRaschAnalysis } from '@/lib/rasch/runAnalysis'
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -275,6 +277,11 @@ export function ReportsPage() {
   const [importError, setImportError]   = useState('')
   const [importSaving, setImportSaving] = useState(false)
   const [importSaved, setImportSaved]   = useState(false)
+  const [importMode, setImportMode]     = useState<'inhouse' | 'facets'>('inhouse')
+  const [analysisEvent, setAnalysisEvent] = useState('')
+  const [analysisInfo, setAnalysisInfo] = useState<{
+    source: 'in-house' | 'facets'; observations?: number; iterations?: number; converged?: boolean; excludedRows?: number
+  } | null>(null)
 
   const svgRef = useRef<SVGSVGElement>(null)
   const queryClient = useQueryClient()
@@ -470,6 +477,7 @@ export function ReportsPage() {
 
   function changeSession(name: string) {
     setSessionName(name)
+    setAnalysisEvent(name)
     setRaterId('')
     setParaOverrides({})
     setHandWave({})
@@ -505,10 +513,38 @@ export function ReportsPage() {
         setImportParsed(null)
       } else {
         setImportParsed(result)
+        setAnalysisInfo({ source: 'facets' })
       }
     } catch (e) {
       setImportError(String(e))
       setImportParsed(null)
+    }
+  }
+
+  // In-house analysis: same data and rater numbering as the Facets export on the
+  // Scores page (all published scores + the chosen event), estimated in-browser
+  function handleRunAnalysis() {
+    setImportError('')
+    setImportSaved(false)
+    setImportParsed(null)
+    try {
+      const ids = sessions.find(s => s.name === analysisEvent)?.ids ?? []
+      const data = buildRaschData(scores, ids, people)
+      if (data.rows.length === 0) {
+        setImportError('No scores to analyse.')
+        return
+      }
+      const { run, result, excludedRows } = runRaschAnalysis(data)
+      setImportParsed(run)
+      setAnalysisInfo({
+        source: 'in-house',
+        observations: result.observationsUsed,
+        iterations: result.iterations,
+        converged: result.converged,
+        excludedRows,
+      })
+    } catch (e) {
+      setImportError(String(e))
     }
   }
 
@@ -528,6 +564,8 @@ export function ReportsPage() {
         candidateDensity: importParsed.candidateDensity,
         candidateMeasures: importParsed.candidateMeasures ?? [],
         scaleBoundaries: importParsed.scaleBoundaries ?? [],
+        source: analysisInfo?.source ?? 'facets',
+        ...(analysisInfo?.source === 'in-house' ? { event: analysisEvent || null } : {}),
       })
       setImportSaved(true)
       setImportText('')
@@ -618,33 +656,88 @@ export function ReportsPage() {
         >
           <span className="flex items-center gap-2">
             <BarChart2 className="size-4" />
-            Import Rasch results
+            Rasch analysis
           </span>
           <ChevronRight className={`size-4 text-muted-foreground transition-transform ${importOpen ? 'rotate-90' : ''}`} />
         </button>
         {importOpen && (
           <div className="border-t px-4 py-4 space-y-3">
-            <p className="text-xs text-muted-foreground">
-              Paste the full Facets <code>.out</code> file. Table 7 (rater measures) and Table 6 (Wright map) will be extracted and become the active run as soon as it's saved.
-            </p>
-            <textarea
-              value={importText}
-              onChange={e => { setImportText(e.target.value); setImportParsed(null); setImportSaved(false); setImportError('') }}
-              placeholder="Paste the full contents of the .out file here…"
-              rows={8}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs font-mono resize-y"
-            />
-            <div className="flex items-center gap-3">
-              <Button size="sm" onClick={handleImportParse} disabled={!importText.trim()}>
-                Parse file
-              </Button>
-              {importParsed && (
-                <Button size="sm" variant="outline" onClick={handleImportSave} disabled={importSaving}>
-                  {importSaving ? 'Saving…' : 'Save to Firestore'}
-                </Button>
-              )}
-              {importSaved && <span className="text-xs text-green-700">Saved — this run is now active.</span>}
+            <div className="flex gap-4 text-sm">
+              {([['inhouse', 'Run analysis'], ['facets', 'Import from Facets']] as const).map(([val, label]) => (
+                <label key={val} className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="raschMode"
+                    checked={importMode === val}
+                    onChange={() => { setImportMode(val); setImportParsed(null); setImportSaved(false); setImportError('') }}
+                  />
+                  {label}
+                </label>
+              ))}
             </div>
+
+            {importMode === 'inhouse' ? (
+              <>
+                <p className="text-xs text-muted-foreground">
+                  Runs the same many-facet Rasch analysis as Facets on all published scores plus the chosen event's scores,
+                  numbering raters exactly as the Facets export does. Results become the active run once saved.
+                </p>
+                <div className="flex flex-wrap items-center gap-3">
+                  <select
+                    value={analysisEvent}
+                    onChange={e => { setAnalysisEvent(e.target.value); setImportParsed(null); setImportSaved(false) }}
+                    className="rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+                  >
+                    <option value="">Published scores only</option>
+                    {sessions.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
+                  </select>
+                  <Button size="sm" onClick={handleRunAnalysis} disabled={scores.length === 0}>
+                    Run analysis
+                  </Button>
+                  {importParsed && (
+                    <Button size="sm" variant="outline" onClick={handleImportSave} disabled={importSaving}>
+                      {importSaving ? 'Saving…' : 'Save as active run'}
+                    </Button>
+                  )}
+                  {importSaved && <span className="text-xs text-green-700">Saved — this run is now active.</span>}
+                </div>
+                {importParsed && analysisInfo?.source === 'in-house' && (
+                  <p className={`text-xs ${analysisInfo.converged ? 'text-muted-foreground' : 'text-red-600'}`}>
+                    {analysisInfo.observations?.toLocaleString()} ratings ·{' '}
+                    {analysisInfo.converged ? `converged in ${analysisInfo.iterations} iterations` : 'did not converge — treat with caution'}
+                    {!!analysisInfo.excludedRows && (
+                      <span className="text-amber-700">
+                        {' '}· {analysisInfo.excludedRows} score rows skipped because their rater has no permanent number (use "Assign numbers" on the Scores page)
+                      </span>
+                    )}
+                  </p>
+                )}
+              </>
+            ) : (
+              <>
+                <p className="text-xs text-muted-foreground">
+                  Paste the full Facets <code>.out</code> file. Table 7 (rater measures) and Table 6 (Wright map) will be extracted and become the active run as soon as it's saved.
+                </p>
+                <textarea
+                  value={importText}
+                  onChange={e => { setImportText(e.target.value); setImportParsed(null); setImportSaved(false); setImportError('') }}
+                  placeholder="Paste the full contents of the .out file here…"
+                  rows={8}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs font-mono resize-y"
+                />
+                <div className="flex items-center gap-3">
+                  <Button size="sm" onClick={handleImportParse} disabled={!importText.trim()}>
+                    Parse file
+                  </Button>
+                  {importParsed && (
+                    <Button size="sm" variant="outline" onClick={handleImportSave} disabled={importSaving}>
+                      {importSaving ? 'Saving…' : 'Save to Firestore'}
+                    </Button>
+                  )}
+                  {importSaved && <span className="text-xs text-green-700">Saved — this run is now active.</span>}
+                </div>
+              </>
+            )}
             {importError && <p className="text-xs text-red-600">{importError}</p>}
             {importParsed && (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-1 text-xs">
@@ -669,7 +762,7 @@ export function ReportsPage() {
             {importParsed && importParsed.criteria.length > 0 && (
               <div>
                 <p className="text-xs text-muted-foreground mb-1">
-                  Criteria found ({importParsed.criteria.length}) — check this matches the 6 ICAO dimensions
+                  Criteria ({importParsed.criteria.length}) — check this matches the 6 ICAO dimensions
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {importParsed.criteria.map(c => (

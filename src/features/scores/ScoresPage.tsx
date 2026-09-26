@@ -8,6 +8,7 @@ import {
 import { Plus, Download, ChevronUp, ChevronDown, ChevronsUpDown, Hash } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import type { Score, Person } from '@/types'
+import { buildRaschData, type RaterKeyEntry } from '@/lib/rasch/raschData'
 import { ScoreDrawer } from './ScoreDrawer'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -36,43 +37,9 @@ function levelColour(n: number) {
 // Output is Facets-ready as-is: comma-separated, and every non-data line
 // (notes, rater key, column header) starts with ';' so Facets skips it
 function buildRaschExport(scores: Score[], sessionId: string, people: Person[]) {
-  const rows = scores.filter(s => {
-    if (s.testNumber == null) return false
-    if (s.published) return true
-    return !!sessionId && s.sessionId === sessionId
-  })
-
-  const permNumById = new Map(people.filter(p => p.raterNumber).map(p => [p.id, p.raterNumber!]))
-
-  // Current session raters always get a fresh temp number — even returnees
-  // so they appear as a separate row in Facets Table 7 alongside their historical row
-  const currentSessionRaterIds = sessionId
-    ? new Set(rows.filter(s => !s.published && s.sessionId === sessionId).map(s => s.raterId))
-    : new Set<string>()
-  const publishedRaterIds = new Set(rows.filter(s => s.published).map(s => s.raterId))
-  const returneeIds = new Set([...currentSessionRaterIds].filter(id => publishedRaterIds.has(id)))
-  const newRaterIds  = new Set([...currentSessionRaterIds].filter(id => !publishedRaterIds.has(id)))
-
-  let nextNum = Math.max(0, ...(permNumById.size ? permNumById.values() : [0])) + 1
-  const tempNumById = new Map<string, number>()
-  // Assign temp numbers to all current-session raters (sorted for stability)
-  const currentRatersSorted = [...currentSessionRaterIds].sort((a, b) => {
-    const nameA = rows.find(s => s.raterId === a)?.raterName ?? ''
-    const nameB = rows.find(s => s.raterId === b)?.raterName ?? ''
-    return nameA.localeCompare(nameB)
-  })
-  for (const id of currentRatersSorted) tempNumById.set(id, nextNum++)
-
-  const sessionName = sessionId ? (scores.find(s => s.sessionId === sessionId)?.sessionName ?? sessionId) : null
-
-  // Build rater key: historical raters first, then current (returnees appear twice)
-  const historicalRaters = [...new Map(
-    rows.filter(s => s.published).map(s => [s.raterId, s.raterName])
-  ).entries()].sort((a, b) => (permNumById.get(a[0]) ?? 0) - (permNumById.get(b[0]) ?? 0))
-  const currentRaters = currentRatersSorted.map(id => {
-    const name = rows.find(s => s.raterId === id)?.raterName ?? id
-    return [id, name] as [string, string]
-  })
+  const data = buildRaschData(scores, sessionId ? [sessionId] : [], people)
+  const { rows, sessionName } = data
+  const keyLine = (k: RaterKeyEntry) => `; ${k.number},${k.name},${k.note}`
 
   const lines: string[] = [
     `; Rasch export — ${new Date().toISOString().split('T')[0]}`,
@@ -82,46 +49,20 @@ function buildRaschExport(scores: Score[], sessionId: string, people: Person[]) 
     `; Returnees appear twice (permanent # for history, temp # for current event)`,
     `;`,
     `; Rater key — historical:`,
-    ...historicalRaters.map(([id, name]) => {
-      const tag = returneeIds.has(id) ? `returnee — now Rater ${tempNumById.get(id)} in this event` : ''
-      return `; ${permNumById.get(id)},${name},${tag}`
-    }),
+    ...data.historicalKey.map(keyLine),
     `;`,
     `; Rater key — current event (temp numbers):`,
-    ...currentRaters.map(([id, name]) => {
-      const tag = returneeIds.has(id) ? `returnee — previously Rater ${permNumById.get(id) ?? '(no number assigned yet)'}` : newRaterIds.has(id) ? 'new' : ''
-      return `; ${tempNumById.get(id)},${name},${tag}`
-    }),
+    ...data.currentKey.map(keyLine),
     `;`,
     [';candidate', 'rater', '1-6a', 'varPronunciation', 'varStructure',
       'varVocabulary', 'varFluency', 'varComprehension', 'varInteraction'].join(','),
-    ...[...rows].sort((a, b) => {
-      const isCurrA = !a.published && !!sessionId && a.sessionId === sessionId
-      const isCurrB = !b.published && !!sessionId && b.sessionId === sessionId
-      const numA = isCurrA ? (tempNumById.get(a.raterId) ?? 0) : (permNumById.get(a.raterId) ?? 0)
-      const numB = isCurrB ? (tempNumById.get(b.raterId) ?? 0) : (permNumById.get(b.raterId) ?? 0)
-      return numA !== numB ? numA - numB : (a.testNumber ?? 0) - (b.testNumber ?? 0)
-    }).map(s => {
-      const isCurrent = !s.published && sessionId && s.sessionId === sessionId
-      const num = isCurrent ? (tempNumById.get(s.raterId) ?? 0) : (permNumById.get(s.raterId) ?? 0)
-      return [
-        s.testNumber,
-        num,
-        '1-6a',
-        s.pronunciation, s.structure, s.vocabulary,
-        s.fluency, s.comprehension, s.interactions,
-      ].join(',')
-    }),
+    ...rows.map(r => [r.candidate, r.rater, '1-6a', ...r.scores].join(',')),
   ]
 
-  const nums = rows.map(s => {
-    const isCurrent = !s.published && sessionId && s.sessionId === sessionId
-    return isCurrent ? (tempNumById.get(s.raterId) ?? 0) : (permNumById.get(s.raterId) ?? 0)
-  })
   return {
     lines,
-    maxCandidate: Math.max(1, ...rows.map(s => s.testNumber ?? 0)),
-    maxRater: Math.max(1, ...nums),
+    maxCandidate: data.maxCandidate,
+    maxRater: data.maxRater,
     // Plain characters only — it's written into the spec's data= line
     fileName: sessionName ? `rasch-${sessionName.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '')}.csv` : 'rasch-published.csv',
   }
