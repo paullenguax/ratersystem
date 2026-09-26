@@ -358,8 +358,8 @@ export function ReportsPage() {
   // values from a previous number); manual edits stick until it changes again
   useEffect(() => {
     if (!raschData) return
-    setMeasure(String(raschData.measure))
-    setInfit(String(raschData.infitMnSq))
+    setMeasure(raschData.measure.toFixed(2))
+    setInfit(raschData.infitMnSq.toFixed(2))
   }, [raschData])
 
   // Same for a returning rater's previous number, if it's in the run
@@ -370,7 +370,7 @@ export function ReportsPage() {
   }, [latestRun, prevRaterNumber])
 
   useEffect(() => {
-    if (prevRaschData) setPrevMeasure(String(prevRaschData.measure))
+    if (prevRaschData) setPrevMeasure(prevRaschData.measure.toFixed(2))
   }, [prevRaschData])
 
   function toggleRepeater(checked: boolean) {
