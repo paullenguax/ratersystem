@@ -1062,20 +1062,29 @@ function renderCurrentSlide() {
   }
 
   // Training run: on an audio slide still waiting on a recording, offer a
-  // working escape hatch — it advances, and says plainly in the log that a
-  // real test would not have allowed it.
+  // working escape hatch — one click moves on, and says plainly in the log
+  // that a real test would not have allowed it.
   if (audioGateBlocks(item)) {
+    const wrap = document.createElement('div')
+    wrap.className = 'audio-skip-wrap'
     const skip = document.createElement('button')
     skip.type = 'button'
     skip.className = 'audio-skip'
-    skip.textContent = 'Skip without playing every recording'
+    skip.textContent = 'Click to skip ▶'
     skip.addEventListener('click', () => {
       skipArmed.add(currentIndex)
       logEvent('audio_gate_skipped', `advanced past "${item.label}" without playing every recording — a real test does not allow this`)
       skip.disabled = true
       updateNavState()
+      // Move on straight away; if something else still gates Next, the
+      // click is a no-op and the slide simply stays unlocked.
+      document.getElementById('next-btn')?.click()
     })
-    content.appendChild(skip)
+    const note = document.createElement('span')
+    note.className = 'audio-skip-note'
+    note.textContent = 'Training run only — moves on without playing every recording. A real test keeps Next locked until you have.'
+    wrap.append(skip, note)
+    content.appendChild(wrap)
   }
 
   refreshClipButtons()
