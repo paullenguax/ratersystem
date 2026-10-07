@@ -68,10 +68,21 @@ export function PracticeScorePage() {
         const personSnap = await getDoc(doc(db, 'people', user.uid))
         setName((personSnap.data()?.name as string | undefined) ?? user.email ?? 'You')
 
-        const scoresSnap = await getDocs(query(collection(db, 'practice_scores'), where('sessionId', '==', session!.id)))
-        const mine = scoresSnap.docs
-          .map(d => ({ id: d.id, ...d.data() }) as PracticeScore)
-          .find(s => s.raterId === user.uid)
+        // Ask only for this person's own score: the rules let a non-admin read
+        // nothing else in practice_scores, so a session-wide query is refused
+        // outright. A failed lookup must not strand them on the loading screen,
+        // so it is treated as "no score yet".
+        let mine: PracticeScore | undefined
+        try {
+          const scoresSnap = await getDocs(query(
+            collection(db, 'practice_scores'),
+            where('sessionId', '==', session!.id),
+            where('raterId', '==', user.uid),
+          ))
+          mine = scoresSnap.docs.map(d => ({ id: d.id, ...d.data() }) as PracticeScore)[0]
+        } catch (err) {
+          console.error('PracticeScorePage: could not look up existing score', err)
+        }
 
         if (mine) {
           setExistingDocId(mine.id)

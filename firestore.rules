@@ -137,10 +137,12 @@ service cloud.firestore {
 
     // ── practice_scores ───────────────────────────────────────────────────────
     // Public write — participants submit without auth.
-    // Admin read only — trainer sees results.
+    // Admin read — trainer sees results. A Canvas-identified participant can
+    // also read their own score, which the scoring page needs to tell whether
+    // they have already submitted.
 
     match /practice_scores/{scoreId} {
-      allow read: if isAdmin();
+      allow read: if isAdmin() || (isSignedIn() && resource.data.raterId == request.auth.uid);
       allow write: if true;
     }
 
