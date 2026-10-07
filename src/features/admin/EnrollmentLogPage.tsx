@@ -6,7 +6,7 @@ import { AlertTriangle, CheckCircle2, Info, Mail, RefreshCw } from 'lucide-react
 import { Button } from '@/components/ui/button'
 
 const resendEnrollmentEmailFn = httpsCallable<
-  { email: string; sectionId: number; name?: string },
+  { email: string; sectionId: number; name?: string; canvasUserId?: number | null },
   { sent: boolean }
 >(functions, 'resendEnrollmentEmail')
 
@@ -104,7 +104,7 @@ export function EnrollmentLogPage() {
     }
     setResendingId(entry.id)
     try {
-      await resendEnrollmentEmailFn({ email: entry.email, sectionId: entry.sectionId, name: entry.name })
+      await resendEnrollmentEmailFn({ email: entry.email, sectionId: entry.sectionId, name: entry.name, canvasUserId: entry.canvasUserId })
       alert(`Email resent to ${entry.email}.`)
     } catch (err) {
       alert(`Failed to resend: ${err instanceof Error ? err.message : String(err)}`)

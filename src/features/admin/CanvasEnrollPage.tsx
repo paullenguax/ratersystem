@@ -34,7 +34,7 @@ type Step =
   | { id: 'name_search'; inputEmail: string }
   | { id: 'name_results'; inputEmail: string; results: CanvasUser[] }
   | { id: 'section_pick'; person: ResolvedPerson }
-  | { id: 'confirm'; person: ResolvedPerson; section: CanvasSection; updateEmail: boolean; concludeOldSection: boolean }
+  | { id: 'confirm'; person: ResolvedPerson; section: CanvasSection; updateEmail: boolean; concludeOldSection: boolean; certification: boolean }
   | { id: 'done'; person: ResolvedPerson; section: CanvasSection; result: EnrollResult }
 
 interface EnrollResult {
@@ -42,6 +42,7 @@ interface EnrollResult {
   alreadyEnrolled: boolean
   emailUpdated: boolean
   concludedSections: number[]
+  person: { status: 'added' | 'exists' | 'possible_duplicate'; name: string } | null
 }
 
 // ── firebase callables ────────────────────────────────────────────────────────
@@ -58,6 +59,8 @@ const enrollFn = httpsCallable<{
   sectionName?: string
   updateEmail?: boolean
   concludeOldSection?: boolean
+  certification?: boolean
+  canvasEmail?: string
 }, EnrollResult>(functions, 'canvasEnroll')
 
 // ── sub-components ────────────────────────────────────────────────────────────
@@ -247,7 +250,7 @@ function NameSearchStep({ inputEmail, onFound, onNew, onBack }: {
 
 function SectionPickStep({ person, onConfirm, onBack }: {
   person: ResolvedPerson
-  onConfirm: (section: CanvasSection, updateEmail: boolean, concludeOldSection: boolean) => void
+  onConfirm: (section: CanvasSection, updateEmail: boolean, concludeOldSection: boolean, certification: boolean) => void
   onBack: () => void
 }) {
   const [sections, setSections] = useState<CanvasSection[] | null>(null)
@@ -256,6 +259,7 @@ function SectionPickStep({ person, onConfirm, onBack }: {
   const [selectedSection, setSelectedSection] = useState<CanvasSection | null>(null)
   const [updateEmail, setUpdateEmail] = useState(false)
   const [concludeOldSection, setConcludeOldSection] = useState(true)
+  const [certification, setCertification] = useState(false)
 
   const emailMismatch = person.canvasEmail && person.canvasEmail !== person.inputEmail
 
@@ -327,25 +331,42 @@ function SectionPickStep({ person, onConfirm, onBack }: {
 
       {error && <ErrorMsg msg={error} />}
 
-      {/* Options — only show once a section is selected and person has existing account */}
-      {selectedSection && person.canvasUserId && (
+      {/* Options — only show once a section is selected; the Canvas-account ones only apply to an existing account */}
+      {selectedSection && (
         <div className="space-y-3 pt-2 border-t">
           <label className="flex items-start gap-3 cursor-pointer">
             <input
               type="checkbox"
-              checked={concludeOldSection}
-              onChange={e => setConcludeOldSection(e.target.checked)}
+              checked={certification}
+              onChange={e => setCertification(e.target.checked)}
               className="mt-0.5"
             />
             <div>
-              <p className="text-sm font-medium">Conclude previous section enrolment</p>
+              <p className="text-sm font-medium">This person will take a certification set</p>
               <p className="text-xs text-muted-foreground">
-                If they're already in another section of this course, mark it as concluded and move them to the new one.
+                Also adds them to People in RaterSystem as a trainee. Leave unticked for teachers and anyone who only needs Canvas.
               </p>
             </div>
           </label>
 
-          {emailMismatch && (
+          {person.canvasUserId && (
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={concludeOldSection}
+                onChange={e => setConcludeOldSection(e.target.checked)}
+                className="mt-0.5"
+              />
+              <div>
+                <p className="text-sm font-medium">Conclude previous section enrolment</p>
+                <p className="text-xs text-muted-foreground">
+                  If they're already in another section of this course, mark it as concluded and move them to the new one.
+                </p>
+              </div>
+            </label>
+          )}
+
+          {person.canvasUserId && emailMismatch && (
             <label className="flex items-start gap-3 cursor-pointer">
               <input
                 type="checkbox"
@@ -369,7 +390,7 @@ function SectionPickStep({ person, onConfirm, onBack }: {
       <div className="flex gap-2 pt-1">
         <Button
           disabled={!selectedSection}
-          onClick={() => selectedSection && onConfirm(selectedSection, updateEmail, concludeOldSection)}
+          onClick={() => selectedSection && onConfirm(selectedSection, updateEmail, concludeOldSection, certification)}
         >
           Review & confirm <ChevronRight className="size-4 ml-1" />
         </Button>
@@ -381,11 +402,12 @@ function SectionPickStep({ person, onConfirm, onBack }: {
 
 // ── ConfirmStep ───────────────────────────────────────────────────────────────
 
-function ConfirmStep({ person, section, updateEmail, concludeOldSection, onConfirm, onBack }: {
+function ConfirmStep({ person, section, updateEmail, concludeOldSection, certification, onConfirm, onBack }: {
   person: ResolvedPerson
   section: CanvasSection
   updateEmail: boolean
   concludeOldSection: boolean
+  certification: boolean
   onConfirm: (result: EnrollResult) => void
   onBack: () => void
 }) {
@@ -409,6 +431,8 @@ function ConfirmStep({ person, section, updateEmail, concludeOldSection, onConfi
         sectionName: section.displayName,
         updateEmail,
         concludeOldSection,
+        certification,
+        canvasEmail: person.canvasEmail,
       })
       onConfirm(res.data)
     } catch (err) {
@@ -452,11 +476,15 @@ function ConfirmStep({ person, section, updateEmail, concludeOldSection, onConfi
           </div>
         )}
         {concludeOldSection && person.canvasUserId && (
-          <div className="flex justify-between py-1.5">
+          <div className="flex justify-between py-1.5 border-b">
             <span className="text-muted-foreground">Conclude old section</span>
             <span className="text-blue-600 font-medium">If applicable</span>
           </div>
         )}
+        <div className="flex justify-between py-1.5">
+          <span className="text-muted-foreground">Certification set</span>
+          <span className="font-medium">{certification ? 'Yes — add to People' : 'No — Canvas only'}</span>
+        </div>
       </div>
 
       {error && <ErrorMsg msg={error} />}
@@ -506,6 +534,24 @@ function DoneStep({ person, section, result, onReset }: {
           {result.concludedSections.length > 0 && (
             <p className="text-sm text-muted-foreground">
               Previous section enrolment concluded.
+            </p>
+          )}
+          {result.person?.status === 'added' && (
+            <p className="text-sm text-muted-foreground">
+              Added to People in RaterSystem as a trainee.
+            </p>
+          )}
+          {result.person?.status === 'exists' && (
+            <p className="text-sm text-muted-foreground">
+              Already in People in RaterSystem as {result.person.name}.
+            </p>
+          )}
+          {result.person?.status === 'possible_duplicate' && (
+            <p className="text-sm text-amber-600 flex items-start gap-1.5">
+              <AlertTriangle className="size-4 shrink-0 mt-0.5" />
+              <span>
+                Not added to People — {result.person.name} is already there under a different email and may be the same person. Link them in Canvas Sync.
+              </span>
             </p>
           )}
         </div>
@@ -570,9 +616,9 @@ export function CanvasEnrollPage() {
     setStep({ id: 'section_pick', person: resolved })
   }
 
-  function handleSectionConfirm(section: CanvasSection, updateEmail: boolean, concludeOldSection: boolean) {
+  function handleSectionConfirm(section: CanvasSection, updateEmail: boolean, concludeOldSection: boolean, certification: boolean) {
     if (!person) return
-    setStep({ id: 'confirm', person, section, updateEmail, concludeOldSection })
+    setStep({ id: 'confirm', person, section, updateEmail, concludeOldSection, certification })
   }
 
   function handleEnrolled(result: EnrollResult) {
@@ -619,6 +665,7 @@ export function CanvasEnrollPage() {
           section={step.section}
           updateEmail={step.updateEmail}
           concludeOldSection={step.concludeOldSection}
+          certification={step.certification}
           onConfirm={handleEnrolled}
           onBack={() => person && setStep({ id: 'section_pick', person })}
         />

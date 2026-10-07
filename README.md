@@ -110,7 +110,7 @@ Build runs `tsc -b && vite build` — TypeScript strict mode is on, unused impor
 2. Firestore → `people` → new doc with that UID as the document ID; fields: `name`, `email`, `role`, `status` (`active`)
 3. Firebase Console → Auth → send password reset to the user
 
-Canvas SSO users: run Canvas Sync (Admin page) — it creates the `people` doc automatically, no password ever needed.
+Canvas SSO users: run Canvas Sync (Admin page) — it creates the `people` doc automatically, no password ever needed. When enrolling someone one at a time through the enroll wizard, ticking "This person will take a certification set" creates the same trainee `people` doc on the spot, so no separate Canvas Sync run is needed; leave it unticked for teachers and other Canvas-only enrolments.
 
 Any already-active user can reset their own password anytime via "Forgot password?" on the login page (`sendPasswordResetEmail`, no Cloud Function involved).
 
@@ -153,7 +153,7 @@ Certificates issued before this migration (2026-09) have `sharePointUrl`/`shareL
 | `canvasEnrollments` | All student enrollments for a course (used by Canvas Sync) |
 | `canvasSections` | All sections across all accessible courses (admin, used by the enroll wizard and audits) |
 | `canvasLookupUser` / `canvasUserSearch` | Exact-email / fuzzy-name Canvas user lookup (admin, enroll wizard) |
-| `canvasEnroll` | Full manual enrollment: create-user-if-needed, optional email update, optional old-section conclusion, enroll, log (admin). Log entry stores the wizard's already-known `sectionName` (e.g. "Rater Course 2026 → July 2026") so `EnrollmentLogPage` shows something readable instead of a bare Canvas section ID |
+| `canvasEnroll` | Full manual enrollment: create-user-if-needed, optional email update, optional old-section conclusion, enroll, log (admin). With `certification: true` (the wizard's "will take a certification set" tick box) it also creates a trainee `people` doc keyed on the Canvas login email (`createdVia: 'canvas_enroll'`) unless one already exists for that email or a name-similar person exists — the latter is reported back as a possible duplicate to link in Canvas Sync rather than forked. Log entry stores the wizard's already-known `sectionName` (e.g. "Rater Course 2026 → July 2026") so `EnrollmentLogPage` shows something readable instead of a bare Canvas section ID |
 | `canvasSectionEnrollments` | Students in one specific section (admin, section-membership audit) |
 | `resendEnrollmentEmail` | Re-sends the "welcome to your course" email for one `canvasEnrollmentLog` entry (admin) — backs the "Resend email" button on `/admin/enrollment-log`. Ports the WP plugin's `cce_send_enrollment_email` template so this works for manual-wizard entries too, which never touch WordPress and so have no equivalent action there. Looks up the course name from `sectionId` via the Canvas API; sends via Resend (`RESEND_API_KEY`) |
 | `enrollmentWebhook` | HTTP endpoint the WordPress plugin POSTs to after each WooCommerce enrollment attempt; shared-secret auth (`x-webhook-secret` / `ENROLLMENT_WEBHOOK_SECRET`) |
@@ -1543,4 +1543,4 @@ sidebar as "User Manual".
 
 ## Last updated
 
-2026-09-26
+2026-10-02

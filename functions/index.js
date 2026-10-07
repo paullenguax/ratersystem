@@ -612,8 +612,18 @@ exports.canvasUserSearch = onCall(async (request) => {
 //   updateEmail?       — if true, update the Canvas login email to `email`
 //   concludeOldSection? — if true, conclude any existing student enrollments in the
 //                         same course (other than the target section)
+//   certification?     — if true, this person will take a certification set, so
+//                         make sure they have a trainee `people` doc to SSO into
+//                         (saves a separate Canvas Sync run). Teachers and other
+//                         Canvas-only enrolments leave this off.
+//   canvasEmail?       — the existing Canvas user's current login email; the
+//                         people doc has to carry whatever Canvas will report at
+//                         SSO, which is this rather than `email` unless the
+//                         account was just created or had its email updated
 //
-// Returns: { canvasUserId, created, alreadyEnrolled, concludedSections, emailUpdated }
+// Returns: { canvasUserId, created, alreadyEnrolled, concludedSections, emailUpdated, person }
+//   person — null unless `certification`; otherwise
+//            { status: 'added' | 'exists' | 'possible_duplicate', name }
 
 exports.canvasEnroll = onCall(async (request) => {
   await assertAdmin(request)
@@ -626,6 +636,8 @@ exports.canvasEnroll = onCall(async (request) => {
     sectionName,
     updateEmail = false,
     concludeOldSection = false,
+    certification = false,
+    canvasEmail,
   } = request.data
 
   if (!sectionId) throw new HttpsError('invalid-argument', 'Missing sectionId')
@@ -750,20 +762,55 @@ exports.canvasEnroll = onCall(async (request) => {
     }
   }
 
-  // ── 6. Log to Firestore ───────────────────────────────────────────────────
+  // ── 6. Optionally make sure they have a RaterSystem people doc ────────────
+  // Same shape Canvas Sync writes, and the same no-silent-fork rule as
+  // canvasAuth's self-serve auto-provisioning: a name-similar existing person
+  // is left for an admin to link in Canvas Sync rather than duplicated.
+  let person = null
+  if (certification) {
+    const db = admin.firestore()
+    const loginEmail = ((created || emailUpdated ? email : canvasEmail) || email).toLowerCase().trim()
+    const personName = [firstName, lastName !== firstName ? lastName : ''].filter(Boolean).join(' ').trim() || loginEmail
+
+    const byEmail = await db.collection('people').where('email', '==', loginEmail).limit(1).get()
+    if (!byEmail.empty) {
+      person = { status: 'exists', name: byEmail.docs[0].data().name }
+    } else {
+      const allPeople = await db.collection('people').get()
+      const possibleDuplicate = allPeople.docs.find(d => namesLikelyMatch(d.data().name, personName))
+      if (possibleDuplicate) {
+        person = { status: 'possible_duplicate', name: possibleDuplicate.data().name }
+      } else {
+        await db.collection('people').doc().set({
+          name: personName,
+          email: loginEmail,
+          role: 'trainee',
+          status: 'active',
+          notes: '',
+          createdVia: 'canvas_enroll',
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        })
+        person = { status: 'added', name: personName }
+      }
+    }
+  }
+
+  // ── 7. Log to Firestore ───────────────────────────────────────────────────
   await writeEnrollmentLog({
     source: 'manual',
     email,
+    name: [firstName, lastName !== firstName ? lastName : ''].filter(Boolean).join(' ').trim(),
     canvasUserId,
     sectionId,
     sectionName: sectionName || '',
     status: alreadyEnrolled ? 'already_enrolled' : created ? 'new_account' : 'enrolled',
     emailUpdated,
     concludedSections,
+    certification,
     enrolledBy: request.auth.uid,
   })
 
-  return { canvasUserId, created, alreadyEnrolled, concludedSections, emailUpdated }
+  return { canvasUserId, created, alreadyEnrolled, concludedSections, emailUpdated, person }
 })
 
 // ── resendEnrollmentEmail ──────────────────────────────────────────────────────
@@ -774,9 +821,9 @@ exports.canvasEnroll = onCall(async (request) => {
 // enrollment log only ever contains the former, so manual entries have nowhere
 // else to trigger this from.
 
-function enrollmentEmailHtml({ firstName, courseName, canvasUrl }) {
+function enrollmentEmailHtml({ firstName, email, courseName, canvasUrl }) {
   const body = `
-    <p>Hi ${firstName},</p>
+    <p>Hi${firstName ? ` ${firstName}` : ''},</p>
     <p>🎉 Welcome to ${courseName}!</p>
     <p>You have been successfully enrolled and can start learning immediately.</p>
     <div class="highlight">
@@ -784,7 +831,8 @@ function enrollmentEmailHtml({ firstName, courseName, canvasUrl }) {
     </div>
     <p><strong>📚 What's next:</strong></p>
     <ul>
-      <li>Check your email for Canvas login instructions (if it's your first time)</li>
+      <li>Log in with your email address (${email}) as your username</li>
+      <li>First time, or forgotten your password? Click "Forgot Password?" on the login page and Canvas will email you a link to set one</li>
       <li>Complete your profile setup</li>
       <li>Start with the course introduction</li>
     </ul>
@@ -820,7 +868,7 @@ function enrollmentEmailHtml({ firstName, courseName, canvasUrl }) {
 
 exports.resendEnrollmentEmail = onCall({ secrets: [RESEND_API_KEY] }, async (request) => {
   await assertAdmin(request)
-  const { email, sectionId, name } = request.data
+  const { email, sectionId, name, canvasUserId } = request.data
   if (!email) throw new HttpsError('invalid-argument', 'Missing email')
   if (!sectionId) throw new HttpsError('invalid-argument', 'Missing sectionId')
 
@@ -841,7 +889,21 @@ exports.resendEnrollmentEmail = onCall({ secrets: [RESEND_API_KEY] }, async (req
     console.error('resendEnrollmentEmail: failed to look up course name', err)
   }
 
-  const firstName = (name || '').trim().split(/\s+/)[0] || email.split('@')[0]
+  // Greet by the name Canvas holds for them. Manual log entries written before
+  // `name` was stored have none, and the email's local part ("cortac") is not a
+  // name, so with nothing better the greeting is left bare.
+  let firstName = (name || '').trim().split(/\s+/)[0] || ''
+  if (canvasUserId) {
+    try {
+      const userRes = await canvasFetch(`/api/v1/users/${canvasUserId}`, apiToken)
+      if (userRes.ok) {
+        const user = await userRes.json()
+        firstName = (user.short_name || user.name || '').trim().split(/\s+/)[0] || firstName
+      }
+    } catch (err) {
+      console.error('resendEnrollmentEmail: failed to look up Canvas user name', err)
+    }
+  }
   const canvasUrl = `${CANVAS_URL}/login/canvas`
 
   const apiKey = RESEND_API_KEY.value()
@@ -857,7 +919,7 @@ exports.resendEnrollmentEmail = onCall({ secrets: [RESEND_API_KEY] }, async (req
       from: 'Lenguax <notifications@lenguax.com>',
       to: email,
       subject: `Welcome to ${courseName}! 🎓`,
-      html: enrollmentEmailHtml({ firstName, courseName, canvasUrl }),
+      html: enrollmentEmailHtml({ firstName, email, courseName, canvasUrl }),
     }),
   })
 
