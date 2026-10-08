@@ -1026,6 +1026,8 @@ exports.resendEnrollmentEmail = onCall({ secrets: [RESEND_API_KEY] }, async (req
     },
     body: JSON.stringify({
       from: 'Lenguax <notifications@lenguax.com>',
+      // The email invites a reply for help; notifications@ is not a mailbox anyone reads.
+      reply_to: 'paul@lenguax.com',
       to: recipient,
       subject: registrationUrl
         ? `Finish your registration for ${courseName}`
