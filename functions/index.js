@@ -814,7 +814,9 @@ exports.canvasEnroll = onCall(async (request) => {
 })
 
 // ── resendEnrollmentEmail ──────────────────────────────────────────────────────
-// Re-sends the "welcome to your course" email for an entry in canvasEnrollmentLog.
+// Re-sends the "welcome to your course" email for an entry in canvasEnrollmentLog —
+// or, for someone who has never logged in to Canvas, an email carrying their
+// personal "finish registration" link instead (see findCanvasRegistrationUrl).
 // Ports the WordPress plugin's cce_send_enrollment_email/cce_get_email_wrapper
 // template (canvas-cohort-enrollment.php) so this works from a single place for
 // both WooCommerce-sourced and manually-enrolled entries — the WP plugin's own
@@ -839,6 +841,34 @@ function enrollmentEmailHtml({ firstName, email, courseName, canvasUrl }) {
     <p><strong>💡 Need help?</strong><br/>Reply to this email — course support is available 24/7.</p>
     <p>Happy learning!<br/>The Lenguax Team</p>
   `
+  return enrollmentEmailWrapper(body)
+}
+
+// For someone who has never logged in to Canvas: the welcome email above is no
+// use to them, because they have no password yet. This carries the personal
+// "finish registration" link Canvas issued for them instead.
+function registrationEmailHtml({ firstName, loginId, courseName, registrationUrl }) {
+  const body = `
+    <p>Hi${firstName ? ` ${firstName}` : ''},</p>
+    <p>You have been enrolled in ${courseName}.</p>
+    <p>Before you can log in, you need to finish setting up your Canvas account by choosing a password.</p>
+    <div class="highlight">
+      <p><strong>🚀 Finish your registration:</strong><br/><a href="${registrationUrl}">${registrationUrl}</a></p>
+    </div>
+    <p><strong>📚 What's next:</strong></p>
+    <ul>
+      <li>Open the link above and choose a password</li>
+      <li>From then on, log in with your email address (${loginId}) as your username</li>
+      <li>Start with the course introduction</li>
+    </ul>
+    <p>This link is personal to you, so please don't forward it.</p>
+    <p><strong>💡 Need help?</strong><br/>Reply to this email — course support is available 24/7.</p>
+    <p>Happy learning!<br/>The Lenguax Team</p>
+  `
+  return enrollmentEmailWrapper(body)
+}
+
+function enrollmentEmailWrapper(body) {
   return `
     <!DOCTYPE html>
     <html>
@@ -864,6 +894,32 @@ function enrollmentEmailHtml({ firstName, email, courseName, canvasUrl }) {
     </body>
     </html>
   `
+}
+
+// Finds the "finish registration" link Canvas most recently emailed this user,
+// by reading their sent notifications (what Admin Tools → View Notifications
+// shows). Canvas exposes the link nowhere else. Returns null if none is on
+// record. Needs the account's "admins can view notifications" setting and the
+// API token's user to hold the "Notifications - view" permission; a refusal is
+// surfaced rather than swallowed so the admin learns why.
+async function findCanvasRegistrationUrl(canvasUserId, apiToken) {
+  const res = await canvasFetch(`/api/v1/comm_messages?user_id=${canvasUserId}&per_page=50`, apiToken)
+  if (res.status === 401 || res.status === 403) {
+    throw new HttpsError(
+      'failed-precondition',
+      'This person has not finished registering, but Canvas refused to show their registration email. ' +
+      'The Canvas API token\'s user needs the "Notifications - view" permission.'
+    )
+  }
+  if (!res.ok) throw new HttpsError('internal', `Canvas could not list this person's emails (${res.status})`)
+
+  const messages = await res.json()
+  const linkPattern = new RegExp(`${CANVAS_URL}/register/[A-Za-z0-9]+`)
+  const withLink = messages
+    .map(m => ({ createdAt: m.created_at || '', url: (`${m.body || ''} ${m.html_body || ''}`.match(linkPattern) || [])[0] }))
+    .filter(m => m.url)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  return withLink.length ? withLink[0].url : null
 }
 
 exports.resendEnrollmentEmail = onCall({ secrets: [RESEND_API_KEY] }, async (request) => {
@@ -893,18 +949,32 @@ exports.resendEnrollmentEmail = onCall({ secrets: [RESEND_API_KEY] }, async (req
   // `name` was stored have none, and the email's local part ("cortac") is not a
   // name, so with nothing better the greeting is left bare.
   let firstName = (name || '').trim().split(/\s+/)[0] || ''
+  // The log entry keeps the address as typed on the day. If it has since been
+  // corrected in Canvas, the Canvas login is the one that reaches the person
+  // (and the one they log in with), so that wins.
+  let recipient = email
+  let neverLoggedIn = false
   if (canvasUserId) {
     try {
-      const userRes = await canvasFetch(`/api/v1/users/${canvasUserId}`, apiToken)
+      const userRes = await canvasFetch(`/api/v1/users/${canvasUserId}?include[]=last_login`, apiToken)
       if (userRes.ok) {
         const user = await userRes.json()
         firstName = (user.short_name || user.name || '').trim().split(/\s+/)[0] || firstName
+        if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(user.login_id || '')) recipient = user.login_id
+        neverLoggedIn = 'last_login' in user && !user.last_login
       }
     } catch (err) {
-      console.error('resendEnrollmentEmail: failed to look up Canvas user name', err)
+      console.error('resendEnrollmentEmail: failed to look up Canvas user', err)
     }
   }
   const canvasUrl = `${CANVAS_URL}/login/canvas`
+
+  // Someone who has never logged in has no password, so what they need is
+  // their registration link, not a pointer to the login page. If Canvas has no
+  // such email on record any more, the welcome email still tells them how to
+  // get a new one via "Forgot Password?".
+  const registrationUrl = neverLoggedIn ? await findCanvasRegistrationUrl(canvasUserId, apiToken) : null
+  const kind = registrationUrl ? 'registration' : 'welcome'
 
   const apiKey = RESEND_API_KEY.value()
   if (!apiKey) throw new HttpsError('failed-precondition', 'Email sending is not configured')
@@ -917,9 +987,13 @@ exports.resendEnrollmentEmail = onCall({ secrets: [RESEND_API_KEY] }, async (req
     },
     body: JSON.stringify({
       from: 'Lenguax <notifications@lenguax.com>',
-      to: email,
-      subject: `Welcome to ${courseName}! 🎓`,
-      html: enrollmentEmailHtml({ firstName, email, courseName, canvasUrl }),
+      to: recipient,
+      subject: registrationUrl
+        ? `Finish your registration for ${courseName}`
+        : `Welcome to ${courseName}! 🎓`,
+      html: registrationUrl
+        ? registrationEmailHtml({ firstName, loginId: recipient, courseName, registrationUrl })
+        : enrollmentEmailHtml({ firstName, email: recipient, courseName, canvasUrl }),
     }),
   })
 
@@ -928,7 +1002,7 @@ exports.resendEnrollmentEmail = onCall({ secrets: [RESEND_API_KEY] }, async (req
     throw new HttpsError('internal', `Failed to send email: ${body}`)
   }
 
-  return { sent: true }
+  return { sent: true, kind, to: recipient, neverLoggedIn }
 })
 
 // ── requestSelfAssignment ──────────────────────────────────────────────────────

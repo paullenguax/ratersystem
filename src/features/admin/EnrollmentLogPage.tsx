@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 
 const resendEnrollmentEmailFn = httpsCallable<
   { email: string; sectionId: number; name?: string; canvasUserId?: number | null },
-  { sent: boolean }
+  { sent: boolean; kind: 'registration' | 'welcome'; to: string; neverLoggedIn: boolean }
 >(functions, 'resendEnrollmentEmail')
 
 // ── types ─────────────────────────────────────────────────────────────────────
@@ -104,8 +104,14 @@ export function EnrollmentLogPage() {
     }
     setResendingId(entry.id)
     try {
-      await resendEnrollmentEmailFn({ email: entry.email, sectionId: entry.sectionId, name: entry.name, canvasUserId: entry.canvasUserId })
-      alert(`Email resent to ${entry.email}.`)
+      const { data } = await resendEnrollmentEmailFn({ email: entry.email, sectionId: entry.sectionId, name: entry.name, canvasUserId: entry.canvasUserId })
+      if (data.kind === 'registration') {
+        alert(`${data.to} has never logged in to Canvas, so they were sent their "finish registration" link.`)
+      } else if (data.neverLoggedIn) {
+        alert(`${data.to} has never logged in to Canvas, but Canvas has no registration email on record for them. They were sent the welcome email, which explains how to set a password via "Forgot Password?".`)
+      } else {
+        alert(`Welcome email resent to ${data.to}.`)
+      }
     } catch (err) {
       alert(`Failed to resend: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
