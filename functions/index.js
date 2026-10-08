@@ -877,7 +877,7 @@ function enrollmentEmailHtml({ firstName, email, courseName, canvasUrl }) {
       <li>Complete your profile setup</li>
       <li>Start with the course introduction</li>
     </ul>
-    <p><strong>💡 Need help?</strong><br/>Reply to this email — course support is available 24/7.</p>
+    <p><strong>💡 Need help?</strong><br/>Reply to this email and we will get back to you.</p>
     <p>Happy learning!<br/>The Lenguax Team</p>
   `
   return enrollmentEmailWrapper(body)
@@ -901,7 +901,7 @@ function registrationEmailHtml({ firstName, loginId, courseName, registrationUrl
       <li>Start with the course introduction</li>
     </ul>
     <p>This link is personal to you, so please don't forward it.</p>
-    <p><strong>💡 Need help?</strong><br/>Reply to this email — course support is available 24/7.</p>
+    <p><strong>💡 Need help?</strong><br/>Reply to this email and we will get back to you.</p>
     <p>Happy learning!<br/>The Lenguax Team</p>
   `
   return enrollmentEmailWrapper(body)
