@@ -4,6 +4,9 @@ export interface Person {
   id: string
   name: string
   email: string
+  // Canvas user ID — what actually ties this record to a Canvas account at
+  // SSO. Absent on records that predate it; those still match by email.
+  canvasUserId?: number
   role: 'admin' | 'senior_rater' | 'trainee' | 'examiner'
   status: 'active' | 'inactive' | 'suspended'
   raterNumber?: number

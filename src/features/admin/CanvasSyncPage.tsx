@@ -28,6 +28,9 @@ interface SyncRow {
   canvasUser: CanvasUser
   status: MatchStatus
   matchedPersonId?: string
+  // A matched person whose record lacks the Canvas ID or carries an older
+  // email than Canvas now has — brought up to date on Apply.
+  needsUpdate?: boolean
   matchedPersonName?: string
   decision: Decision
   newRole: Person['role']
@@ -58,9 +61,12 @@ async function fetchCanvasEnrollments(courseId: string): Promise<CanvasUser[]> {
 
 function buildRows(canvasUsers: CanvasUser[], people: Person[]): SyncRow[] {
   return canvasUsers.map(cu => {
-    const exact = people.find(p => p.email?.toLowerCase() === cu.email)
+    const exact = people.find(p => p.canvasUserId === cu.canvasId) ?? people.find(p => p.email?.toLowerCase() === cu.email)
     if (exact) {
-      return { canvasUser: cu, status: 'matched', matchedPersonId: exact.id, matchedPersonName: exact.name, decision: 'confirm', newRole: 'trainee' }
+      // A record already tied to a different Canvas account is left alone —
+      // that's two Canvas accounts sharing an email, not something to overwrite.
+      const needsUpdate = exact.canvasUserId == null || (exact.canvasUserId === cu.canvasId && exact.email?.toLowerCase() !== cu.email)
+      return { canvasUser: cu, status: 'matched', matchedPersonId: exact.id, matchedPersonName: exact.name, needsUpdate, decision: 'confirm', newRole: 'trainee' }
     }
     const fuzzy = people.find(p => nameSimilar(p.name, cu.name))
     if (fuzzy) {
@@ -155,12 +161,15 @@ export function CanvasSyncPage() {
 
       for (const row of rows) {
         if (row.status === 'possible' && row.decision === 'confirm' && row.matchedPersonId) {
-          batch.update(doc(db, 'people', row.matchedPersonId), { email: row.canvasUser.email })
+          batch.update(doc(db, 'people', row.matchedPersonId), { email: row.canvasUser.email, canvasUserId: row.canvasUser.canvasId })
           linked++
+        } else if (row.status === 'matched' && row.needsUpdate && row.matchedPersonId) {
+          batch.update(doc(db, 'people', row.matchedPersonId), { email: row.canvasUser.email, canvasUserId: row.canvasUser.canvasId })
         } else if (row.status === 'new' && row.decision === 'add') {
           batch.set(doc(collection(db, 'people')), {
             name: row.canvasUser.name,
             email: row.canvasUser.email,
+            canvasUserId: row.canvasUser.canvasId,
             role: row.newRole,
             status: 'active',
             notes: '',
@@ -182,7 +191,8 @@ export function CanvasSyncPage() {
   const newCount = rows.filter(r => r.status === 'new').length
   const pending = rows.filter(r =>
     (r.status === 'possible' && r.decision === 'confirm') ||
-    (r.status === 'new' && r.decision === 'add'),
+    (r.status === 'new' && r.decision === 'add') ||
+    (r.status === 'matched' && r.needsUpdate),
   ).length
 
   return (

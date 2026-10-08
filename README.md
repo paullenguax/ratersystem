@@ -110,7 +110,7 @@ Build runs `tsc -b && vite build` — TypeScript strict mode is on, unused impor
 2. Firestore → `people` → new doc with that UID as the document ID; fields: `name`, `email`, `role`, `status` (`active`)
 3. Firebase Console → Auth → send password reset to the user
 
-Canvas SSO users: run Canvas Sync (Admin page) — it creates the `people` doc automatically, no password ever needed. When enrolling someone one at a time through the enroll wizard, ticking "This person will take a certification set" creates the same trainee `people` doc on the spot, so no separate Canvas Sync run is needed; leave it unticked for teachers and other Canvas-only enrolments.
+Canvas SSO users: run Canvas Sync (Admin page) — it creates the `people` doc automatically, no password ever needed. A `people` doc is tied to its Canvas account by `canvasUserId` (stamped by Canvas Sync, the enroll wizard, self-serve auto-provisioning, and the first SSO sign-in of any older doc that matched by email); `canvasAuth` looks up by that ID first and falls back to email, and when the ID matches but the Canvas login email has changed it updates the doc's `email` to follow — so correcting a mistyped address in Canvas no longer locks the person out. When enrolling someone one at a time through the enroll wizard, ticking "This person will take a certification set" creates the same trainee `people` doc on the spot, so no separate Canvas Sync run is needed; leave it unticked for teachers and other Canvas-only enrolments.
 
 Any already-active user can reset their own password anytime via "Forgot password?" on the login page (`sendPasswordResetEmail`, no Cloud Function involved).
 

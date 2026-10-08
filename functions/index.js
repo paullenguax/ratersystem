@@ -215,13 +215,42 @@ exports.canvasAuth = onCall({ secrets: [CANVAS_CLIENT_SECRET] }, async (request)
   if (!email) throw new HttpsError('internal', 'Could not determine email from Canvas profile')
 
   const db = admin.firestore()
-  const snap = await db.collection('people').where('email', '==', email).limit(1).get()
 
-  let personId, personName
+  // A people doc is tied to its Canvas account by the Canvas user ID, which
+  // never changes, rather than by email, which gets mistyped and corrected.
+  // Docs written before the ID was stored are still found by email exactly as
+  // before, and pick up the ID on that first sign-in.
+  const canvasUserId = Number(canvasUser.id) || null
+  const byId = canvasUserId
+    ? await db.collection('people').where('canvasUserId', '==', canvasUserId).limit(1).get()
+    : null
+  const byEmail = await db.collection('people').where('email', '==', email).limit(1).get()
 
-  if (!snap.empty) {
-    personId = snap.docs[0].id
-    personName = snap.docs[0].data().name
+  let personId, personName, previousEmail
+
+  if (byId && !byId.empty) {
+    const personDoc = byId.docs[0]
+    personId = personDoc.id
+    personName = personDoc.data().name
+    // Their Canvas login email has changed since we last saw them — follow it,
+    // unless some other people doc already holds that address (two records for
+    // one person is an admin's call to untangle, not something to paper over).
+    if (personDoc.data().email !== email) {
+      if (byEmail.empty) {
+        previousEmail = personDoc.data().email
+        await personDoc.ref.update({ email })
+        await admin.auth().updateUser(personId, { email }).catch(() => {})
+      } else {
+        console.warn(`canvasAuth: people/${personId} is Canvas user ${canvasUserId} but ${email} belongs to people/${byEmail.docs[0].id}`)
+      }
+    }
+  } else if (!byEmail.empty) {
+    const personDoc = byEmail.docs[0]
+    personId = personDoc.id
+    personName = personDoc.data().name
+    if (canvasUserId && !personDoc.data().canvasUserId) {
+      await personDoc.ref.update({ canvasUserId })
+    }
   } else if (selfServe) {
     // Failsafe for "Canvas Sync wasn't run before this person tried to take
     // their exam": auto-provision a trainee record, but only if they're
@@ -250,6 +279,7 @@ exports.canvasAuth = onCall({ secrets: [CANVAS_CLIENT_SECRET] }, async (request)
     await newPersonRef.set({
       name: personName,
       email,
+      ...(canvasUserId ? { canvasUserId } : {}),
       role: 'trainee',
       status: 'active',
       createdVia: 'self_serve_auto',
@@ -263,7 +293,14 @@ exports.canvasAuth = onCall({ secrets: [CANVAS_CLIENT_SECRET] }, async (request)
   try {
     await admin.auth().getUser(personId)
   } catch {
-    const existingByEmail = await admin.auth().getUserByEmail(email).catch(() => null)
+    let existingByEmail = await admin.auth().getUserByEmail(email).catch(() => null)
+    // Their login may live under the address they had before it changed in
+    // Canvas — keep them on that same login (and move it to the new address)
+    // rather than minting a second one that owns none of their past work.
+    if (!existingByEmail && previousEmail) {
+      existingByEmail = await admin.auth().getUserByEmail(previousEmail).catch(() => null)
+      if (existingByEmail) await admin.auth().updateUser(existingByEmail.uid, { email }).catch(() => {})
+    }
     if (existingByEmail) {
       const token = await admin.auth().createCustomToken(existingByEmail.uid)
       return { token }
@@ -775,6 +812,7 @@ exports.canvasEnroll = onCall(async (request) => {
     const byEmail = await db.collection('people').where('email', '==', loginEmail).limit(1).get()
     if (!byEmail.empty) {
       person = { status: 'exists', name: byEmail.docs[0].data().name }
+      if (!byEmail.docs[0].data().canvasUserId) await byEmail.docs[0].ref.update({ canvasUserId: Number(canvasUserId) })
     } else {
       const allPeople = await db.collection('people').get()
       const possibleDuplicate = allPeople.docs.find(d => namesLikelyMatch(d.data().name, personName))
@@ -784,6 +822,7 @@ exports.canvasEnroll = onCall(async (request) => {
         await db.collection('people').doc().set({
           name: personName,
           email: loginEmail,
+          canvasUserId: Number(canvasUserId),
           role: 'trainee',
           status: 'active',
           notes: '',
