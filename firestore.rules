@@ -218,7 +218,7 @@ service cloud.firestore {
     // ── certificateShareLinkLog ─────────────────────────────────────────────
     // Audit trail of anonymous SharePoint share links issued for certificates
     // (candidate, cert number, link, expiry, issuer). Written client-side from
-    // the admin-only Certificates page.
+    // the admin-only Certificates and Reports pages.
 
     match /certificateShareLinkLog/{logId} {
       allow read, write: if isAdmin();

@@ -1,50 +1,26 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, serverTimestamp } from 'firebase/firestore'
+import { collection, getDocs, updateDoc, deleteDoc, doc, query, where } from 'firebase/firestore'
 import type jsPDF from 'jspdf'
-import { Copy, Check, ExternalLink, Download, Trash2, CloudUpload, LogOut, Link, RefreshCw, Share2, Plus } from 'lucide-react'
+import { Copy, Check, ExternalLink, Download, Trash2, CloudUpload, Link, RefreshCw, Share2, Plus } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { SharePointBar } from '@/components/SharePointBar'
 import {
   CERT_TYPES, type CertTypeValue,
-  generateCertNumber, generatePIN, buildCertPDF, resolveTemplateUrl,
+  generateCertNumber, generatePIN, resolveTemplateUrl,
 } from './certGen'
-import { msSignIn, msSignOut, getMsAccount, getTokenStatus } from '@/lib/msal'
-import { uploadToSharePoint, createAnonymousViewLink, SP_FOLDERS_CERT } from '@/lib/oneDrive'
-
-interface CertRecord {
-  id: string
-  certNumber: string
-  pin: string
-  name: string
-  date: string
-  certType: CertTypeValue
-  certTypeName: string
-  createdAt?: { seconds: number }
-  sharePointUrl?: string
-  sharePointItemId?: string
-  shareLink?: string
-  shareLinkExpiresAt?: string
-}
+import {
+  type CertRecord, TEMPLATE_BASE, validationUrl,
+  issueCertificate, downloadCertificate, logShareLink,
+} from './issueCertificate'
+import { useMsConnection } from '@/lib/useMsConnection'
+import { createAnonymousViewLink } from '@/lib/oneDrive'
 
 function daysUntil(iso: string): number {
   return Math.ceil((new Date(iso).getTime() - Date.now()) / (24 * 60 * 60 * 1000))
-}
-
-async function logShareLink(entry: { certificateId: string; certNumber: string; candidateName: string; link: string; expiresAt: string; issuedBy: string }) {
-  await addDoc(collection(db, 'certificateShareLinkLog'), {
-    ...entry,
-    issuedAt: serverTimestamp(),
-  })
-}
-
-const VALIDATION_BASE = 'https://lenguax.com/ratersystem/validate'
-const TEMPLATE_BASE   = '/ratersystem'
-
-function validationUrl(certNumber: string) {
-  return `${VALIDATION_BASE}/${certNumber}`
 }
 
 export function CertificatesPage() {
@@ -62,20 +38,7 @@ export function CertificatesPage() {
   const [copied, setCopied]         = useState<string | null>(null)
 
   // ── SharePoint state ─────────────────────────────────────────────────────
-  const [msAccount, setMsAccount]       = useState(() => getMsAccount())
-  const [msStatus, setMsStatus]         = useState(() => getTokenStatus())
-  useEffect(() => {
-    function refreshMsStatus() {
-      setMsAccount(getMsAccount())
-      setMsStatus(getTokenStatus())
-    }
-    refreshMsStatus()
-    // Catches the token quietly expiring while the page just sits open —
-    // not just on mount/sign-in/sign-out.
-    const interval = setInterval(refreshMsStatus, 60_000)
-    return () => clearInterval(interval)
-  }, [])
-  const [msSignInErr, setMsSignInErr]   = useState<string | null>(null)
+  const ms = useMsConnection()
   const [certSpUrl, setCertSpUrl]       = useState<string | null>(null)
   const [certSpErr, setCertSpErr]       = useState<string | null>(null)
   const [certShareLink, setCertShareLink]           = useState<{ url: string; expiresAt: string } | null>(null)
@@ -84,22 +47,6 @@ export function CertificatesPage() {
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null)
   const [regenerateErr, setRegenerateErr]   = useState<{ id: string; msg: string } | null>(null)
 
-  async function handleMsSignIn() {
-    setMsSignInErr(null)
-    try {
-      const account = await msSignIn()
-      setMsAccount(account)
-      setMsStatus(getTokenStatus())
-    } catch (err) {
-      setMsSignInErr(err instanceof Error ? err.message : 'Microsoft sign-in failed')
-    }
-  }
-
-  async function handleMsSignOut() {
-    await msSignOut()
-    setMsAccount(null)
-    setMsStatus('signed-out')
-  }
 
   const { data: records = [] } = useQuery({
     queryKey: ['certificates'],
@@ -128,71 +75,16 @@ export function CertificatesPage() {
     setCertShareLink(null)
     setCertShareLinkErr(null)
     try {
-      const templateUrl = await resolveTemplateUrl(certType, TEMPLATE_BASE)
-      const pdf = await buildCertPDF({
-        name: name.trim(),
-        date: date.trim(),
-        pin,
-        certNumber,
-        certType,
-        validationUrl: validationUrl(certNumber),
-        basePath: TEMPLATE_BASE,
-        templateUrl,
+      const issued = await issueCertificate({
+        name, date, certType, certNumber, pin,
+        upload: ms.status === 'connected',
+        issuedBy: user?.uid ?? '',
       })
-
-      const filename = `${selectedType.label} - ${name.trim()} - ${certNumber}.pdf`
-      setGeneratedPdf({ pdf, filename })
-
-      let spUrl: string | null = null
-      let spItemId: string | null = null
-      let shareLink: { url: string; expiresAt: string } | null = null
-      if (msStatus === 'connected') {
-        try {
-          const blob = pdf.output('blob')
-          const uploaded = await uploadToSharePoint(blob, filename, SP_FOLDERS_CERT[certType], 'CourseCertificates')
-          spUrl = uploaded.webUrl
-          spItemId = uploaded.itemId
-          setCertSpUrl(spUrl)
-        } catch (err) {
-          setCertSpErr(err instanceof Error ? err.message : 'SharePoint upload failed')
-        }
-
-        // Per-candidate anonymous view link — only once the file itself is up.
-        if (spItemId) {
-          try {
-            shareLink = await createAnonymousViewLink(spItemId, 'CourseCertificates')
-            setCertShareLink(shareLink)
-          } catch (err) {
-            setCertShareLinkErr(err instanceof Error ? err.message : 'Could not create shareable link')
-          }
-        }
-      }
-
-      const docRef = await addDoc(collection(db, 'certificates'), {
-        certNumber,
-        pin,
-        name: name.trim(),
-        date: date.trim(),
-        certType,
-        certTypeName: selectedType.label,
-        createdBy: user?.uid ?? '',
-        ...(spUrl ? { sharePointUrl: spUrl } : {}),
-        ...(spItemId ? { sharePointItemId: spItemId } : {}),
-        ...(shareLink ? { shareLink: shareLink.url, shareLinkExpiresAt: shareLink.expiresAt } : {}),
-        createdAt: serverTimestamp(),
-      })
-
-      if (shareLink) {
-        await logShareLink({
-          certificateId: docRef.id,
-          certNumber,
-          candidateName: name.trim(),
-          link: shareLink.url,
-          expiresAt: shareLink.expiresAt,
-          issuedBy: user?.uid ?? '',
-        })
-      }
-
+      setGeneratedPdf({ pdf: issued.pdf, filename: issued.filename })
+      setCertSpUrl(issued.sharePointUrl)
+      setCertSpErr(issued.sharePointErr)
+      setCertShareLink(issued.shareLink)
+      setCertShareLinkErr(issued.shareLinkErr)
       setGenerated({ certNumber, pin })
       queryClient.invalidateQueries({ queryKey: ['certificates'] })
     } finally {
@@ -239,21 +131,6 @@ export function CertificatesPage() {
     }
   }
 
-  async function handleRegenerate(rec: CertRecord) {
-    const templateUrl = await resolveTemplateUrl(rec.certType, TEMPLATE_BASE)
-    const pdf = await buildCertPDF({
-      name: rec.name,
-      date: rec.date,
-      pin: rec.pin,
-      certNumber: rec.certNumber,
-      certType: rec.certType,
-      validationUrl: validationUrl(rec.certNumber),
-      basePath: TEMPLATE_BASE,
-      templateUrl,
-    })
-    pdf.save(`${rec.certTypeName} - ${rec.name} - ${rec.certNumber}.pdf`)
-  }
-
   async function handleDelete(rec: CertRecord) {
     if (!confirm(`Delete certificate ${rec.certNumber} for ${rec.name}?`)) return
     await deleteDoc(doc(db, 'certificates', rec.id))
@@ -285,38 +162,7 @@ export function CertificatesPage() {
         </Button>
       </div>
 
-      {/* SharePoint connection bar */}
-      {msSignInErr && <p className="text-xs text-red-600">{msSignInErr}</p>}
-      <div className={`flex items-center justify-between rounded-md border px-3 py-2 text-sm ${
-        msStatus === 'connected' ? 'border-green-400 bg-green-100 dark:bg-green-950 dark:border-green-700'
-        : msStatus === 'stale' ? 'border-amber-400 bg-amber-100 dark:bg-amber-950 dark:border-amber-700'
-        : 'border-red-400 bg-red-100 dark:bg-red-950 dark:border-red-700'
-      }`}>
-        {msAccount ? (
-          <>
-            <span className={msStatus === 'connected' ? 'text-green-900 dark:text-green-200' : 'text-amber-900 dark:text-amber-200'}>
-              SharePoint: <span className="font-medium">{msAccount.username}</span>
-              {msStatus === 'stale' && <span className="font-normal"> — session needs refreshing</span>}
-            </span>
-            {msStatus === 'stale' ? (
-              <button type="button" onClick={handleMsSignIn} className="flex items-center gap-1.5 text-xs font-semibold text-amber-900 dark:text-amber-200 hover:underline">
-                <CloudUpload className="size-3.5" /> Reconnect
-              </button>
-            ) : (
-              <button type="button" onClick={handleMsSignOut} className="flex items-center gap-1 text-xs text-green-900 dark:text-green-200 hover:underline">
-                <LogOut className="size-3" /> Disconnect
-              </button>
-            )}
-          </>
-        ) : (
-          <>
-            <span className="font-medium text-red-900 dark:text-red-200">Not signed in — certificates won't auto-save to SharePoint</span>
-            <button type="button" onClick={handleMsSignIn} className="flex items-center gap-1.5 text-xs font-semibold text-red-900 dark:text-red-200 hover:underline">
-              <CloudUpload className="size-3.5" /> Connect
-            </button>
-          </>
-        )}
-      </div>
+      <SharePointBar ms={ms} signedOutText="Not signed in — certificates won't auto-save to SharePoint" />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
 
@@ -525,7 +371,7 @@ export function CertificatesPage() {
                                 </button>
                               </>
                             )}
-                            <button title="Re-download PDF" onClick={() => handleRegenerate(rec)} className="text-muted-foreground hover:text-foreground">
+                            <button title="Re-download PDF" onClick={() => downloadCertificate(rec)} className="text-muted-foreground hover:text-foreground">
                               <Download className="size-3.5" />
                             </button>
                             <button title="Delete record" onClick={() => handleDelete(rec)} className="text-muted-foreground hover:text-red-600">

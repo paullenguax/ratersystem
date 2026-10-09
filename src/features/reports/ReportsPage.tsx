@@ -12,6 +12,7 @@ import { parseFacetsOutput, type RaschRun } from '@/lib/parseFacets'
 import { buildRaschData, toAnalysisInput } from '@/lib/rasch/raschData'
 import { analyze } from '@/lib/rasch/analysis'
 import { useRaschBaseline } from '@/lib/rasch/baseline'
+import { CertificatePanel } from './CertificatePanel'
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -143,8 +144,8 @@ function buildEmail(params: {
   const { rater, candidateStats, paraOverrides, handWave, isRefresher, measure, infit, outcome, advisoryText,
           isRepeater, prevRaterNumber, prevMeasure, raterNumberField, habitSentence } = params
   const courseLink = isRefresher
-    ? 'https://www.lenguax.com/product/online-aviation-english-rater-refresher-course/'
-    : 'https://www.lenguax.com/product/online-aviation-english-rater-course/'
+    ? 'https://www.lenguax.com/product/aviation-english-rater-refresher-course/'
+    : 'https://www.lenguax.com/product/aviation-english-rater-course/'
   const firstName = rater.name.split(' ')[0]
   const raterNum = raterNumberField || (rater.raterNumber ?? '[RATER NUMBER]')
 
@@ -216,10 +217,12 @@ function buildEmail(params: {
     '',
     `With this in mind, ${outcomeText}`,
     '',
-    `The certificate will follow separately.`,
-    '',
-    `Congratulations on passing the course!`,
-    '',
+    ...(outcome === 'fail' ? [] : [
+      `The certificate will follow separately.`,
+      '',
+      `Congratulations on passing the course!`,
+      '',
+    ]),
     ...(repeaterSentence ? [repeaterSentence, ''] : []),
     `If possible, could you leave us some feedback?`,
     '',
@@ -1217,6 +1220,16 @@ export function ReportsPage() {
                 />
               )}
             </div>
+
+            {rater && outcome !== 'fail' && (
+              <CertificatePanel
+                key={`${sessionName}|${raterId}`}
+                raterId={raterId}
+                raterName={rater.name}
+                sessionName={sessionName}
+                isRefresher={isRefresher}
+              />
+            )}
 
             {/* Repeater */}
             <div className="space-y-2">
