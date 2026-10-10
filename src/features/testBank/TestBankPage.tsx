@@ -6,6 +6,7 @@ import { Plus, Play, Square, ChevronUp, ChevronDown, ChevronsUpDown } from 'luci
 import { db } from '@/lib/firebase'
 import type { Test } from '@/types'
 import { TestDrawer } from './TestDrawer'
+import { TestScoresSheet } from './TestScoresSheet'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -34,6 +35,7 @@ export function TestBankPage() {
   const [courseTagFilter, setCourseTagFilter] = useState<'all' | NonNullable<Test['courseTag']>>('all')
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [selectedTest, setSelectedTest] = useState<Test | undefined>()
+  const [scoresTest, setScoresTest] = useState<Test | undefined>()
   const [playingUrl, setPlayingUrl] = useState<string | null>(null)
   const [sorting, setSorting] = useState<SortingState>([{ id: 'testId', desc: false }])
 
@@ -87,13 +89,15 @@ export function TestBankPage() {
         if (t.calibratedLevel == null) return <span className="text-muted-foreground/50 text-xs">—</span>
         const disagree = (t.calibratedInfit ?? 1) > 1.3 || (t.calibratedOutfit ?? 1) > 1.3
         return (
-          <span
-            className="text-sm"
-            title={`Rasch-calibrated: level an average rater would award (fair avg ${t.calibratedFairAvg?.toFixed(2)}, ${t.calibratedRaters} raters). Statistics → Tests.`}
+          <button
+            type="button"
+            onClick={() => setScoresTest(t)}
+            className="text-sm hover:underline"
+            title={`Rasch-calibrated: level an average rater would award (fair avg ${t.calibratedFairAvg?.toFixed(2)}, ${t.calibratedRaters} raters). Click to see every rater's scores.`}
           >
             <span className="font-semibold">{t.calibratedLevel}</span>
-            {disagree && <span className="ml-1.5 text-[11px] text-red-700" title="Raters disagree about this recording more than expected">⚠ disagree</span>}
-          </span>
+            {disagree && <span className="ml-1.5 text-[11px] text-red-700">⚠ disagree</span>}
+          </button>
         )
       },
     },
@@ -146,13 +150,18 @@ export function TestBankPage() {
     {
       id: 'actions',
       cell: ({ row }) => (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => { setSelectedTest(row.original); setDrawerOpen(true) }}
-        >
-          Edit
-        </Button>
+        <div className="flex">
+          <Button variant="ghost" size="sm" onClick={() => setScoresTest(row.original)}>
+            Scores
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => { setSelectedTest(row.original); setDrawerOpen(true) }}
+          >
+            Edit
+          </Button>
+        </div>
       ),
     },
   ]
@@ -302,6 +311,7 @@ export function TestBankPage() {
       )}
 
       <TestDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} test={selectedTest} />
+      <TestScoresSheet open={!!scoresTest} onClose={() => setScoresTest(undefined)} test={scoresTest} />
     </div>
   )
 }

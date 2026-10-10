@@ -1545,6 +1545,8 @@ sidebar as "User Manual".
 
 - **Submission emails for every assignment**: `notifySelfServeSubmission` used to fire only for `source: 'self_serve'` assignments and only if `config/canvas.notificationEmail` was set — but nothing in the app could set that field, and Canvas Sync's settings save (`setDoc` without merge) deleted it every time the token or course list was saved. Now: the function covers any non-standardization assignment a rater confirms, both submission notifiers fall back to paul@lenguax.com when the field is blank, the Canvas Sync settings panel has a "Notification email" field, and its save merges instead of overwriting. Cloud Functions aren't deployed by the GitHub Action — `firebase deploy --only functions:notifySelfServeSubmission,functions:notifyStandardizationSubmission`.
 
+- **Test Bank — who gave what**: clicking a test's Level (or the new "Scores" button on any row) opens `features/testBank/TestScoresSheet.tsx`, a side panel listing every `scores` doc for that `testDocId` — rater (senior raters/admins badged), event, the six criteria and overall — under a bar chart of the overall levels awarded and median rows for all raters and for senior raters. Cells a full level or more from the all-rater median are highlighted (blue higher, amber lower). It's the drill-down for the "⚠ disagree" marker; unpublished scores are listed too and labelled as such.
+
 ## Last updated
 
 2026-10-10
