@@ -13,6 +13,7 @@ import { CheckCircle2, AlertTriangle, RefreshCw, ChevronDown, ChevronUp, X } fro
 interface CanvasConfig {
   apiToken: string
   courses: { id: string; name: string }[]
+  notificationEmail?: string
 }
 
 interface CanvasUser {
@@ -81,6 +82,7 @@ function buildRows(canvasUsers: CanvasUser[], people: Person[]): SyncRow[] {
 export function CanvasSyncPage() {
   const [config, setConfig] = useState<CanvasConfig | null>(null)
   const [tokenDraft, setTokenDraft] = useState('')
+  const [notifyDraft, setNotifyDraft] = useState('')
   const [coursesDraft, setCoursesDraft] = useState<{ id: string; name: string }[]>([])
   const [newCourseId, setNewCourseId] = useState('')
   const [newCourseName, setNewCourseName] = useState('')
@@ -100,6 +102,7 @@ export function CanvasSyncPage() {
         const data = snap.data() as CanvasConfig
         setConfig(data)
         setTokenDraft(data.apiToken ?? '')
+        setNotifyDraft(data.notificationEmail ?? '')
         setCoursesDraft(data.courses ?? [])
         if (data.courses?.length) setSelectedCourseId(data.courses[0].id)
       } else {
@@ -112,8 +115,9 @@ export function CanvasSyncPage() {
   async function saveConfig() {
     setSavingConfig(true)
     try {
-      const next: CanvasConfig = { apiToken: tokenDraft, courses: coursesDraft }
-      await setDoc(doc(db, 'config', 'canvas'), next)
+      const next: CanvasConfig = { apiToken: tokenDraft, courses: coursesDraft, notificationEmail: notifyDraft.trim() }
+      // merge — a plain setDoc here used to wipe any field this form doesn't own
+      await setDoc(doc(db, 'config', 'canvas'), next, { merge: true })
       setConfig(next)
       if (!selectedCourseId && coursesDraft.length) setSelectedCourseId(coursesDraft[0].id)
     } finally {
@@ -232,6 +236,19 @@ export function CanvasSyncPage() {
               />
               <p className="text-xs text-muted-foreground">
                 Canvas → Account → Settings → Approved Integrations → New Access Token
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Notification email</label>
+              <Input
+                type="email"
+                value={notifyDraft}
+                onChange={e => setNotifyDraft(e.target.value)}
+                placeholder="paul@lenguax.com"
+              />
+              <p className="text-xs text-muted-foreground">
+                Emailed when a rater confirms their scores for an assignment. Left blank, it goes to paul@lenguax.com.
               </p>
             </div>
 

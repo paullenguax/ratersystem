@@ -1227,12 +1227,16 @@ exports.requestSelfAssignment = onCall(async (request) => {
   return { assignmentId: assignRef.id }
 })
 
+// Where submission alerts go when config/canvas.notificationEmail is blank.
+const DEFAULT_NOTIFICATION_EMAIL = 'paul@lenguax.com'
+
 // ── notifySelfServeSubmission ──────────────────────────────────────────────────
-// Fires when a self-serve rater explicitly confirms their scores (not just
-// when the 4th test is saved — `status` flips to 'submitted' at that point,
-// but the rater can still review/change answers until they hit "confirm").
-// Emails the admin; silently no-ops if email isn't configured, matching the
-// WP plugin's precedent for its own webhook.
+// Fires when a rater explicitly confirms their scores (not just when the 4th
+// test is saved — `status` flips to 'submitted' at that point, but the rater
+// can still review/change answers until they hit "confirm"). Despite the name
+// (kept so the deployed function isn't orphaned) this covers every
+// non-standardization assignment, self-serve or admin-created;
+// standardization has its own function below.
 
 exports.notifySelfServeSubmission = onDocumentUpdated(
   { document: 'assignments/{assignmentId}', secrets: [RESEND_API_KEY] },
@@ -1240,21 +1244,19 @@ exports.notifySelfServeSubmission = onDocumentUpdated(
     const before = event.data.before.data()
     const after = event.data.after.data()
 
-    if (after.source !== 'self_serve') return
+    if ((after.category ?? 'rater_course') === 'standardization') return
     if (before.confirmedAt || !after.confirmedAt) return
 
     const db = admin.firestore()
     const configSnap = await db.doc('config/canvas').get()
-    const notificationEmail = configSnap.data()?.notificationEmail
-    const apiKey = RESEND_API_KEY.value()
-
-    if (!notificationEmail || !apiKey) return // not configured — skip silently
+    const notificationEmail = configSnap.data()?.notificationEmail || DEFAULT_NOTIFICATION_EMAIL
+    const selfServe = after.source === 'self_serve'
 
     await sendResendEmail({
       from: 'RaterSystem <notifications@lenguax.com>',
       to: notificationEmail,
-      subject: `Self-serve submission — ${after.raterName}`,
-      text: `${after.raterName} has confirmed their self-serve rater exam for "${after.sessionName}".\n\nReview it here: https://lenguax.com/ratersystem/assignments/${event.params.assignmentId}`,
+      subject: `${selfServe ? 'Self-serve submission' : 'Assignment submission'} — ${after.raterName}`,
+      text: `${after.raterName} has confirmed their ${selfServe ? 'self-serve rater exam' : 'scores'} for "${after.sessionName}".\n\nReview it here: https://lenguax.com/ratersystem/assignments/${event.params.assignmentId}`,
     })
   }
 )
@@ -1277,10 +1279,7 @@ exports.notifyStandardizationSubmission = onDocumentUpdated(
 
     const db = admin.firestore()
     const configSnap = await db.doc('config/canvas').get()
-    const notificationEmail = configSnap.data()?.notificationEmail
-    const apiKey = RESEND_API_KEY.value()
-
-    if (!notificationEmail || !apiKey) return // not configured — skip silently
+    const notificationEmail = configSnap.data()?.notificationEmail || DEFAULT_NOTIFICATION_EMAIL
 
     await sendResendEmail({
       from: 'RaterSystem <notifications@lenguax.com>',
