@@ -75,7 +75,7 @@ export function DashboardPage() {
     const activeAssignments = data.assignments.filter(a => a.status !== 'published')
     // confirmedAt, not just status === 'submitted' — the rater can still be
     // reviewing/changing answers up until they explicitly confirm
-    const selfServeSubmissions = data.assignments.filter(a => a.source === 'self_serve' && a.confirmedAt)
+    const selfServeSubmissions = data.assignments.filter(a => a.source === 'self_serve' && a.confirmedAt && a.status !== 'published')
 
     // Progress per assignment: count scored tests
     const scoresByAssignment = new Map<string, number>()
