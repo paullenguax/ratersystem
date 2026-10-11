@@ -1170,13 +1170,18 @@ exports.requestSelfAssignment = onCall(async (request) => {
     sessionId = newSession.id
   }
 
-  // ── 4. Idempotency — reuse an existing open assignment for this rater+session ──
+  // ── 4. Idempotency — one self-serve set per rater per section ─────────────
+  // An assignment still in progress is reopened. Once the rater has confirmed
+  // (or it's been published) the link must NOT hand out a fresh set — it used
+  // to as soon as the first one was published. A resit in the same section is
+  // an admin decision: create the assignment by hand and this link opens it.
   const existingSnap = await db.collection('assignments')
     .where('raterId', '==', uid)
     .where('sessionId', '==', sessionId)
     .get()
-  const existing = existingSnap.docs.find(d => d.data().status !== 'published')
-  if (existing) return { assignmentId: existing.id }
+  const inProgress = existingSnap.docs.find(d => d.data().status !== 'published' && !d.data().confirmedAt)
+  if (inProgress) return { assignmentId: inProgress.id }
+  if (!existingSnap.empty) return { assignmentId: existingSnap.docs[0].id, completed: true, sessionName }
 
   // ── 5. Build selection inputs ──────────────────────────────────────────────
   const [testsSnap, scoresSnap, sessionAssignmentsSnap] = await Promise.all([

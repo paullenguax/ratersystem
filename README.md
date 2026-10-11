@@ -1547,6 +1547,8 @@ sidebar as "User Manual".
 
 - **Test Bank — who gave what**: clicking a test's Level (or the new "Scores" button on any row) opens `features/testBank/TestScoresSheet.tsx`, a side panel listing every `scores` doc for that `testDocId` — rater (senior raters/admins badged), event, the six criteria and overall — under a bar chart of the overall levels awarded and median rows for all raters and for senior raters. Cells a full level or more from the all-rater median are highlighted (blue higher, amber lower). It's the drill-down for the "⚠ disagree" marker; unpublished scores are listed too and labelled as such.
 
+- **Self-serve link no longer hands out a second set**: `requestSelfAssignment`'s idempotency check only reused an assignment whose status wasn't `published`, so once a rater's first set was published, clicking the `/take-test` link again built them a brand-new 4-test assignment for the same section. It now reopens an assignment only while it's still in progress (not confirmed, not published); if the rater already has a confirmed or published one for that section it returns `{ completed: true, sessionName }` and creates nothing, and `CanvasCallbackPage.tsx` shows an "already submitted" card. (That also fixes a hang: a confirmed-but-unpublished assignment used to be returned to `ScoringPage`, whose list excludes confirmed assignments, leaving the rater on "Loading…" forever.) For a resit within the same section, create the assignment by hand on the Assignments page — the link then opens that one.
+
 ## Last updated
 
-2026-10-10
+2026-10-11

@@ -7,6 +7,7 @@ import { functions, auth } from '@/lib/firebase'
 export function CanvasCallbackPage() {
   const navigate = useNavigate()
   const [error, setError] = useState('')
+  const [completedSession, setCompletedSession] = useState<string | null>(null)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -21,13 +22,15 @@ export function CanvasCallbackPage() {
     if (!code) { setError('No authorisation code received from Canvas.'); return }
 
     const canvasAuth = httpsCallable<{ code: string; selfServe: boolean }, { token: string }>(functions, 'canvasAuth')
-    const requestSelfAssignment = httpsCallable<Record<string, never>, { assignmentId: string }>(functions, 'requestSelfAssignment')
+    const requestSelfAssignment = httpsCallable<Record<string, never>, { assignmentId: string; completed?: boolean; sessionName?: string }>(functions, 'requestSelfAssignment')
 
     canvasAuth({ code, selfServe })
       .then(result => signInWithCustomToken(auth, result.data.token))
       .then(async () => {
         if (isSelfServeExam) {
           const result = await requestSelfAssignment({})
+          // Already confirmed for this section — nothing to open, and no new set
+          if (result.data.completed) { setCompletedSession(result.data.sessionName ?? ''); return }
           navigate('/scoring', { replace: true, state: { assignmentId: result.data.assignmentId } })
         } else if (practiceCode) {
           navigate(`/practice/${practiceCode}`, { replace: true })
@@ -44,6 +47,20 @@ export function CanvasCallbackPage() {
         <div className="bg-white rounded-2xl shadow-lg px-8 py-10 space-y-4 max-w-sm text-center">
           <p className="text-sm text-destructive">{error}</p>
           <a href="/ratersystem/login" className="text-sm text-primary underline">Back to login</a>
+        </div>
+      </div>
+    )
+  }
+
+  if (completedSession !== null) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#B3C8D9]/30">
+        <div className="bg-white rounded-2xl shadow-lg px-8 py-10 space-y-3 max-w-sm text-center">
+          <p className="text-lg font-semibold">You've already submitted your scores</p>
+          <p className="text-sm text-muted-foreground">
+            We have your scores{completedSession ? ` for ${completedSession}` : ''}, so there is nothing more for you to do.
+            We'll be in touch with your feedback.
+          </p>
         </div>
       </div>
     )
