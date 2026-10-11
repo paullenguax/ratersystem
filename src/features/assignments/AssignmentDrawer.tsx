@@ -143,6 +143,14 @@ export function AssignmentDrawer({ open, onClose, assignment }: Props) {
     setSelectedTestIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
   }
 
+  async function handleDelete() {
+    if (!assignment) return
+    if (!window.confirm(`Delete ${assignment.raterName}'s assignment for "${assignment.sessionName}"?\n\nAny scores they've already entered for it are kept.`)) return
+    await deleteDoc(doc(db, 'assignments', assignment.id))
+    queryClient.invalidateQueries({ queryKey: ['assignments'] })
+    onClose()
+  }
+
   async function onSubmit(data: FormData) {
     if (!isEdit && selectedTestIds.length === 0) return
 
@@ -322,6 +330,11 @@ export function AssignmentDrawer({ open, onClose, assignment }: Props) {
           </div>
 
           <SheetFooter className="mt-2">
+            {isEdit && (
+              <Button type="button" variant="ghost" className="text-destructive" onClick={handleDelete}>
+                Delete assignment
+              </Button>
+            )}
             <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
             <Button
               type="submit"
