@@ -1183,7 +1183,18 @@ exports.requestSelfAssignment = onCall(async (request) => {
   if (inProgress) return { assignmentId: inProgress.id }
   if (!existingSnap.empty) return { assignmentId: existingSnap.docs[0].id, completed: true, sessionName }
 
-  // ── 5. Build selection inputs ──────────────────────────────────────────────
+  // ── 5–6. Pick the tests and create the assignment ─────────────────────────
+  const assignmentId = await createSelfServeAssignment(db, {
+    raterId: uid, raterName: person.name, sessionId, sessionName,
+  })
+  return { assignmentId }
+})
+
+// Picks a balanced 4-test set for one rater in one section's session and
+// writes it as a `source: 'self_serve'` assignment. Shared by the trainee's
+// own /take-test link (requestSelfAssignment) and an admin issuing a resit
+// (issueSelfServeResit).
+async function createSelfServeAssignment(db, { raterId, raterName, sessionId, sessionName, notes = '', requireFullSet = false }) {
   const [testsSnap, scoresSnap, sessionAssignmentsSnap] = await Promise.all([
     db.collection('test_bank').get(),
     db.collection('scores').get(),
@@ -1197,7 +1208,7 @@ exports.requestSelfAssignment = onCall(async (request) => {
   const ratersByTest = new Map()
   scoresSnap.docs.forEach(d => {
     const s = d.data()
-    if (s.raterId === uid) seenTestIds.add(s.testDocId)
+    if (s.raterId === raterId) seenTestIds.add(s.testDocId)
     if (!ratersByTest.has(s.testDocId)) ratersByTest.set(s.testDocId, new Set())
     ratersByTest.get(s.testDocId).add(s.raterId)
   })
@@ -1209,27 +1220,67 @@ exports.requestSelfAssignment = onCall(async (request) => {
   // rather than converging on the same handful of tests.
   const cohortFreq = new Map()
   sessionAssignmentsSnap.docs.forEach(d => {
-    for (const testDocId of d.data().testDocIds ?? []) {
+    const a = d.data()
+    for (const testDocId of a.testDocIds ?? []) {
       cohortFreq.set(testDocId, (cohortFreq.get(testDocId) ?? 0) + 1)
+      // Anything this rater was already given here counts as seen, scored or
+      // not — a resit must be four recordings they haven't had before.
+      if (a.raterId === raterId) seenTestIds.add(testDocId)
     }
   })
 
   const tests = pickSelfServeTests({ pool, seenTestIds, raterCountByTest, cohortFreq })
+  if (requireFullSet && tests.length < SELF_SERVE_TESTS_PER_RATER) {
+    throw new HttpsError('failed-precondition', `Only ${tests.length} unseen test(s) left in the pool for this rater — not enough for a full set.`)
+  }
 
-  // ── 6. Create the assignment ───────────────────────────────────────────────
   const assignRef = await db.collection('assignments').add({
-    raterId: uid,
-    raterName: person.name,
+    raterId,
+    raterName,
     sessionId,
     sessionName,
     testDocIds: tests.map(t => t.id),
     status: 'pending',
     source: 'self_serve',
-    notes: '',
+    notes,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   })
+  return assignRef.id
+}
 
-  return { assignmentId: assignRef.id }
+// ── issueSelfServeResit ───────────────────────────────────────────────────────
+// Admin-only. Gives a rater who has already completed a self-serve set a
+// fresh one in the same session (requestSelfAssignment deliberately won't —
+// see its step 4). The rater's /take-test link then opens the new set.
+
+exports.issueSelfServeResit = onCall(async (request) => {
+  await assertAdmin(request)
+  const db = admin.firestore()
+  const { assignmentId } = request.data ?? {}
+  if (!assignmentId) throw new HttpsError('invalid-argument', 'assignmentId is required')
+
+  const snap = await db.collection('assignments').doc(assignmentId).get()
+  if (!snap.exists) throw new HttpsError('not-found', 'Assignment not found')
+  const prev = snap.data()
+
+  const existingSnap = await db.collection('assignments')
+    .where('raterId', '==', prev.raterId)
+    .where('sessionId', '==', prev.sessionId)
+    .get()
+  const inProgress = existingSnap.docs.find(d => d.data().status !== 'published' && !d.data().confirmedAt)
+  if (inProgress) {
+    throw new HttpsError('failed-precondition', `${prev.raterName} already has a set in progress for this event.`)
+  }
+
+  const newId = await createSelfServeAssignment(db, {
+    raterId: prev.raterId,
+    raterName: prev.raterName,
+    sessionId: prev.sessionId,
+    sessionName: prev.sessionName,
+    notes: 'Resit',
+    requireFullSet: true,
+  })
+  return { assignmentId: newId }
 })
 
 // Where submission alerts go when config/canvas.notificationEmail is blank.

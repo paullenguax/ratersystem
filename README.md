@@ -1549,6 +1549,8 @@ sidebar as "User Manual".
 
 - **Self-serve link no longer hands out a second set**: `requestSelfAssignment`'s idempotency check only reused an assignment whose status wasn't `published`, so once a rater's first set was published, clicking the `/take-test` link again built them a brand-new 4-test assignment for the same section. It now reopens an assignment only while it's still in progress (not confirmed, not published); if the rater already has a confirmed or published one for that section it returns `{ completed: true, sessionName }` and creates nothing, and `CanvasCallbackPage.tsx` shows an "already submitted" card. (That also fixes a hang: a confirmed-but-unpublished assignment used to be returned to `ScoringPage`, whose list excludes confirmed assignments, leaving the rater on "Loading…" forever.) For a resit within the same section, create the assignment by hand on the Assignments page — the link then opens that one.
 
+- **Self-serve resits**: an admin can give a rater who has already completed a self-serve set another one — "Issue another set" on that assignment's row in the Assignments page (shown for `source: 'self_serve'` assignments that are confirmed or published; untick "Hide published" to reach published ones). It calls the admin-only `issueSelfServeResit` Cloud Function, which reuses the link's own selection (`createSelfServeAssignment`, factored out of `requestSelfAssignment`) to build a new `self_serve` assignment in the same session with `notes: 'Resit'`. Tests the rater has scored or was previously assigned in that session are excluded; it refuses if they already have a set in progress or if fewer than 4 unseen tests remain. The rater's `/take-test` link then opens the new set.
+
 ## Last updated
 
 2026-10-11

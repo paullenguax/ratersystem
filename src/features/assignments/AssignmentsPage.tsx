@@ -7,7 +7,8 @@ import {
 } from '@tanstack/react-table'
 import { Plus, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { db } from '@/lib/firebase'
+import { httpsCallable } from 'firebase/functions'
+import { db, functions } from '@/lib/firebase'
 import type { Assignment, Person } from '@/types'
 import { useAuth } from '@/context/AuthContext'
 import { AssignmentDrawer } from './AssignmentDrawer'
@@ -40,6 +41,7 @@ export function AssignmentsPage() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [selected, setSelected] = useState<Assignment | undefined>()
   const [publishing, setPublishing] = useState<string | null>(null)
+  const [issuingResit, setIssuingResit] = useState<string | null>(null)
   const [hidePublished, setHidePublished] = useState(true)
   const [seniorOnly, setSeniorOnly] = useState(false)
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'rater_course' | 'standardization'>('all')
@@ -57,6 +59,21 @@ export function AssignmentsPage() {
 
   function openAdd() { setSelected(undefined); setDrawerOpen(true) }
   function openEdit(a: Assignment) { setSelected(a); setDrawerOpen(true) }
+
+  // Fresh self-serve set for someone who has already completed one — the
+  // rater's own link won't issue a second (see requestSelfAssignment).
+  async function issueResit(a: Assignment) {
+    if (!window.confirm(`Issue ${a.raterName} another set of 4 tests for "${a.sessionName}"?\n\nThey'll get recordings they haven't rated before, and their self-serve link will open the new set.`)) return
+    setIssuingResit(a.id)
+    try {
+      await httpsCallable<{ assignmentId: string }, { assignmentId: string }>(functions, 'issueSelfServeResit')({ assignmentId: a.id })
+      queryClient.invalidateQueries({ queryKey: ['assignments'] })
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Could not issue another set')
+    } finally {
+      setIssuingResit(null)
+    }
+  }
 
   async function publishAssignment(a: Assignment) {
     if (!window.confirm(`Publish ${a.raterName}'s scores from "${a.sessionName}"?\n\nThis will add all their scores to the main pool. This cannot be undone.`)) return
@@ -163,6 +180,11 @@ export function AssignmentsPage() {
                 onClick={() => publishAssignment(a)}
               >
                 {publishing === a.id ? 'Publishing…' : 'Publish'}
+              </Button>
+            )}
+            {role === 'admin' && a.source === 'self_serve' && (a.confirmedAt || a.status === 'published') && (
+              <Button variant="ghost" size="sm" disabled={issuingResit === a.id} onClick={() => issueResit(a)}>
+                {issuingResit === a.id ? 'Issuing…' : 'Issue another set'}
               </Button>
             )}
             {role === 'admin' && (
