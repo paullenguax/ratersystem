@@ -59,6 +59,7 @@ export interface RaterStat {
   number: number
   name: string
   isCurrent: boolean
+  totalScore: number
   count: number
   observedAvg: number
   fairAvg: number
@@ -192,6 +193,7 @@ export function analyze(input: AnalysisInput): RaschAnalysis {
     number: e.id,
     name: names.get(e.id) ?? String(e.id),
     isCurrent: current.has(e.id),
+    totalScore: e.totalScore,
     count: e.count,
     observedAvg: r2(e.observedAvg),
     fairAvg: r2(e.fairAvg),
@@ -293,6 +295,7 @@ export function analyze(input: AnalysisInput): RaschAnalysis {
       raterNumber: r.number, raterName: r.name, measure: r.measure, se: r.se,
       infitMnSq: r.infitMnSq, infitZStd: r.infitZStd, outfitMnSq: r.outfitMnSq, outfitZStd: r.outfitZStd,
       discrimination: r.discrimination, ptMea: r.ptMea, ptExp: r.ptExp,
+      totalScore: r.totalScore, count: r.count, observedAvg: r.observedAvg, fairAvg: r.fairAvg,
     })),
     criteria: [...criteria].sort((a, b) => b.measure - a.measure).map(c => ({ name: c.name, logit: c.measure })),
     candidateDensity: [...density].map(([logit, count]) => ({ logit, count })).sort((a, b) => b.logit - a.logit),

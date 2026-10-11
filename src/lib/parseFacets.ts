@@ -10,6 +10,12 @@ export interface RaschRater {
   discrimination: number
   ptMea: number
   ptExp: number
+  // Table 7.2.1's first four columns — absent on rasch_runs docs saved before
+  // these were kept (re-run or re-import to get them)
+  totalScore?: number
+  count?: number
+  observedAvg?: number
+  fairAvg?: number
 }
 
 export interface RaschCriterion {
@@ -108,8 +114,8 @@ function parseTable7(text: string, facet: string): { raters: RaschRater[]; meanM
         discrimination: s4[0] ?? NaN,
         ptMea: s5[0] ?? NaN,
         ptExp: s5[1] ?? NaN,
+        ...(s1.length >= 4 ? { totalScore: s1[0], count: s1[1], observedAvg: s1[2], fairAvg: s1[3] } : {}),
       })
-      void s1 // totalScore/count available if needed later
     }
   }
 

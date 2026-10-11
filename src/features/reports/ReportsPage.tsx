@@ -12,6 +12,7 @@ import { parseFacetsOutput, type RaschRun } from '@/lib/parseFacets'
 import { buildRaschData, toAnalysisInput } from '@/lib/rasch/raschData'
 import { analyze } from '@/lib/rasch/analysis'
 import { useRaschBaseline } from '@/lib/rasch/baseline'
+import { buildTable7Text, downloadTextAsPng } from '@/lib/rasch/table7'
 import { CertificatePanel } from './CertificatePanel'
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -529,8 +530,16 @@ export function ReportsPage() {
     setPrevMeasure('')
     setMeasure('')
     setInfit('')
+    // Prefill with the number this rater has in the active run. A returning
+    // rater is in it twice — permanent number for their history, and a new,
+    // higher one for this event — and it's the new one the email is about
+    // (ticking "Returning rater" then suggests the stored one as previous).
+    // Falls back to the stored number when the run doesn't have them by name.
     const found = people.find(p => p.id === id)
-    setRaterNumberField(found?.raterNumber ? String(found.raterNumber) : '')
+    const names = new Set([found?.name, ratersInSession.find(r => r.id === id)?.name].filter(Boolean))
+    const inRun = (latestRun?.raters ?? []).filter(r => names.has(r.raterName)).map(r => r.raterNumber)
+    const num = inRun.length ? Math.max(...inRun) : found?.raterNumber
+    setRaterNumberField(num ? String(num) : '')
   }
 
   function handleImportParse() {
@@ -610,6 +619,13 @@ export function ReportsPage() {
       setImportSaving(false)
     }
   }
+
+  const table7Text = useMemo(
+    () => (latestRun && raschData
+      ? buildTable7Text(latestRun, raschData.raterNumber, isRepeater ? prevRaschData?.raterNumber : undefined)
+      : null),
+    [latestRun, raschData, isRepeater, prevRaschData],
+  )
 
   function handleDownloadMap() {
     const svg = svgRef.current
@@ -1164,6 +1180,25 @@ export function ReportsPage() {
                 </div>
               )}
             </div>
+
+            {/* Rater measurement table (Facets Table 7.2.1 layout) */}
+            {table7Text && raschData && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium">Rater measurement table</p>
+                  <Button size="sm" variant="outline" onClick={() => downloadTextAsPng(table7Text, `rater-table-${raschData.raterNumber}.png`)}>
+                    <Download className="size-4 mr-1.5" />
+                    Download PNG
+                  </Button>
+                </div>
+                <pre className="border rounded-md p-2 bg-white text-black text-[9px] leading-tight overflow-x-auto">{table7Text}</pre>
+                {raschData.count == null && (
+                  <p className="text-xs text-muted-foreground">
+                    The score, count and average columns are blank because this run was saved before they were kept — run the analysis again and save it to fill them in.
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Wright map */}
             {raschData && latestRun && rater && (
