@@ -10,6 +10,30 @@ import type { AnalysisInput } from './analysis'
 // in the current event gets a fresh temp number (max permanent + 1, by name) —
 // returnees included, so they appear as a separate element alongside their
 // historical one.
+//
+// A rater with more than one assignment in the event (a resit) is one element
+// per attempt: the latest keeps the plain name, earlier ones are suffixed
+// "(attempt N)" — see sessionAttempts/attemptName.
+
+// Each rater's assignments within an event, oldest first (by earliest score).
+// More than one means they resat; the last is their current attempt.
+export function sessionAttempts(scores: Score[], sessionIds: string[]): Map<string, string[]> {
+  const first = new Map<string, Map<string, number>>() // raterId → assignmentId → earliest score time
+  for (const s of scores) {
+    if (!sessionIds.includes(s.sessionId)) continue
+    const t = s.createdAt?.seconds ?? Number.MAX_SAFE_INTEGER
+    const byAssignment = first.get(s.raterId) ?? new Map<string, number>()
+    byAssignment.set(s.assignmentId ?? '', Math.min(t, byAssignment.get(s.assignmentId ?? '') ?? Infinity))
+    first.set(s.raterId, byAssignment)
+  }
+  return new Map([...first].map(([raterId, m]) =>
+    [raterId, [...m].sort((a, b) => a[1] - b[1]).map(([assignmentId]) => assignmentId)]))
+}
+
+// Name an attempt carries in a run: plain for the latest, suffixed for earlier ones
+export function attemptName(name: string, index: number, total: number): string {
+  return index === total - 1 ? name : `${name} (attempt ${index + 1})`
+}
 
 export interface RaschDataRow {
   candidate: number // test number
@@ -41,12 +65,28 @@ export function buildRaschData(scores: Score[], sessionIds: string[], people: Pe
 
   const permNumById = new Map(people.filter(p => p.raterNumber).map(p => [p.id, p.raterNumber!]))
 
-  const currentSessionRaterIds = new Set(rows.filter(inEvent).map(s => s.raterId))
-  const publishedRaterIds = new Set(rows.filter(s => s.published).map(s => s.raterId))
-  const returneeIds = new Set([...currentSessionRaterIds].filter(id => publishedRaterIds.has(id)))
-  const newRaterIds = new Set([...currentSessionRaterIds].filter(id => !publishedRaterIds.has(id)))
+  // Event raters are keyed per attempt: the plain raterId for their latest
+  // assignment in the event, `raterId#n` for an earlier one (0-based n).
+  const attempts = sessionAttempts(scores, sessionIds)
+  const attemptIndex = (s: Score) => (attempts.get(s.raterId) ?? []).indexOf(s.assignmentId ?? '')
+  const attemptCount = (raterId: string) => attempts.get(raterId)?.length ?? 1
+  const keyOf = (s: Score) => {
+    const i = attemptIndex(s)
+    return i < 0 || i === attemptCount(s.raterId) - 1 ? s.raterId : `${s.raterId}#${i}`
+  }
+  const raterIdOf = (key: string) => key.split('#')[0]
+  const earlierAttempt = (key: string) => key.includes('#')
 
-  const nameOf = (id: string) => rows.find(s => s.raterId === id)?.raterName ?? id
+  const currentSessionRaterIds = new Set(rows.filter(inEvent).map(keyOf))
+  const publishedRaterIds = new Set(rows.filter(s => s.published).map(s => s.raterId))
+  const returneeIds = new Set([...currentSessionRaterIds].filter(id => !earlierAttempt(id) && publishedRaterIds.has(id)))
+  const newRaterIds = new Set([...currentSessionRaterIds].filter(id => !earlierAttempt(id) && !publishedRaterIds.has(id)))
+
+  const nameOf = (key: string) => {
+    const id = raterIdOf(key)
+    const name = rows.find(s => s.raterId === id)?.raterName ?? id
+    return earlierAttempt(key) ? attemptName(name, Number(key.split('#')[1]), attemptCount(id)) : name
+  }
 
   let nextNum = Math.max(0, ...(permNumById.size ? permNumById.values() : [0])) + 1
   const tempNumById = new Map<string, number>()
@@ -71,10 +111,11 @@ export function buildRaschData(scores: Score[], sessionIds: string[], people: Pe
     name: nameOf(id),
     note: returneeIds.has(id)
       ? `returnee — previously Rater ${permNumById.get(id) ?? '(no number assigned yet)'}`
+      : earlierAttempt(id) ? 'earlier attempt in this event (resat since)'
       : newRaterIds.has(id) ? 'new' : '',
   }))
 
-  const raterNum = (s: Score) => (inEvent(s) ? tempNumById.get(s.raterId) : permNumById.get(s.raterId)) ?? 0
+  const raterNum = (s: Score) => (inEvent(s) ? tempNumById.get(keyOf(s)) : permNumById.get(s.raterId)) ?? 0
 
   const dataRows: RaschDataRow[] = [...rows]
     .sort((a, b) => raterNum(a) - raterNum(b) || (a.testNumber ?? 0) - (b.testNumber ?? 0))

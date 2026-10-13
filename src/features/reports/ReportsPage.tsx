@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { WrightMap } from '@/components/WrightMap'
 import { parseFacetsOutput, type RaschRun } from '@/lib/parseFacets'
-import { buildRaschData, toAnalysisInput } from '@/lib/rasch/raschData'
+import { buildRaschData, toAnalysisInput, sessionAttempts, attemptName } from '@/lib/rasch/raschData'
 import { analyze } from '@/lib/rasch/analysis'
 import { useRaschBaseline } from '@/lib/rasch/baseline'
 import { buildTable7Text, downloadTextAsPng } from '@/lib/rasch/table7'
@@ -263,6 +263,7 @@ function emailTextToHtml(text: string): string {
 export function ReportsPage() {
   const [sessionName, setSessionName]   = useState('')   // deduplicated by name
   const [raterId, setRaterId]           = useState('')
+  const [attemptId, setAttemptId]       = useState<string | null>(null) // null = latest attempt
   const [measure, setMeasure]           = useState('')
   const [infit, setInfit]               = useState('')
   const [outcome, setOutcome]           = useState<'pass' | 'advisory' | 'fail'>('pass')
@@ -396,18 +397,27 @@ export function ReportsPage() {
     [people],
   )
 
+  // The rater's assignments in this event, oldest first — more than one means
+  // they resat, and each attempt is fed back on (and Rasch-analysed) separately
+  const attempts = useMemo(
+    () => (raterId ? sessionAttempts(scores, sessionIds).get(raterId) ?? [] : []),
+    [scores, sessionIds, raterId],
+  )
+  const activeAttempt = attemptId ?? attempts[attempts.length - 1]
+
   // Scores for this rater in this session, sorted by entry order so A/B/C matches the rater's test sequence
   const raterScores = useMemo(() => {
     if (!sessionIds.length || !raterId) return []
     return scores
-      .filter(s => sessionIds.includes(s.sessionId) && s.raterId === raterId)
+      .filter(s => sessionIds.includes(s.sessionId) && s.raterId === raterId
+        && (attempts.length < 2 || (s.assignmentId ?? '') === activeAttempt))
       .sort((a, b) => {
         const aSeq = (a as any).sequence
         const bSeq = (b as any).sequence
         if (aSeq != null && bSeq != null) return aSeq - bSeq
         return ((a.createdAt as any)?.seconds ?? 0) - ((b.createdAt as any)?.seconds ?? 0)
       })
-  }, [scores, sessionIds, raterId])
+  }, [scores, sessionIds, raterId, attempts, activeAttempt])
 
   // Senior-rater scores per test — used both for the expanded table rows and
   // as the comparison basis for auto-generated candidate commentary
@@ -509,6 +519,7 @@ export function ReportsPage() {
     setSessionName(name)
     setAnalysisEvent(name)
     setRaterId('')
+    setAttemptId(null)
     setParaOverrides({})
     setHandWave({})
     setExpanded(new Set())
@@ -519,8 +530,39 @@ export function ReportsPage() {
     setIsRefresher(false)
   }
 
+  // The number a rater (or one of their attempts) has in the active run. A
+  // returning rater is in it twice — permanent number for their history, and
+  // a new, higher one for this event — and it's the new one the email is
+  // about (ticking "Returning rater" then suggests the stored one as
+  // previous). An earlier attempt is in the run under a suffixed name.
+  // Falls back to the stored number when the run doesn't have them by name.
+  function runNumberFor(id: string, attempt: string | null): string {
+    const found = people.find(p => p.id === id)
+    const list = sessionAttempts(scores, sessionIds).get(id) ?? []
+    const index = attempt == null ? list.length - 1 : list.indexOf(attempt)
+    const names = new Set(
+      [found?.name, ratersInSession.find(r => r.id === id)?.name]
+        .filter((n): n is string => !!n)
+        .map(n => (list.length > 1 ? attemptName(n, index, list.length) : n)),
+    )
+    const inRun = (latestRun?.raters ?? []).filter(r => names.has(r.raterName)).map(r => r.raterNumber)
+    const num = inRun.length ? Math.max(...inRun) : found?.raterNumber
+    return num ? String(num) : ''
+  }
+
+  function changeAttempt(id: string) {
+    setAttemptId(id)
+    setParaOverrides({})
+    setHandWave({})
+    setExpanded(new Set())
+    setMeasure('')
+    setInfit('')
+    setRaterNumberField(runNumberFor(raterId, id))
+  }
+
   function changeRater(id: string) {
     setRaterId(id)
+    setAttemptId(null)
     setParaOverrides({})
     setHandWave({})
     setExpanded(new Set())
@@ -530,16 +572,7 @@ export function ReportsPage() {
     setPrevMeasure('')
     setMeasure('')
     setInfit('')
-    // Prefill with the number this rater has in the active run. A returning
-    // rater is in it twice — permanent number for their history, and a new,
-    // higher one for this event — and it's the new one the email is about
-    // (ticking "Returning rater" then suggests the stored one as previous).
-    // Falls back to the stored number when the run doesn't have them by name.
-    const found = people.find(p => p.id === id)
-    const names = new Set([found?.name, ratersInSession.find(r => r.id === id)?.name].filter(Boolean))
-    const inRun = (latestRun?.raters ?? []).filter(r => names.has(r.raterName)).map(r => r.raterNumber)
-    const num = inRun.length ? Math.max(...inRun) : found?.raterNumber
-    setRaterNumberField(num ? String(num) : '')
+    setRaterNumberField(runNumberFor(id, null))
   }
 
   function handleImportParse() {
@@ -858,6 +891,26 @@ export function ReportsPage() {
               </select>
             </div>
           </div>
+
+          {attempts.length > 1 && (
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Attempt</label>
+              <select
+                value={activeAttempt}
+                onChange={e => changeAttempt(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+              >
+                {attempts.map((a, i) => (
+                  <option key={a} value={a}>
+                    {i === attempts.length - 1 ? `Set ${i + 1} — latest (resit)` : `Set ${i + 1}`}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground">
+                This rater has {attempts.length} sets in this event. Each is analysed as its own rater in a Rasch run made from now on.
+              </p>
+            </div>
+          )}
 
           <label className="flex items-center gap-2 text-sm cursor-pointer">
             <input

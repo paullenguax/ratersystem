@@ -1555,6 +1555,8 @@ sidebar as "User Manual".
 
 - **Reports page — rater number prefill uses the active run**: selecting a rater used to prefill "Rater number" from `people.raterNumber`, which for a returning rater is their old permanent number, not the temporary one this event's run gave them. `changeRater()` now looks the rater up by name in the active run's `raters` and takes the highest number found (event numbers are always allocated above every permanent one — `buildRaschData`), falling back to the stored number when the run has no row under that name (e.g. a Facets import labelled differently, or no run for this event yet). Ticking "Returning rater" still suggests the stored number as the previous one.
 
+- **Resits analysed as separate attempts**: a resit lives in the same event as the first set (same `sessionId`/`sessionName`, different `assignmentId`), so both sets used to merge — one rater element with 8 tests in a Rasch run, and candidates A–H on the Reports page. `raschData.ts` now treats each of a rater's assignments in the chosen event as its own element (`sessionAttempts`, oldest first by earliest score): the latest keeps the plain name and the usual numbering, earlier ones are named "Name (attempt N)" with their own temp number and a "earlier attempt in this event" note in the rater key. This applies everywhere `buildRaschData` is used (Reports' Run analysis, Statistics, the Scores page Facets export) and only to unpublished event scores — a published first attempt is already separate, under the rater's permanent number. On the Reports page an "Attempt" selector appears when the selected rater has more than one set in the event (default: latest); it filters the candidate list to that set and looks the rater number up under the matching name in the active run. Runs saved before this change still have the attempts merged — re-run and save.
+
 ## Last updated
 
-2026-10-11
+2026-10-13
