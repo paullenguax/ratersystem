@@ -258,6 +258,27 @@ function emailTextToHtml(text: string): string {
   return linked.split('\n').map(line => line || '&nbsp;').join('<br>')
 }
 
+// Event dropdown options: events with unpublished scores first, fully
+// published ones in their own group below
+function EventOptions({ sessions }: { sessions: { name: string; active: boolean }[] }) {
+  const active = sessions.filter(s => s.active)
+  const completed = sessions.filter(s => !s.active)
+  return (
+    <>
+      {active.length > 0 && (
+        <optgroup label="Active">
+          {active.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
+        </optgroup>
+      )}
+      {completed.length > 0 && (
+        <optgroup label="Completed (all scores published)">
+          {completed.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
+        </optgroup>
+      )}
+    </>
+  )
+}
+
 // ── page ───────────────────────────────────────────────────────────────────
 
 export function ReportsPage() {
@@ -315,17 +336,21 @@ export function ReportsPage() {
     },
   })
 
-  // Sessions deduplicated by name (multiple import runs → one entry)
+  // Sessions deduplicated by name (multiple import runs → one entry). An
+  // event is active while any of its scores is unpublished; most recent first.
   const sessions = useMemo(() => {
-    const seen = new Map<string, Set<string>>() // name → set of sessionIds
+    const seen = new Map<string, { ids: Set<string>; active: boolean; latest: number }>()
     scores.forEach(s => {
       if (!s.sessionId || !s.sessionName) return
-      if (!seen.has(s.sessionName)) seen.set(s.sessionName, new Set())
-      seen.get(s.sessionName)!.add(s.sessionId)
+      const e = seen.get(s.sessionName) ?? { ids: new Set<string>(), active: false, latest: 0 }
+      e.ids.add(s.sessionId)
+      if (!s.published) e.active = true
+      e.latest = Math.max(e.latest, s.createdAt?.seconds ?? 0)
+      seen.set(s.sessionName, e)
     })
     return [...seen.entries()]
-      .map(([name, ids]) => ({ name, ids: [...ids] }))
-      .sort((a, b) => a.name.localeCompare(b.name))
+      .map(([name, e]) => ({ name, ids: [...e.ids], active: e.active, latest: e.latest }))
+      .sort((a, b) => b.latest - a.latest || a.name.localeCompare(b.name))
   }, [scores])
 
   // All sessionIds for the selected session name
@@ -771,7 +796,7 @@ export function ReportsPage() {
                     className="rounded-md border border-input bg-background px-2 py-1.5 text-sm"
                   >
                     <option value="">Published scores only</option>
-                    {sessions.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
+                    <EventOptions sessions={sessions} />
                   </select>
                   <Button size="sm" onClick={handleRunAnalysis} disabled={scores.length === 0}>
                     Run analysis
@@ -875,7 +900,7 @@ export function ReportsPage() {
                 className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
               >
                 <option value="">Select event…</option>
-                {sessions.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
+                <EventOptions sessions={sessions} />
               </select>
             </div>
             <div className="space-y-1">
