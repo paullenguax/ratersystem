@@ -26,6 +26,7 @@ export function raterCourseSet(tests: Test[]): Test[] {
 }
 
 const norm = (e?: string | null) => (e ?? '').toLowerCase().trim()
+export const normName = (n?: string | null) => (n ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim()
 
 // Same precedence as Canvas Sync: the Canvas user ID is what really ties a
 // person to an account; email is the fallback for records that predate it.
@@ -35,16 +36,22 @@ export function findPerson(people: Person[], a: Pick<CourseAttendee, 'personId' 
     ?? (a.email ? people.find(p => norm(p.email) === norm(a.email)) : undefined)
 }
 
+// Attendees imported from old records may carry a name only — those match
+// a person by exact (accent/case-insensitive) name.
 export function attendeeIsPerson(a: CourseAttendee, p: Person): boolean {
-  return (!!a.personId && a.personId === p.id)
-    || (!!a.canvasUserId && a.canvasUserId === p.canvasUserId)
-    || (!!a.email && norm(a.email) === norm(p.email))
+  if (a.personId) return a.personId === p.id
+  if (a.canvasUserId && p.canvasUserId) return a.canvasUserId === p.canvasUserId
+  if (a.email) return norm(a.email) === norm(p.email)
+  return normName(a.name) === normName(p.name)
 }
 
+// Compares on the strongest identifier both sides have; name only when
+// neither shares one (name-only records from imports).
 export function sameAttendee(a: CourseAttendee, b: CourseAttendee): boolean {
-  return (!!a.personId && a.personId === b.personId)
-    || (!!a.canvasUserId && a.canvasUserId === b.canvasUserId)
-    || (!!a.email && norm(a.email) === norm(b.email))
+  if (a.personId && b.personId) return a.personId === b.personId
+  if (a.canvasUserId && b.canvasUserId) return a.canvasUserId === b.canvasUserId
+  if (a.email && b.email) return norm(a.email) === norm(b.email)
+  return normName(a.name) === normName(b.name)
 }
 
 // Adds attendees not already on the list (by person, Canvas ID or email),
