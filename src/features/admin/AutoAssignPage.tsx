@@ -163,7 +163,7 @@ export function AutoAssignPage() {
       .sort((a, b) => a.name.localeCompare(b.name)),
   })
   const { data: people = [] } = useQuery({
-    queryKey: ['people'],
+    queryKey: ['people', 'active'],
     queryFn: async () => (await getDocs(collection(db, 'people'))).docs
       .map(d => ({ id: d.id, ...d.data() }) as Person)
       .filter(p => p.status === 'active')

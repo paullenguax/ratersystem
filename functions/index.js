@@ -38,6 +38,16 @@ async function assertAdmin(request) {
   }
 }
 
+// Admins, or anyone with people.isTrainer (runs rater/refresher courses).
+async function assertTrainer(request) {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Must be logged in')
+  const snap = await admin.firestore().collection('people').doc(request.auth.uid).get()
+  const p = snap.exists ? snap.data() : null
+  if (!p || (p.role !== 'admin' && p.isTrainer !== true)) {
+    throw new HttpsError('permission-denied', 'Trainer access required')
+  }
+}
+
 // ── syncAdminClaim ────────────────────────────────────────────────────────────
 // Mirrors people/{uid}.role onto an `admin: true` Auth custom claim, so
 // Storage Security Rules can check request.auth.token.admin directly instead
@@ -509,7 +519,7 @@ exports.canvasEnrollments = onCall(async (request) => {
 // it enrollable via the wizard.
 
 exports.canvasSections = onCall(async (request) => {
-  await assertAdmin(request)
+  await assertTrainer(request)
   const apiToken = await getCanvasToken()
 
   const db = admin.firestore()
@@ -1362,7 +1372,7 @@ exports.notifyStandardizationSubmission = onDocumentUpdated(
 // Used by the section membership audit.
 
 exports.canvasSectionEnrollments = onCall(async (request) => {
-  await assertAdmin(request)
+  await assertTrainer(request)
   const { sectionId } = request.data
   if (!sectionId) throw new HttpsError('invalid-argument', 'Missing sectionId')
 

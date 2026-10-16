@@ -16,6 +16,9 @@ export interface Person {
   // Lets an admin/senior_rater/trainee also take on standardization work,
   // in addition to the dedicated 'examiner' role.
   canStandardize?: boolean
+  // Can run rater/refresher courses: sees Courses and course materials.
+  // Admins are always trainers; anyone else needs this flag.
+  isTrainer?: boolean
   createdAt?: Timestamp
 }
 
@@ -539,6 +542,38 @@ export interface StorylineVersion {
   createdAt?: Timestamp
   createdBy?: string
   publishedAt?: Timestamp
+}
+
+// Someone on a course run. Matched to a `people` record where one exists
+// (by Canvas user ID, then email); otherwise kept by name/email alone so a
+// course can record attendees who never needed a RaterSystem login.
+export interface CourseAttendee {
+  personId?: string | null
+  canvasUserId?: number | null
+  name: string
+  email?: string | null
+}
+
+// One run of a course for one cohort. Canvas content is identical every
+// run — what differs is the audio played live. Attending a run counts as
+// having heard all of its audio (testDocIds).
+export interface Course {
+  id: string
+  kind: 'rater' | 'refresher'
+  // Refreshers are numbered in sequence (Refresher Course 1, 2, 3…)
+  number?: number | null
+  name: string
+  startDate?: string | null   // YYYY-MM-DD
+  endDate?: string | null
+  canvasSections?: { id: number; name: string }[]
+  trainerIds?: string[]
+  // Rater runs: a copy of the Rater Course set (Test.raterCourseDay) taken
+  // when the run is created, so later changes to the set don't rewrite
+  // what an earlier cohort heard. Refresher runs: chosen by the trainer.
+  testDocIds: string[]
+  attendees: CourseAttendee[]
+  notes?: string
+  createdAt?: Timestamp
 }
 
 export interface Test {

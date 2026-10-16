@@ -10,6 +10,7 @@ import { db, storage } from '@/lib/firebase'
 import type { Test } from '@/types'
 import { formatTestNumber } from '@/lib/testNumber'
 import { CATEGORY_LABELS, LEGACY_COURSE_TAG_LABELS, type TestCategory } from '@/lib/testPool'
+import { HeardBySection } from '@/features/courses/CourseExposure'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -309,6 +310,8 @@ export function TestDrawer({ open, onClose, test }: Props) {
             <Label>Notes</Label>
             <Textarea {...register('notes')} rows={3} />
           </div>
+
+          {isEdit && test.category === 'training' && <HeardBySection testDocId={test.id} />}
 
           <SheetFooter className="mt-2">
             <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>

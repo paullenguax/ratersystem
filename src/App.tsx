@@ -28,6 +28,8 @@ const ManualPage = lazy(() =>
   import('@/features/manual/ManualPage').then(m => ({ default: m.ManualPage })),
 )
 import { SessionsPage } from '@/features/sessions/SessionsPage'
+import { CoursesPage } from '@/features/courses/CoursesPage'
+import { CourseDetailPage } from '@/features/courses/CourseDetailPage'
 import { AssignmentsPage } from '@/features/assignments/AssignmentsPage'
 import { AssignmentReviewPage } from '@/features/assignments/AssignmentReviewPage'
 import { QuickEntryPage } from '@/features/assignments/QuickEntryPage'
@@ -94,6 +96,8 @@ export default function App() {
                 <Route path="test-versions/:testId" element={<ProtectedRoute allowedRoles={['admin']}><StorylineVersionsPage /></ProtectedRoute>} />
                 <Route path="test-versions/:testId/versions/:versionId/edit" element={<ProtectedRoute allowedRoles={['admin']}><StorylineVersionEditorPage /></ProtectedRoute>} />
                 <Route path="sessions"    element={<ProtectedRoute allowedRoles={['admin']}><SessionsPage /></ProtectedRoute>} />
+                <Route path="courses"     element={<ProtectedRoute requireTrainer><CoursesPage /></ProtectedRoute>} />
+                <Route path="courses/:courseId" element={<ProtectedRoute requireTrainer><CourseDetailPage /></ProtectedRoute>} />
                 <Route path="assignments" element={<AssignmentsPage />} />
                 <Route path="assignments/quick-entry" element={<ProtectedRoute allowedRoles={['admin']}><QuickEntryPage /></ProtectedRoute>} />
                 <Route path="assignments/:assignmentId" element={<ProtectedRoute allowedRoles={['admin']}><AssignmentReviewPage /></ProtectedRoute>} />

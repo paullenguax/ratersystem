@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, FileAudio, CalendarDays,
   ClipboardList, SlidersHorizontal, Star, BarChart2,
   FileText, Award, Settings, LogOut, MessageSquare, FileCheck, Activity,
-  MonitorPlay, Gauge, Headphones, BookOpen,
+  MonitorPlay, Gauge, Headphones, BookOpen, GraduationCap,
 } from 'lucide-react'
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup,
@@ -21,6 +21,7 @@ const ALL_NAV = [
   { label: 'People',      path: '/people',      icon: Users,               roles: ['admin'] },
   { label: 'Test Bank',   path: '/test-bank',   icon: FileAudio,           roles: ['admin'] },
   { label: 'Events',      path: '/sessions',    icon: CalendarDays,        roles: ['admin'] },
+  { label: 'Courses',     path: '/courses',     icon: GraduationCap,       trainerOnly: true },
   { label: 'Assignments', path: '/assignments', icon: ClipboardList,       roles: ['admin'] },
   { label: 'Scoring',     path: '/scoring',     icon: SlidersHorizontal,   roles: ['admin', 'senior_rater', 'trainee'] },
   { label: 'Standardization', path: '/standardization', icon: Gauge,       standardizationOnly: true },
@@ -39,14 +40,16 @@ const ALL_NAV = [
 ] as const
 
 export function AppShell() {
-  const { user, role, canStandardize } = useAuth()
+  const { user, role, canStandardize, isTrainer } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
 
   const navItems = ALL_NAV.filter((item) =>
     'standardizationOnly' in item
       ? role === 'admin' || role === 'examiner' || canStandardize
-      : role && (item.roles as readonly string[]).includes(role)
+      : 'trainerOnly' in item
+        ? isTrainer
+        : role && (item.roles as readonly string[]).includes(role)
   )
 
   function isActive(path: string) {

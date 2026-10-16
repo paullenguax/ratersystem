@@ -8,10 +8,12 @@ interface Props {
   // capability — either the dedicated 'examiner' role or an existing
   // rater's canStandardize flag. Admins always pass, so they can QA the page.
   requireStandardization?: boolean
+  // Admins, or anyone with people.isTrainer
+  requireTrainer?: boolean
 }
 
-export function ProtectedRoute({ children, allowedRoles, requireStandardization }: Props) {
-  const { user, role, canStandardize, loading } = useAuth()
+export function ProtectedRoute({ children, allowedRoles, requireStandardization, requireTrainer }: Props) {
+  const { user, role, canStandardize, isTrainer, loading } = useAuth()
 
   if (loading) return null
 
@@ -22,6 +24,10 @@ export function ProtectedRoute({ children, allowedRoles, requireStandardization 
   }
 
   if (requireStandardization && role !== 'admin' && role !== 'examiner' && !canStandardize) {
+    return <Navigate to="/" replace />
+  }
+
+  if (requireTrainer && !isTrainer) {
     return <Navigate to="/" replace />
   }
 

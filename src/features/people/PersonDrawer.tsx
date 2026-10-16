@@ -9,6 +9,7 @@ import {
 import { useQueryClient } from '@tanstack/react-query'
 import { db } from '@/lib/firebase'
 import type { Person } from '@/types'
+import { CoursesAttendedSection } from '@/features/courses/CourseExposure'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -37,6 +38,7 @@ export function PersonDrawer({ open, onClose, person }: Props) {
 
   const [raterNumberInput, setRaterNumberInput] = useState('')
   const [canStandardize, setCanStandardize] = useState(false)
+  const [isTrainer, setIsTrainer] = useState(false)
   const [uidInput, setUidInput] = useState('')
   const [linking, setLinking] = useState(false)
   const [linkError, setLinkError] = useState('')
@@ -56,6 +58,7 @@ export function PersonDrawer({ open, onClose, person }: Props) {
       )
       setRaterNumberInput(person?.raterNumber?.toString() ?? '')
       setCanStandardize(person?.canStandardize ?? false)
+      setIsTrainer(person?.isTrainer ?? false)
       setUidInput('')
       setLinkError('')
       setLinkDone(false)
@@ -77,6 +80,7 @@ export function PersonDrawer({ open, onClose, person }: Props) {
       notes: data.notes ?? '',
       raterNumber: !isNaN(rn) && rn > 0 ? rn : null,
       canStandardize,
+      isTrainer,
     }
 
     if (isEdit) {
@@ -212,6 +216,16 @@ export function PersonDrawer({ open, onClose, person }: Props) {
             <span>Can do standardization work</span>
           </label>
 
+          <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={isTrainer}
+              onChange={e => setIsTrainer(e.target.checked)}
+              className="rounded"
+            />
+            <span>Trainer (runs courses — admins always are)</span>
+          </label>
+
           <div className="space-y-1">
             <Label>Status</Label>
             <Controller name="status" control={control} render={({ field }) => (
@@ -242,6 +256,8 @@ export function PersonDrawer({ open, onClose, person }: Props) {
             <Label>Notes</Label>
             <Textarea {...register('notes')} rows={3} />
           </div>
+
+          {isEdit && <CoursesAttendedSection person={person} />}
 
           <SheetFooter className="mt-2">
             <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>

@@ -70,7 +70,7 @@ export function AssignmentDrawer({ open, onClose, assignment }: Props) {
   const [showRated, setShowRated] = useState(false)
 
   const { data: sessions = [] } = useQuery({ queryKey: ['sessions'], queryFn: fetchSessions })
-  const { data: people = [] } = useQuery({ queryKey: ['people'], queryFn: fetchPeople })
+  const { data: people = [] } = useQuery({ queryKey: ['people', 'active'], queryFn: fetchPeople })
   const { data: tests = [] } = useQuery({ queryKey: ['tests', 'active'], queryFn: fetchTests })
 
   const { register, handleSubmit, control, reset, setValue, formState: { errors, isSubmitting } } =

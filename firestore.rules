@@ -15,15 +15,24 @@ service cloud.firestore {
         get(/databases/$(database)/documents/people/$(request.auth.uid)).data.role == 'admin';
     }
 
+    // Admins, or anyone with people.isTrainer — runs rater/refresher courses.
+    function isTrainer() {
+      return isSignedIn() && (
+        get(/databases/$(database)/documents/people/$(request.auth.uid)).data.role == 'admin' ||
+        get(/databases/$(database)/documents/people/$(request.auth.uid)).data.get('isTrainer', false) == true
+      );
+    }
+
     function isSelf(uid) {
       return isSignedIn() && request.auth.uid == uid;
     }
 
     // ── people ────────────────────────────────────────────────────────────────
     // Admins can read/write all. Authenticated users can read their own record.
+    // Trainers can read everyone, to match course attendees and pick trainers.
 
     match /people/{personId} {
-      allow read: if isAdmin() || isSelf(personId);
+      allow read: if isAdmin() || isTrainer() || isSelf(personId);
       allow write: if isAdmin();
     }
 
@@ -80,6 +89,13 @@ service cloud.firestore {
     match /test_bank/{testId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
+    }
+
+    // ── courses ───────────────────────────────────────────────────────────────
+    // Rater/refresher course runs: attendees + the audio played. Trainer-only.
+
+    match /courses/{courseId} {
+      allow read, write: if isTrainer();
     }
 
     // ── certificates ─────────────────────────────────────────────────────────
