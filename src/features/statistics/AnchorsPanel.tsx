@@ -7,6 +7,7 @@ import type { RaschAnalysis, RaschBaseline, TestStat } from '@/lib/rasch/analysi
 import { CRITERIA } from '@/lib/rasch/raschData'
 import { saveBaseline, clearBaseline } from '@/lib/rasch/baseline'
 import { DifficultyBadge, DIFFICULTY_TIER } from './RaschPanels'
+import { isExamPoolTest } from '@/lib/testPool'
 
 // Anchor workflow: shortlist → panel event → panel review + agreed scores →
 // freeze a baseline. See README "Rasch anchors".
@@ -74,11 +75,11 @@ export function AnchorsPanel({ analysis, publishedOnly, baseline, scores, people
   })
 
   const bankByNumber = useMemo(
-    () => new Map(bank.filter(t => t.category !== 'standardization' && t.testId != null).map(t => [t.testId!, t])),
+    () => new Map(bank.filter(t => isExamPoolTest(t) && t.testId != null).map(t => [t.testId!, t])),
     [bank],
   )
   const statByNumber = useMemo(() => new Map(analysis.tests.map(t => [t.number, t])), [analysis])
-  const confirmedAnchors = bank.filter(t => t.anchor && t.category !== 'standardization' && t.testId != null)
+  const confirmedAnchors = bank.filter(t => t.anchor && isExamPoolTest(t) && t.testId != null)
 
   // ── step 1: shortlist ──────────────────────────────────────────────────
   const [showAll, setShowAll] = useState(false)

@@ -551,15 +551,18 @@ export interface Test {
   durationSeconds?: number
   status: 'active' | 'retired'
   excludeFromPool?: boolean
-  // Undefined is treated as 'rater_course' everywhere this is read.
-  category?: 'rater_course' | 'standardization'
-  // Which course this test's recording is used in — a sub-classification
-  // within the rater_course pool (unrelated to `category` above, which
-  // separates rater_course from standardization). Helps a trainer find the
-  // right test when picking one for a Practice Session.
+  // Undefined is treated as 'rater_course' everywhere this is read. Only
+  // rater_course tests may appear in a certification exam — check with
+  // isExamPoolTest() (lib/testPool.ts), never by excluding other categories.
+  // 'training' is audio played to trainees on rater/refresher courses.
+  category?: 'rater_course' | 'standardization' | 'training'
+  // Training audio only: which day (1–5) of the Initial Rater Course's fixed
+  // audio set this recording belongs to. Refresher audio isn't tagged here —
+  // it's attached to each refresher run instead.
+  raterCourseDay?: number | null
+  // Legacy free-form course tags, superseded by raterCourseDay. No longer
+  // editable; still shown read-only in the test drawer as a sorting hint.
   courseTag?: 'rater_course' | 'refresher_course' | 'other'
-  // Free-text, e.g. "Day 1" — sortable/filterable alongside courseTag in
-  // Test Bank and the Practice Session test picker.
   dayLabel?: string
   canonicalDifficulty?: number | null
   canonicalSE?: number | null

@@ -6,6 +6,7 @@ import { db } from '@/lib/firebase'
 import type { Person, Test, Score, Session } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { isExamPoolTest } from '@/lib/testPool'
 
 // ── algorithm ──────────────────────────────────────────────────────────────
 
@@ -169,10 +170,10 @@ export function AutoAssignPage() {
       .sort((a, b) => a.name.localeCompare(b.name)),
   })
   const { data: tests = [] } = useQuery({
-    queryKey: ['tests'],
+    queryKey: ['tests', 'exam-pool', 'active'],
     queryFn: async () => (await getDocs(collection(db, 'test_bank'))).docs
       .map(d => ({ id: d.id, ...d.data() }) as Test)
-      .filter(t => t.status === 'active' && !t.excludeFromPool && (t.category ?? 'rater_course') !== 'standardization'),
+      .filter(t => t.status === 'active' && !t.excludeFromPool && isExamPoolTest(t)),
   })
   const { data: allScores = [] } = useQuery({
     queryKey: ['scores'],

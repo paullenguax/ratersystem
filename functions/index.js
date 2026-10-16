@@ -1190,6 +1190,13 @@ exports.requestSelfAssignment = onCall(async (request) => {
   return { assignmentId }
 })
 
+// Only rater_course tests may go into a certification exam. A positive
+// match on purpose — excluding named categories would let any new one (e.g.
+// 'training' course audio) leak into exams. Mirrors src/lib/testPool.ts.
+function isExamPoolTest(t) {
+  return (t.category ?? 'rater_course') === 'rater_course'
+}
+
 // Picks a balanced 4-test set for one rater in one section's session and
 // writes it as a `source: 'self_serve'` assignment. Shared by the trainee's
 // own /take-test link (requestSelfAssignment) and an admin issuing a resit
@@ -1202,7 +1209,7 @@ async function createSelfServeAssignment(db, { raterId, raterName, sessionId, se
   ])
   const pool = testsSnap.docs
     .map(d => ({ id: d.id, ...d.data() }))
-    .filter(t => t.status === 'active' && !t.excludeFromPool && (t.category ?? 'rater_course') !== 'standardization')
+    .filter(t => t.status === 'active' && !t.excludeFromPool && isExamPoolTest(t))
 
   const seenTestIds = new Set()
   const ratersByTest = new Map()

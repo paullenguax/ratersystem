@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { collection, getDocs } from 'firebase/firestore'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { collection, doc, getDocs, writeBatch } from 'firebase/firestore'
 import { useReactTable, getCoreRowModel, getSortedRowModel, flexRender, type ColumnDef, type SortingState } from '@tanstack/react-table'
 import { Plus, Play, Square, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
 import { db } from '@/lib/firebase'
@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { CategoryBadge } from '@/components/CategoryBadge'
 import { formatTestNumber } from '@/lib/testNumber'
+import { CATEGORY_LABELS, LEGACY_COURSE_TAG_LABELS, testCategory } from '@/lib/testPool'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
@@ -20,10 +21,31 @@ async function fetchTests(): Promise<Test[]> {
   return snap.docs.map(d => ({ id: d.id, ...d.data() }) as Test)
 }
 
-const COURSE_TAG_LABELS: Record<NonNullable<Test['courseTag']>, string> = {
-  rater_course: 'Rater course',
-  refresher_course: 'Refresher course',
-  other: 'Other',
+// Reads the legacy free-text day ("Day 3", "day3", "3") on a test tagged
+// for the rater course, so moving it into Training can carry the day over.
+function legacyRaterCourseDay(t: Test): number | null {
+  if (t.courseTag !== 'rater_course') return null
+  const n = Number(t.dayLabel?.match(/\d+/)?.[0])
+  return n >= 1 && n <= 5 ? n : null
+}
+
+// Moves tests into a non-certification pool. Each gets the next number in
+// that pool's own sequence (S/T), since its old number belongs to another
+// namespace and would usually collide there.
+async function moveTests(tests: Test[], allTests: Test[], target: 'standardization' | 'training') {
+  const moving = new Set(tests.map(t => t.id))
+  let next = Math.max(0, ...allTests
+    .filter(t => !moving.has(t.id) && testCategory(t) === target)
+    .map(t => t.testId ?? 0)) + 1
+  const batch = writeBatch(db)
+  for (const t of [...tests].sort((a, b) => (a.testId ?? 999) - (b.testId ?? 999))) {
+    batch.update(doc(db, 'test_bank', t.id), {
+      category: target,
+      testId: next++,
+      raterCourseDay: target === 'training' ? (t.raterCourseDay ?? legacyRaterCourseDay(t)) : null,
+    })
+  }
+  await batch.commit()
 }
 
 export function TestBankPage() {
@@ -32,7 +54,10 @@ export function TestBankPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | Test['status']>('all')
   const [poolFilter, setPoolFilter] = useState<'all' | 'pool' | 'excluded'>('all')
   const [categoryFilter, setCategoryFilter] = useState<'all' | NonNullable<Test['category']>>('all')
-  const [courseTagFilter, setCourseTagFilter] = useState<'all' | NonNullable<Test['courseTag']>>('all')
+  const [dayFilter, setDayFilter] = useState<'all' | 'none' | '1' | '2' | '3' | '4' | '5'>('all')
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [moving, setMoving] = useState(false)
+  const queryClient = useQueryClient()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [selectedTest, setSelectedTest] = useState<Test | undefined>()
   const [scoresTest, setScoresTest] = useState<Test | undefined>()
@@ -48,12 +73,57 @@ export function TestBankPage() {
       (typeFilter === 'all' || t.testType === typeFilter) &&
       (statusFilter === 'all' || t.status === statusFilter) &&
       (poolFilter === 'all' || (poolFilter === 'excluded' ? !!t.excludeFromPool : !t.excludeFromPool)) &&
-      (categoryFilter === 'all' || (t.category ?? 'rater_course') === categoryFilter) &&
-      (courseTagFilter === 'all' || t.courseTag === courseTagFilter)
+      (categoryFilter === 'all' || testCategory(t) === categoryFilter) &&
+      (dayFilter === 'all' || (dayFilter === 'none' ? !t.raterCourseDay : t.raterCourseDay === Number(dayFilter)))
     )
-  }), [tests, search, typeFilter, statusFilter, poolFilter, categoryFilter, courseTagFilter])
+  }), [tests, search, typeFilter, statusFilter, poolFilter, categoryFilter, dayFilter])
+
+  const selectedTests = tests.filter(t => selectedIds.has(t.id))
+
+  function toggleSelected(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  async function handleMove(target: 'standardization' | 'training') {
+    const n = selectedTests.length
+    if (!confirm(`Move ${n} test${n === 1 ? '' : 's'} to ${CATEGORY_LABELS[target]}? They'll be renumbered in that pool (${target === 'training' ? 'T' : 'S'}1, ${target === 'training' ? 'T' : 'S'}2…).`)) return
+    setMoving(true)
+    try {
+      await moveTests(selectedTests, tests, target)
+      setSelectedIds(new Set())
+      await queryClient.invalidateQueries({ queryKey: ['tests'] })
+    } finally {
+      setMoving(false)
+    }
+  }
+
+  const allFilteredSelected = filtered.length > 0 && filtered.every(t => selectedIds.has(t.id))
 
   const columns: ColumnDef<Test>[] = [
+    {
+      id: 'select',
+      enableSorting: false,
+      header: () => (
+        <input
+          type="checkbox"
+          aria-label="Select all shown tests"
+          checked={allFilteredSelected}
+          onChange={() => setSelectedIds(allFilteredSelected ? new Set() : new Set(filtered.map(t => t.id)))}
+        />
+      ),
+      cell: ({ row }) => (
+        <input
+          type="checkbox"
+          aria-label={`Select ${row.original.candidateName}`}
+          checked={selectedIds.has(row.original.id)}
+          onChange={() => toggleSelected(row.original.id)}
+        />
+      ),
+    },
     {
       accessorKey: 'testId',
       header: '#',
@@ -108,20 +178,22 @@ export function TestBankPage() {
       cell: ({ row }) => <CategoryBadge category={row.original.category} />,
     },
     {
-      id: 'courseTag',
-      header: 'Used in',
-      enableSorting: false,
-      cell: ({ row }) => row.original.courseTag
-        ? <Badge variant="outline">{COURSE_TAG_LABELS[row.original.courseTag]}</Badge>
-        : <span className="text-muted-foreground/50 text-xs">—</span>,
-    },
-    {
-      accessorKey: 'dayLabel',
-      header: 'Day',
+      accessorKey: 'raterCourseDay',
+      header: 'Course',
       sortUndefined: 'last',
-      cell: ({ row }) => (
-        <span className="text-muted-foreground text-sm">{row.original.dayLabel ?? '—'}</span>
-      ),
+      cell: ({ row }) => {
+        const t = row.original
+        if (t.raterCourseDay) return <Badge variant="outline">Rater Course · Day {t.raterCourseDay}</Badge>
+        // Legacy tag, shown faintly as a hint while sorting tests into pools
+        if (t.courseTag || t.dayLabel) {
+          return (
+            <span className="text-xs text-muted-foreground italic" title="Old tag — not used by Courses">
+              {[t.courseTag && LEGACY_COURSE_TAG_LABELS[t.courseTag], t.dayLabel].filter(Boolean).join(' · ')}
+            </span>
+          )
+        }
+        return <span className="text-muted-foreground/50 text-xs">—</span>
+      },
     },
     {
       id: 'excludeFromPool',
@@ -189,14 +261,15 @@ export function TestBankPage() {
           than burying it in the filter row below. */}
       <div className="flex gap-1">
         {([
-          ['all', 'Both'],
+          ['all', 'All'],
           ['rater_course', 'Certification'],
           ['standardization', 'In-session'],
+          ['training', 'Training'],
         ] as const).map(([value, label]) => (
           <button
             key={value}
             type="button"
-            onClick={() => setCategoryFilter(value)}
+            onClick={() => { setCategoryFilter(value); setSelectedIds(new Set()) }}
             className={`px-3 py-1.5 text-sm rounded-md border font-medium transition-colors ${
               categoryFilter === value
                 ? 'bg-primary text-primary-foreground border-primary'
@@ -251,16 +324,28 @@ export function TestBankPage() {
             <SelectItem value="excluded">Excluded</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={courseTagFilter} onValueChange={v => setCourseTagFilter(v as typeof courseTagFilter)}>
-          <SelectTrigger className="w-40"><SelectValue placeholder="Used in" /></SelectTrigger>
+        <Select value={dayFilter} onValueChange={v => setDayFilter(v as typeof dayFilter)}>
+          <SelectTrigger className="w-48">
+            <SelectValue>{(v: string) => v === 'all' ? 'Rater Course — any' : v === 'none' ? 'Not in Rater Course' : `Rater Course Day ${v}`}</SelectValue>
+          </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Used in — any</SelectItem>
-            <SelectItem value="rater_course">Rater course</SelectItem>
-            <SelectItem value="refresher_course">Refresher course</SelectItem>
-            <SelectItem value="other">Other</SelectItem>
+            <SelectItem value="all">Rater Course — any</SelectItem>
+            {['1', '2', '3', '4', '5'].map(d => <SelectItem key={d} value={d}>Rater Course Day {d}</SelectItem>)}
+            <SelectItem value="none">Not in Rater Course</SelectItem>
           </SelectContent>
         </Select>
       </div>
+
+      {selectedTests.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap rounded-md border bg-muted/40 px-3 py-2 text-sm">
+          <span className="font-medium">{selectedTests.length} selected</span>
+          <span className="text-muted-foreground">Move to:</span>
+          <Button size="sm" variant="outline" disabled={moving} onClick={() => handleMove('training')}>Training</Button>
+          <Button size="sm" variant="outline" disabled={moving} onClick={() => handleMove('standardization')}>In-session</Button>
+          <Button size="sm" variant="ghost" disabled={moving} onClick={() => setSelectedIds(new Set())}>Clear</Button>
+          <span className="text-xs text-muted-foreground">To make a test exam-eligible (Certification), edit it individually.</span>
+        </div>
+      )}
 
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>

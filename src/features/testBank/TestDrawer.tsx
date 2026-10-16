@@ -9,6 +9,7 @@ import { Upload } from 'lucide-react'
 import { db, storage } from '@/lib/firebase'
 import type { Test } from '@/types'
 import { formatTestNumber } from '@/lib/testNumber'
+import { CATEGORY_LABELS, LEGACY_COURSE_TAG_LABELS, type TestCategory } from '@/lib/testPool'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -26,11 +27,10 @@ const schema = z.object({
   durationSeconds: z.number().min(0).optional(),
   status: z.enum(['active', 'retired']),
   testId: z.number().min(1).optional(),
-  category: z.enum(['rater_course', 'standardization']),
-  // 'unset' is a form-only sentinel (Select can't bind to undefined) —
-  // stripped back to undefined/null at the Firestore-payload boundary.
-  courseTag: z.enum(['unset', 'rater_course', 'refresher_course', 'other']),
-  dayLabel: z.string().optional(),
+  category: z.enum(['rater_course', 'standardization', 'training']),
+  // 'none' is a form-only sentinel (Select can't bind to undefined) —
+  // stripped back to null at the Firestore-payload boundary.
+  raterCourseDay: z.enum(['none', '1', '2', '3', '4', '5']),
   notes: z.string().optional(),
 })
 type FormData = z.infer<typeof schema>
@@ -38,7 +38,7 @@ type FormData = z.infer<typeof schema>
 const EMPTY: FormData = {
   recordingUrl: '', candidateName: '', candidateNationality: '',
   testType: 'PPL', durationSeconds: undefined, status: 'active', testId: undefined, category: 'rater_course',
-  courseTag: 'unset', dayLabel: '', notes: '',
+  raterCourseDay: 'none', notes: '',
 }
 
 interface Props {
@@ -57,6 +57,7 @@ export function TestDrawer({ open, onClose, test }: Props) {
     useForm<FormData>({ resolver: zodResolver(schema), defaultValues: EMPTY })
 
   const recordingUrlValue = watch('recordingUrl')
+  const categoryValue = watch('category')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
 
@@ -88,8 +89,7 @@ export function TestDrawer({ open, onClose, test }: Props) {
         status: test.status,
         testId: test.testId ?? undefined,
         category: test.category ?? 'rater_course',
-        courseTag: test.courseTag ?? 'unset',
-        dayLabel: test.dayLabel ?? '',
+        raterCourseDay: test.raterCourseDay ? String(test.raterCourseDay) as FormData['raterCourseDay'] : 'none',
         notes: test.notes ?? '',
       } : EMPTY
       reset(vals)
@@ -100,14 +100,14 @@ export function TestDrawer({ open, onClose, test }: Props) {
 
   useEffect(() => { setPreviewUrl(recordingUrlValue) }, [recordingUrlValue])
 
-  // In-session tests are numbered in their own sequence (S1, S2…), separate
-  // from the legacy Certification numbers — auto-assigned here whenever the
-  // number is left blank, whether that's a brand-new test or an existing
-  // Certification test being switched into this category (which otherwise
-  // carries its old numeric id straight into the In-session namespace, where
-  // it usually collides with a number already in use there).
-  async function nextStandardizationNumber(): Promise<number> {
-    const snap = await getDocs(query(collection(db, 'test_bank'), where('category', '==', 'standardization')))
+  // In-session and Training tests are each numbered in their own sequence
+  // (S1, S2… / T1, T2…), separate from the legacy Certification numbers —
+  // auto-assigned here whenever the number is left blank, whether that's a
+  // brand-new test or an existing test being switched into the category
+  // (which otherwise carries its old id straight into the new namespace,
+  // where it usually collides with a number already in use there).
+  async function nextCategoryNumber(category: 'standardization' | 'training'): Promise<number> {
+    const snap = await getDocs(query(collection(db, 'test_bank'), where('category', '==', category)))
     const nums = snap.docs.map(d => (d.data().testId as number | undefined) ?? 0)
     return Math.max(0, ...nums) + 1
   }
@@ -136,8 +136,8 @@ export function TestDrawer({ open, onClose, test }: Props) {
     // existing Certification test switched over; everything else (non-
     // In-session, blank) is left unnumbered, same as always.
     let testId = data.testId
-    if (testId === undefined && data.category === 'standardization') {
-      testId = await nextStandardizationNumber()
+    if (testId === undefined && data.category !== 'rater_course') {
+      testId = await nextCategoryNumber(data.category)
     }
 
     if (testId !== undefined && await findDuplicateTestNumber(data.category, testId)) {
@@ -154,8 +154,7 @@ export function TestDrawer({ open, onClose, test }: Props) {
       status: data.status,
       testId: testId ?? null,
       category: data.category,
-      courseTag: data.courseTag === 'unset' ? null : data.courseTag,
-      dayLabel: data.dayLabel?.trim() || null,
+      raterCourseDay: data.category === 'training' && data.raterCourseDay !== 'none' ? Number(data.raterCourseDay) : null,
       excludeFromPool,
       notes: data.notes ?? '',
     }
@@ -256,42 +255,43 @@ export function TestDrawer({ open, onClose, test }: Props) {
               <Label>Category</Label>
               <Controller name="category" control={control} render={({ field }) => (
                 <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger><SelectValue>{field.value === 'standardization' ? 'In-session' : 'Certification'}</SelectValue></SelectTrigger>
+                  <SelectTrigger><SelectValue>{(v: TestCategory) => CATEGORY_LABELS[v]}</SelectValue></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="rater_course">Certification</SelectItem>
                     <SelectItem value="standardization">In-session</SelectItem>
+                    <SelectItem value="training">Training</SelectItem>
                   </SelectContent>
                 </Select>
               )} />
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          {categoryValue === 'training' && (
             <div className="space-y-1">
-              <Label>Used in</Label>
-              <Controller name="courseTag" control={control} render={({ field }) => (
+              <Label>Initial Rater Course day</Label>
+              <Controller name="raterCourseDay" control={control} render={({ field }) => (
                 <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger><SelectValue>{(v: string) => v === 'none' ? 'Not in the Rater Course set' : `Day ${v}`}</SelectValue></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="unset">—</SelectItem>
-                    <SelectItem value="rater_course">Rater course</SelectItem>
-                    <SelectItem value="refresher_course">Refresher course</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
+                    <SelectItem value="none">Not in the Rater Course set</SelectItem>
+                    {['1', '2', '3', '4', '5'].map(d => <SelectItem key={d} value={d}>Day {d}</SelectItem>)}
                   </SelectContent>
                 </Select>
               )} />
+              <p className="text-xs text-muted-foreground">Refresher audio is chosen per refresher course, not tagged here.</p>
             </div>
-            <div className="space-y-1">
-              <Label>Day</Label>
-              <Input {...register('dayLabel')} placeholder="e.g. Day 1" />
-            </div>
-          </div>
+          )}
+          {(test?.courseTag || test?.dayLabel) && (
+            <p className="text-xs text-muted-foreground">
+              Old tag: {[test.courseTag && LEGACY_COURSE_TAG_LABELS[test.courseTag], test.dayLabel].filter(Boolean).join(' · ')}
+            </p>
+          )}
 
           <div className="space-y-1">
             <Label>Test number</Label>
             <Input type="number" min={1} {...register('testId', {
               setValueAs: v => (v === '' ? undefined : Number(v)),
-            })} placeholder="Auto-assigned for in-session tests if left blank" />
+            })} placeholder="Auto-assigned for in-session/training tests if left blank" />
             {errors.testId && <p className="text-xs text-destructive">{errors.testId.message}</p>}
           </div>
 

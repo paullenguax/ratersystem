@@ -8,6 +8,7 @@ import { useRaschJob } from '@/lib/rasch/useRaschJob'
 import { AnalysisStatus, RatersPanel, TestsPanel, ScalePanel, ReturningPanel } from './RaschPanels'
 import { AnchorsPanel } from './AnchorsPanel'
 import { useRaschBaseline } from '@/lib/rasch/baseline'
+import { isExamPoolTest } from '@/lib/testPool'
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -200,7 +201,7 @@ export function StatisticsPage() {
     setCalSaved('')
     try {
       const bank = (await getDocs(collection(db, 'test_bank'))).docs.map(d => ({ id: d.id, ...d.data() }) as Test)
-      const byNumber = new Map(bank.filter(t => t.category !== 'standardization' && t.testId != null).map(t => [t.testId!, t.id]))
+      const byNumber = new Map(bank.filter(t => isExamPoolTest(t) && t.testId != null).map(t => [t.testId!, t.id]))
       const batch = writeBatch(db)
       let n = 0
       for (const t of main.data.tests) {

@@ -71,7 +71,7 @@ export function AssignmentDrawer({ open, onClose, assignment }: Props) {
 
   const { data: sessions = [] } = useQuery({ queryKey: ['sessions'], queryFn: fetchSessions })
   const { data: people = [] } = useQuery({ queryKey: ['people'], queryFn: fetchPeople })
-  const { data: tests = [] } = useQuery({ queryKey: ['tests'], queryFn: fetchTests })
+  const { data: tests = [] } = useQuery({ queryKey: ['tests', 'active'], queryFn: fetchTests })
 
   const { register, handleSubmit, control, reset, setValue, formState: { errors, isSubmitting } } =
     useForm<FormData>({ resolver: zodResolver(schema), defaultValues: EMPTY })

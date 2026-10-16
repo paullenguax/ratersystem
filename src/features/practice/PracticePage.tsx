@@ -8,6 +8,7 @@ import { Copy, Eye, EyeOff, Download, Trash2, X, ChevronLeft, Radio, Plus, Gradu
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
 import type { PracticeSession, PracticeScore, Test } from '@/types'
+import { formatTestNumber } from '@/lib/testNumber'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { DIMENSIONS } from '@/features/scoring/IcaoSliders'
@@ -66,12 +67,11 @@ async function fetchTests(): Promise<Test[]> {
   const snap = await getDocs(query(collection(db, 'test_bank'), where('status', '==', 'active')))
   return snap.docs
     .map(d => ({ id: d.id, ...d.data() }) as Test)
-    // rater_course-category tests are reserved for the real final assignment
-    // at the end of the course — they must stay unseen by trainees until
-    // then, so they're never offered here. Only the standardization pool
-    // (safe to reuse for live practice) is selectable; `courseTag`
-    // (rater course / refresher course / other) still filters within it.
-    .filter(t => (t.category ?? 'rater_course') === 'standardization')
+    // Only Training audio — the recordings played live on courses — is
+    // offered here. Certification tests must stay unseen until the final
+    // exam, and In-session (standardization) tests may eventually join the
+    // exam pool, so neither is ever previewed in a live practice session.
+    .filter(t => t.category === 'training')
     .sort((a, b) => (a.testId ?? 999) - (b.testId ?? 999))
 }
 
@@ -91,18 +91,15 @@ function CreateDialog({
   const { user } = useAuth()
   const [title, setTitle] = useState('')
   const [selectedTestId, setSelectedTestId] = useState('')
-  const [courseTagFilter, setCourseTagFilter] = useState<'all' | NonNullable<Test['courseTag']>>('all')
+  const [dayFilter, setDayFilter] = useState<'all' | 'none' | '1' | '2' | '3' | '4' | '5'>('all')
   const [saving, setSaving] = useState(false)
 
-  // Grouped by courseTag, then ordered by dayLabel (plain string sort — "Day 1"
-  // before "Day 2" etc, pad to "Day 01" if a course ever runs past 9 days) so
-  // a trainer can quickly scan for the right day's test instead of hunting
-  // through every test in the bank by candidate name alone.
+  // Ordered by Rater Course day (untagged last), then test number, so a
+  // trainer can quickly scan for the right day's recording.
   const filteredTests = tests
-    .filter(t => courseTagFilter === 'all' || t.courseTag === courseTagFilter)
+    .filter(t => dayFilter === 'all' || (dayFilter === 'none' ? !t.raterCourseDay : t.raterCourseDay === Number(dayFilter)))
     .sort((a, b) =>
-      (a.courseTag ?? '').localeCompare(b.courseTag ?? '') ||
-      (a.dayLabel ?? '').localeCompare(b.dayLabel ?? '') ||
+      (a.raterCourseDay ?? 99) - (b.raterCourseDay ?? 99) ||
       (a.testId ?? 999) - (b.testId ?? 999)
     )
 
@@ -156,14 +153,13 @@ function CreateDialog({
           <div>
             <label className="text-sm font-medium block mb-1">Test recording (optional)</label>
             <select
-              value={courseTagFilter}
-              onChange={e => { setCourseTagFilter(e.target.value as typeof courseTagFilter); setSelectedTestId('') }}
+              value={dayFilter}
+              onChange={e => { setDayFilter(e.target.value as typeof dayFilter); setSelectedTestId('') }}
               className="w-full border border-input rounded-lg px-3 py-2 text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-primary bg-background"
             >
-              <option value="all">Used in — any</option>
-              <option value="rater_course">Rater course</option>
-              <option value="refresher_course">Refresher course</option>
-              <option value="other">Other</option>
+              <option value="all">All training audio</option>
+              {['1', '2', '3', '4', '5'].map(d => <option key={d} value={d}>Rater Course Day {d}</option>)}
+              <option value="none">Not in Rater Course (e.g. refresher)</option>
             </select>
             <select
               value={selectedTestId}
@@ -173,12 +169,14 @@ function CreateDialog({
               <option value="">— Trainer plays audio externally —</option>
               {filteredTests.map(t => (
                 <option key={t.id} value={t.id}>
-                  {t.dayLabel ? `${t.dayLabel} — ` : ''}#{t.testId ?? '?'} — {t.candidateName} ({t.testType})
+                  {t.raterCourseDay ? `Day ${t.raterCourseDay} — ` : ''}{formatTestNumber(t.testId, t.category)} — {t.candidateName} ({t.testType})
                 </option>
               ))}
             </select>
             <p className="text-xs text-muted-foreground mt-1">
-              If selected, participants hear the audio on their own device.
+              {tests.length === 0
+                ? 'No Training audio yet — move course recordings into the Training pool in Test Bank.'
+                : 'If selected, participants hear the audio on their own device.'}
             </p>
           </div>
         </div>
@@ -508,7 +506,7 @@ export function PracticePage() {
   })
 
   const { data: tests = [] } = useQuery({
-    queryKey: ['test-bank-active'],
+    queryKey: ['tests', 'training'],
     queryFn: fetchTests,
     enabled: showCreate,
   })

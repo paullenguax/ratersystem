@@ -8,6 +8,7 @@ import type { Person, Session, Test } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
+import { isExamPoolTest } from '@/lib/testPool'
 
 const DIMS = [
   { key: 'pronunciation',  abbr: 'PRO' },
@@ -52,10 +53,10 @@ export function QuickEntryPage() {
     queryFn: async () => (await getDocs(collection(db, 'sessions'))).docs.map(d => ({ id: d.id, ...d.data() }) as Session),
   })
   const { data: tests = [] } = useQuery({
-    queryKey: ['tests'],
+    queryKey: ['tests', 'exam-pool'],
     queryFn: async () => (await getDocs(collection(db, 'test_bank'))).docs
       .map(d => ({ id: d.id, ...d.data() }) as Test)
-      .filter(t => t.status !== 'retired' && (t.category ?? 'rater_course') !== 'standardization')
+      .filter(t => t.status !== 'retired' && isExamPoolTest(t))
       .sort((a, b) => (a.testId ?? 999) - (b.testId ?? 999)),
   })
 

@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from '@/components/ui/sheet'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { isExamPoolTest } from '@/lib/testPool'
 
 const DIMENSIONS = [
   { key: 'pronunciation',  label: 'Pronunciation' },
@@ -55,7 +56,7 @@ async function fetchTests(): Promise<Test[]> {
   const snap = await getDocs(collection(db, 'test_bank'))
   return snap.docs
     .map(d => ({ id: d.id, ...d.data() }) as Test)
-    .filter(t => (t.category ?? 'rater_course') !== 'standardization')
+    .filter(isExamPoolTest)
     .sort((a, b) => (a.testId ?? 999) - (b.testId ?? 999))
 }
 
@@ -73,7 +74,7 @@ export function ScoreDrawer({ open, onClose, score }: Props) {
   const isEdit = !!score
 
   const { data: assignments = [] } = useQuery({ queryKey: ['assignments'], queryFn: fetchAssignments })
-  const { data: allTests = [] } = useQuery({ queryKey: ['tests'], queryFn: fetchTests })
+  const { data: allTests = [] } = useQuery({ queryKey: ['tests', 'exam-pool'], queryFn: fetchTests })
 
   const { register, handleSubmit, control, reset, setValue, formState: { errors, isSubmitting } } =
     useForm<FormData>({ resolver: zodResolver(schema), defaultValues: EMPTY })
