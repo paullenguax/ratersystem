@@ -83,6 +83,14 @@ service firebase.storage {
       allow read, write: if isAdmin();
     }
 
+    // ── course-materials ─────────────────────────────────────────────────────
+    // Teacher notes/handouts uploaded from the Courses pages. Trainer-only;
+    // `trainer` claim is set by syncAdminClaim for admins and people.isTrainer.
+
+    match /course-materials/{materialId}/{fileName} {
+      allow read, write: if isAdmin() || (isSignedIn() && request.auth.token.trainer == true);
+    }
+
     // ── default deny ─────────────────────────────────────────────────────────
 
     match /{allPaths=**} {

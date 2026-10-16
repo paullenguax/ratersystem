@@ -576,6 +576,28 @@ export interface Course {
   createdAt?: Timestamp
 }
 
+// Teacher notes and handouts for courses — an uploaded file or a markdown
+// note edited in the app. Trainer-only.
+export interface CourseMaterial {
+  id: string
+  // Shown on every rater course, every refresher, or one run (courseId)
+  scope: 'rater' | 'refresher' | 'course'
+  courseId?: string | null
+  // Optional, for rater-course material that belongs to one day (1–5)
+  day?: number | null
+  title: string
+  kind: 'file' | 'markdown'
+  fileName?: string | null
+  storagePath?: string | null
+  url?: string | null
+  contentType?: string | null
+  size?: number | null
+  markdown?: string
+  updatedByName?: string
+  updatedAt?: Timestamp
+  createdAt?: Timestamp
+}
+
 export interface Test {
   id: string
   testId?: number

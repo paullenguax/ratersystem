@@ -98,6 +98,13 @@ service cloud.firestore {
       allow read, write: if isTrainer();
     }
 
+    // ── course_materials ──────────────────────────────────────────────────────
+    // Teacher notes/handouts (files live in Storage course-materials/). Trainer-only.
+
+    match /course_materials/{materialId} {
+      allow read, write: if isTrainer();
+    }
+
     // ── certificates ─────────────────────────────────────────────────────────
     // Public read so /validate/:certNumber works without auth.
 

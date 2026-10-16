@@ -11,6 +11,8 @@ import {
 } from '@/lib/courses'
 import { formatTestNumber } from '@/lib/testNumber'
 import { CourseDrawer } from './CourseDrawer'
+import { MaterialsSection } from './MaterialsSection'
+import { fetchMaterials, materialsForCourse } from '@/lib/courseMaterials'
 import { fetchPeople, fetchAllTests, formatDateRange } from './CoursesPage'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -32,6 +34,7 @@ export function CourseDetailPage() {
   const { data: courses = [], isLoading } = useQuery({ queryKey: ['courses'], queryFn: fetchCourses })
   const { data: people = [] } = useQuery({ queryKey: ['people'], queryFn: fetchPeople })
   const { data: tests = [] } = useQuery({ queryKey: ['tests'], queryFn: fetchAllTests })
+  const { data: materials = [] } = useQuery({ queryKey: ['course-materials'], queryFn: fetchMaterials })
 
   const course = courses.find(c => c.id === courseId)
   const testById = useMemo(() => new Map(tests.map(t => [t.id, t])), [tests])
@@ -86,6 +89,16 @@ export function CourseDetailPage() {
           save={save}
         />
       </div>
+
+      <MaterialsSection
+        materials={materialsForCourse(materials, course)}
+        addTargets={[
+          { label: 'This course only', target: { scope: 'course', courseId: course.id } },
+          { label: course.kind === 'rater' ? 'All rater courses' : 'All refresher courses', target: { scope: course.kind } },
+        ]}
+        allowDay={course.kind === 'rater'}
+        returnTo={`/courses/${course.id}`}
+      />
 
       <CourseDrawer
         open={editing}

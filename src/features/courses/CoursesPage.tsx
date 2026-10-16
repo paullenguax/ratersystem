@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { collection, getDocs } from 'firebase/firestore'
 import { Plus } from 'lucide-react'
@@ -40,7 +40,8 @@ export function CoursesPage() {
           <h1 className="text-2xl font-semibold">Courses</h1>
           <p className="text-sm text-muted-foreground">Each rater or refresher course: who attended and the audio they heard.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <Button variant="ghost" nativeButton={false} render={<Link to="/courses/materials" />}>Shared materials</Button>
           <Button variant="outline" onClick={() => setCreating('rater')}>
             <Plus className="size-4 mr-2" /> Rater course
           </Button>

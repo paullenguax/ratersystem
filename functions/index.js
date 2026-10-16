@@ -56,14 +56,19 @@ async function assertTrainer(request) {
 // unresolved, but custom claims are the standard, documented pattern for
 // this anyway and sidestep it entirely). Firestore rules keep using the
 // direct people/{uid} lookup as before — this only affects Storage.
+// Also sets `trainer: true` for admins and people.isTrainer, for the
+// course-materials Storage path.
 // Custom claims only take effect on a user's NEXT ID token — an already
 // signed-in session needs to sign out/in (or wait for the ~hourly refresh)
 // to pick up a change made here.
 exports.syncAdminClaim = onDocumentWritten('people/{personId}', async (event) => {
   const uid = event.params.personId
-  const isAdmin = event.data.after?.data()?.role === 'admin'
+  const after = event.data.after?.data()
+  const isAdmin = after?.role === 'admin'
+  const isTrainer = isAdmin || after?.isTrainer === true
+  const claims = { ...(isAdmin && { admin: true }), ...(isTrainer && { trainer: true }) }
   try {
-    await admin.auth().setCustomUserClaims(uid, isAdmin ? { admin: true } : null)
+    await admin.auth().setCustomUserClaims(uid, Object.keys(claims).length ? claims : null)
   } catch (err) {
     // Auth user may not exist yet (e.g. people doc created before first login) — safe to ignore.
     console.error(`syncAdminClaim: failed to set claim for ${uid}`, err.message)
