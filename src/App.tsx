@@ -33,6 +33,7 @@ import { CourseDetailPage } from '@/features/courses/CourseDetailPage'
 import { SharedMaterialsPage } from '@/features/courses/SharedMaterialsPage'
 import { MaterialEditorPage } from '@/features/courses/MaterialEditorPage'
 import { ImportCoursesPage } from '@/features/courses/ImportCoursesPage'
+import { TeachPage } from '@/features/courses/TeachPage'
 import { AssignmentsPage } from '@/features/assignments/AssignmentsPage'
 import { AssignmentReviewPage } from '@/features/assignments/AssignmentReviewPage'
 import { QuickEntryPage } from '@/features/assignments/QuickEntryPage'
@@ -103,6 +104,7 @@ export default function App() {
                 <Route path="courses/import" element={<ProtectedRoute requireTrainer><ImportCoursesPage /></ProtectedRoute>} />
                 <Route path="courses/materials" element={<ProtectedRoute requireTrainer><SharedMaterialsPage /></ProtectedRoute>} />
                 <Route path="courses/materials/:materialId" element={<ProtectedRoute requireTrainer><MaterialEditorPage /></ProtectedRoute>} />
+                <Route path="courses/:courseId/teach" element={<ProtectedRoute requireTrainer><TeachPage /></ProtectedRoute>} />
                 <Route path="courses/:courseId" element={<ProtectedRoute requireTrainer><CourseDetailPage /></ProtectedRoute>} />
                 <Route path="assignments" element={<AssignmentsPage />} />
                 <Route path="assignments/quick-entry" element={<ProtectedRoute allowedRoles={['admin']}><QuickEntryPage /></ProtectedRoute>} />

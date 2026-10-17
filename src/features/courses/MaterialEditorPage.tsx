@@ -8,6 +8,7 @@ import { ChevronLeft, Download, Printer } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { fetchMaterials, SCOPE_LABELS } from '@/lib/courseMaterials'
 import { fetchCourses } from '@/lib/courses'
+import { printDocument } from '@/lib/printDocument'
 import { useCurrentPersonName } from './MaterialsSection'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -76,22 +77,14 @@ export function MaterialEditorPage() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  // Prints just the rendered note in a clean window — the browser's print
-  // dialog doubles as "Save as PDF".
+  // Branded print window — "Save as PDF" in the print dialog is the PDF export
   function printNote() {
-    const w = window.open('', '_blank')
-    if (!w || !previewRef.current) return
-    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>
-      body { font: 11pt/1.55 system-ui, -apple-system, 'Segoe UI', sans-serif; color: #111; max-width: 46rem; margin: 2rem auto; padding: 0 1rem; }
-      h1 { font-size: 1.6rem; } h2 { font-size: 1.25rem; margin-top: 1.6em; } h3 { font-size: 1.05rem; }
-      table { border-collapse: collapse; width: 100%; } th, td { border: 1px solid #bbb; padding: .3em .5em; text-align: left; }
-      code { background: #f2f2f2; padding: 0 .2em; border-radius: 3px; } pre { background: #f2f2f2; padding: .6em; overflow-x: auto; }
-      blockquote { border-left: 3px solid #ccc; margin-left: 0; padding-left: 1em; color: #444; }
-      a { color: #00528C; }
-    </style></head><body>${previewRef.current.innerHTML}</body></html>`)
-    w.document.close()
-    w.focus()
-    w.print()
+    if (!previewRef.current || !material) return
+    printDocument({
+      title: title.trim() || 'Document',
+      html: previewRef.current.innerHTML,
+      subtitle: course ? course.name : material.scope === 'library' ? undefined : SCOPE_LABELS[material.scope],
+    })
   }
 
   function downloadMarkdown() {
@@ -152,8 +145,4 @@ export function MaterialEditorPage() {
       </p>
     </div>
   )
-}
-
-function escapeHtml(s: string) {
-  return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!))
 }

@@ -572,6 +572,9 @@ export interface Course {
   // taken when the run is created, so later changes to the set don't rewrite
   // what an earlier cohort heard — plus any per-run tweaks by the trainer.
   testDocIds: string[]
+  // Teach view checklist: when each recording was played to this cohort.
+  // Progress only — attending still counts as having heard the run's audio.
+  playedAt?: Record<string, Timestamp>
   attendees: CourseAttendee[]
   notes?: string
   createdAt?: Timestamp
@@ -581,8 +584,9 @@ export interface Course {
 // note edited in the app. Trainer-only.
 export interface CourseMaterial {
   id: string
-  // Shown on every rater course, every refresher, or one run (courseId)
-  scope: 'rater' | 'refresher' | 'course'
+  // Shown on every rater course, every refresher, or one run (courseId);
+  // 'library' = general documents not tied to any course (rater documents…)
+  scope: 'rater' | 'refresher' | 'course' | 'library'
   courseId?: string | null
   // Optional, for rater-course material that belongs to one day (1–5)
   day?: number | null

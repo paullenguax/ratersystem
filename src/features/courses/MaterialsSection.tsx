@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore'
-import { FileText, NotebookPen, Upload, Plus, Trash2, Pencil, ExternalLink } from 'lucide-react'
+import { FileText, NotebookPen, Upload, Plus, Trash2, Pencil, ExternalLink, FileDown } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
 import type { CourseMaterial } from '@/types'
@@ -36,6 +36,7 @@ export function MaterialsSection({ title = 'Materials', materials, addTargets, a
   const queryClient = useQueryClient()
   const myName = useCurrentPersonName()
   const fileInput = useRef<HTMLInputElement>(null)
+  const mdInput = useRef<HTMLInputElement>(null)
   const [targetIndex, setTargetIndex] = useState(0)
   const [day, setDay] = useState('')
   const [progress, setProgress] = useState<string | null>(null)
@@ -67,6 +68,22 @@ export function MaterialsSection({ title = 'Materials', materials, addTargets, a
     navigate(`/courses/materials/${id}`, { state: { returnTo } })
   }
 
+  // Turns existing .md/.txt files into editable notes (one note per file)
+  async function handleImportMarkdown(files: FileList) {
+    setError('')
+    try {
+      for (const file of [...files]) {
+        const body = await file.text()
+        await createNote(file.name.replace(/\.(md|markdown|txt)$/i, ''), target, myName, body)
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Import failed')
+    } finally {
+      if (mdInput.current) mdInput.current.value = ''
+      refresh()
+    }
+  }
+
   async function handleRename(m: CourseMaterial) {
     const name = prompt('Rename to:', m.title)?.trim()
     if (!name || name === m.title) return
@@ -86,7 +103,7 @@ export function MaterialsSection({ title = 'Materials', materials, addTargets, a
   }
 
   // Grouped by where each item is shared, in the order the add targets list them
-  const scopeOrder = [...new Set([...addTargets.map(t => t.target.scope), 'course', 'rater', 'refresher'])] as CourseMaterial['scope'][]
+  const scopeOrder = [...new Set([...addTargets.map(t => t.target.scope), 'course', 'rater', 'refresher', 'library'])] as CourseMaterial['scope'][]
   const groups = scopeOrder
     .map(scope => [scope, materials.filter(m => m.scope === scope)] as const)
     .filter(([, ms]) => ms.length > 0)
@@ -124,7 +141,14 @@ export function MaterialsSection({ title = 'Materials', materials, addTargets, a
           <Button size="sm" variant="outline" onClick={handleNewNote}>
             <Plus className="size-3.5 mr-1.5" /> New note
           </Button>
+          <Button size="sm" variant="outline" onClick={() => mdInput.current?.click()} title="Bring in existing .md files as editable notes">
+            <FileDown className="size-3.5 mr-1.5" /> Import .md
+          </Button>
         </div>
+        <input
+          ref={mdInput} type="file" multiple accept=".md,.markdown,.txt,text/markdown,text/plain" className="sr-only"
+          onChange={e => e.target.files?.length && handleImportMarkdown(e.target.files)}
+        />
         <input
           ref={fileInput} type="file" multiple className="sr-only"
           onChange={e => e.target.files?.length && handleFiles(e.target.files)}

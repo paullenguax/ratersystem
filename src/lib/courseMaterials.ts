@@ -21,6 +21,7 @@ export const SCOPE_LABELS: Record<CourseMaterial['scope'], string> = {
   rater: 'All rater courses',
   refresher: 'All refresher courses',
   course: 'This course only',
+  library: 'General documents',
 }
 
 // A run shows its own materials plus the shared ones for its kind.
@@ -63,14 +64,14 @@ export async function uploadMaterialFile(
   }
 }
 
-export async function createNote(title: string, target: MaterialTarget, updatedByName: string): Promise<string> {
+export async function createNote(title: string, target: MaterialTarget, updatedByName: string, markdown?: string): Promise<string> {
   const ref = await addDoc(collection(db, 'course_materials'), {
     scope: target.scope,
     courseId: target.courseId ?? null,
     day: target.day ?? null,
     title,
     kind: 'markdown',
-    markdown: `# ${title}\n\n`,
+    markdown: markdown ?? `# ${title}\n\n`,
     updatedByName,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),

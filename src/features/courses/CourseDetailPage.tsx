@@ -69,7 +69,10 @@ export function CourseDetailPage() {
             </p>
             {course.notes && <p className="text-sm mt-1 whitespace-pre-wrap">{course.notes}</p>}
           </div>
-          <Button variant="outline" onClick={() => setEditing(true)}>Edit</Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setEditing(true)}>Edit</Button>
+            <Button nativeButton={false} render={<Link to={`/courses/${course.id}/teach`} />}>Teach</Button>
+          </div>
         </div>
       </div>
 

@@ -61,7 +61,7 @@ export function CoursesPage() {
           <p className="text-sm text-muted-foreground">Each rater or refresher course: who attended and the audio they heard.</p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <Button variant="ghost" nativeButton={false} render={<Link to="/courses/materials" />}>Shared materials</Button>
+          <Button variant="ghost" nativeButton={false} render={<Link to="/courses/materials" />}>Materials &amp; documents</Button>
           <Button variant="ghost" nativeButton={false} render={<Link to="/courses/import" />}>Import past courses</Button>
           <Button variant="outline" onClick={() => setCreating('rater')}>
             <Plus className="size-4 mr-2" /> Rater course
@@ -98,6 +98,7 @@ export function CoursesPage() {
                 <TableHead>Dates</TableHead>
                 <TableHead className="text-right">Attendees</TableHead>
                 <TableHead className="text-right">Audio</TableHead>
+                <TableHead />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -112,6 +113,11 @@ export function CoursesPage() {
                   <TableCell className="text-sm text-muted-foreground">{formatDateRange(c)}</TableCell>
                   <TableCell className="text-right tabular-nums">{c.attendees?.length ?? 0}</TableCell>
                   <TableCell className="text-right tabular-nums">{c.testDocIds?.length ?? 0}</TableCell>
+                  <TableCell className="text-right">
+                    <Button size="sm" variant="ghost" nativeButton={false} render={<Link to={`/courses/${c.id}/teach`} />} onClick={e => e.stopPropagation()}>
+                      Teach
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
