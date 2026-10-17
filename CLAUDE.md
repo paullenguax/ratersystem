@@ -59,10 +59,29 @@ obvious file types; it cannot block a script pasted into a `.tsx`.
 Item text belongs in Firestore behind access rules. When you need example content
 while building, invent it — do not copy a real item.
 
-The rules, skills and validators that govern item generation live in
-`paullenguax/teac` (private). That repo is the source of truth for what a legal
-item is; never copy its rules into this one, because a second copy drifts within
-a week. See `docs/teac-content-review-spec.md`.
+## TEAC content — where the boundary is
+
+`paullenguax/teac` (private) holds the rules, exemplars, skills and validators for
+all four TEAC Parts. It is the source of truth for what a legal item is, and its
+root `README.md` is the front door for the whole programme: current state per
+Part, and where open questions are tracked.
+
+The division of labour:
+
+| | Lives in `teac` | Lives here |
+|---|---|---|
+| What makes an item legal | yes | no |
+| Validators | yes | consumed, never reimplemented |
+| Generation skills and prompts | yes | consumed |
+| The content itself | no (Firestore) | no (Firestore) |
+| Review workflow, roles, UI, export | no | yes |
+
+**Never copy a ruleset into this repository.** A second copy drifts within a week,
+and the whole point of the rules is that one version governs every item. Consume
+them by submodule or a pinned fetch, and record which version generated each item.
+
+`docs/teac-content-review-spec.md` is the interface between the two repos and the
+place to take any question about how they meet.
 
 ## SiteGround caching
 
