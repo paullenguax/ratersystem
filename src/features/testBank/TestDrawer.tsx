@@ -32,6 +32,7 @@ const schema = z.object({
   // 'none' is a form-only sentinel (Select can't bind to undefined) —
   // stripped back to null at the Firestore-payload boundary.
   raterCourseDay: z.enum(['none', '1', '2', '3', '4', '5']),
+  refresherNumber: z.number().int().min(1).optional(),
   notes: z.string().optional(),
 })
 type FormData = z.infer<typeof schema>
@@ -39,7 +40,7 @@ type FormData = z.infer<typeof schema>
 const EMPTY: FormData = {
   recordingUrl: '', candidateName: '', candidateNationality: '',
   testType: 'PPL', durationSeconds: undefined, status: 'active', testId: undefined, category: 'rater_course',
-  raterCourseDay: 'none', notes: '',
+  raterCourseDay: 'none', refresherNumber: undefined, notes: '',
 }
 
 interface Props {
@@ -91,6 +92,7 @@ export function TestDrawer({ open, onClose, test }: Props) {
         testId: test.testId ?? undefined,
         category: test.category ?? 'rater_course',
         raterCourseDay: test.raterCourseDay ? String(test.raterCourseDay) as FormData['raterCourseDay'] : 'none',
+        refresherNumber: test.refresherNumber ?? undefined,
         notes: test.notes ?? '',
       } : EMPTY
       reset(vals)
@@ -156,6 +158,7 @@ export function TestDrawer({ open, onClose, test }: Props) {
       testId: testId ?? null,
       category: data.category,
       raterCourseDay: data.category === 'training' && data.raterCourseDay !== 'none' ? Number(data.raterCourseDay) : null,
+      refresherNumber: data.category === 'training' ? data.refresherNumber ?? null : null,
       excludeFromPool,
       notes: data.notes ?? '',
     }
@@ -268,18 +271,31 @@ export function TestDrawer({ open, onClose, test }: Props) {
           </div>
 
           {categoryValue === 'training' && (
-            <div className="space-y-1">
-              <Label>Initial Rater Course day</Label>
-              <Controller name="raterCourseDay" control={control} render={({ field }) => (
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger><SelectValue>{(v: string) => v === 'none' ? 'Not in the Rater Course set' : `Day ${v}`}</SelectValue></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Not in the Rater Course set</SelectItem>
-                    {['1', '2', '3', '4', '5'].map(d => <SelectItem key={d} value={d}>Day {d}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              )} />
-              <p className="text-xs text-muted-foreground">Refresher audio is chosen per refresher course, not tagged here.</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label>Initial Rater Course day</Label>
+                <Controller name="raterCourseDay" control={control} render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger><SelectValue>{(v: string) => v === 'none' ? '—' : `Day ${v}`}</SelectValue></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">—</SelectItem>
+                      {['1', '2', '3', '4', '5'].map(d => <SelectItem key={d} value={d}>Day {d}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                )} />
+              </div>
+              <div className="space-y-1">
+                <Label>Refresher set</Label>
+                <div className="flex items-center gap-1">
+                  <span className="text-sm text-muted-foreground">RC</span>
+                  <Input type="number" min={1} className="w-20" placeholder="—" {...register('refresherNumber', {
+                    setValueAs: v => (v === '' || v == null ? undefined : Number(v)),
+                  })} />
+                </div>
+              </div>
+              <p className="col-span-2 text-xs text-muted-foreground">
+                Every new run of that course starts with the recordings tagged here. Leave both blank for audio that isn't in a set.
+              </p>
             </div>
           )}
           {(test?.courseTag || test?.dayLabel) && (

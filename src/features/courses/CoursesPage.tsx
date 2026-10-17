@@ -5,7 +5,7 @@ import { collection, doc, getDocs, writeBatch } from 'firebase/firestore'
 import { Plus } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import type { Course, Person, Test } from '@/types'
-import { fetchCourses, nextRefresherNumber, raterCourseSet } from '@/lib/courses'
+import { fetchCourses, latestRefresherNumber, setForCourse } from '@/lib/courses'
 import { CourseDrawer } from './CourseDrawer'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -34,16 +34,22 @@ export function CoursesPage() {
   const { data: tests = [] } = useQuery({ queryKey: ['tests'], queryFn: fetchAllTests })
   const queryClient = useQueryClient()
 
-  // Rater runs created before the Rater Course set was tagged (e.g. imported
-  // past courses) have no audio; this gives them the set in one go.
-  const emptyRaterRuns = courses.filter(c => c.kind === 'rater' && !(c.testDocIds?.length))
-  const raterSet = raterCourseSet(tests)
+  // Runs created before their set was tagged (e.g. imported past courses)
+  // have no audio; this gives each one its set in one go.
+  const emptyRuns = courses.filter(c => !(c.testDocIds?.length))
+  const fillable = emptyRuns
+    .map(c => ({ course: c, set: setForCourse(tests, c) }))
+    .filter(x => x.set.length > 0)
 
-  async function applyRaterSet() {
-    if (!confirm(`Give ${emptyRaterRuns.length} rater course${emptyRaterRuns.length === 1 ? '' : 's'} with no audio the current Rater Course set (${raterSet.length} recordings)? Their attendees will then count as having heard them.`)) return
-    const batch = writeBatch(db)
-    emptyRaterRuns.forEach(c => batch.update(doc(db, 'courses', c.id), { testDocIds: raterSet.map(t => t.id) }))
-    await batch.commit()
+  async function applySets() {
+    if (!confirm(`Give ${fillable.length} course${fillable.length === 1 ? '' : 's'} with no audio the recordings from their set? Their attendees will then count as having heard them.`)) return
+    // Firestore batches cap at 500 writes
+    for (let i = 0; i < fillable.length; i += 450) {
+      const batch = writeBatch(db)
+      fillable.slice(i, i + 450).forEach(({ course, set }) =>
+        batch.update(doc(db, 'courses', course.id), { testDocIds: set.map(t => t.id) }))
+      await batch.commit()
+    }
     queryClient.invalidateQueries({ queryKey: ['courses'] })
   }
 
@@ -66,14 +72,14 @@ export function CoursesPage() {
         </div>
       </div>
 
-      {emptyRaterRuns.length > 0 && (
+      {emptyRuns.length > 0 && (
         <div className="flex items-center gap-3 flex-wrap rounded-md border bg-muted/40 px-3 py-2 text-sm">
           <span>
-            {emptyRaterRuns.length} rater course{emptyRaterRuns.length === 1 ? ' has' : 's have'} no audio yet.
-            {raterSet.length === 0 && ' Tag Training recordings with a Rater Course day in Test Bank first.'}
+            {emptyRuns.length} course{emptyRuns.length === 1 ? ' has' : 's have'} no audio yet.
+            {fillable.length < emptyRuns.length && ' Tag recordings with a Rater Course day or RC set in Test Bank to fill the rest.'}
           </span>
-          {raterSet.length > 0 && (
-            <Button size="sm" variant="outline" onClick={applyRaterSet}>Apply Rater Course set ({raterSet.length})</Button>
+          {fillable.length > 0 && (
+            <Button size="sm" variant="outline" onClick={applySets}>Apply course sets ({fillable.length})</Button>
           )}
         </div>
       )}
@@ -88,7 +94,7 @@ export function CoursesPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Course</TableHead>
-                <TableHead>Type</TableHead>
+                <TableHead>Set</TableHead>
                 <TableHead>Dates</TableHead>
                 <TableHead className="text-right">Attendees</TableHead>
                 <TableHead className="text-right">Audio</TableHead>
@@ -100,7 +106,7 @@ export function CoursesPage() {
                   <TableCell className="font-medium">{c.name}</TableCell>
                   <TableCell>
                     <Badge variant={c.kind === 'refresher' ? 'secondary' : 'outline'}>
-                      {c.kind === 'refresher' ? 'Refresher' : 'Rater course'}
+                      {c.kind === 'refresher' ? `RC${c.number ?? '?'}` : 'Initial'}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">{formatDateRange(c)}</TableCell>
@@ -117,7 +123,7 @@ export function CoursesPage() {
         open={creating !== null}
         onClose={() => setCreating(null)}
         kind={creating ?? 'refresher'}
-        suggestedNumber={nextRefresherNumber(courses)}
+        suggestedNumber={latestRefresherNumber(courses, tests)}
         people={people}
         tests={tests}
         onCreated={id => navigate(`/courses/${id}`)}

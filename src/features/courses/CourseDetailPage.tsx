@@ -7,7 +7,7 @@ import { ChevronLeft, Play, Square, X, RefreshCw, UserPlus } from 'lucide-react'
 import { db, functions } from '@/lib/firebase'
 import type { Course, CourseAttendee, Person, Test } from '@/types'
 import {
-  fetchCourses, mergeAttendees, cohortExposure, raterCourseSet,
+  fetchCourses, mergeAttendees, cohortExposure, setForCourse, setLabel, inAnySet,
 } from '@/lib/courses'
 import { formatTestNumber } from '@/lib/testNumber'
 import { CourseDrawer } from './CourseDrawer'
@@ -277,16 +277,22 @@ function AudioSection({ course, courses, tests, testById, playingUrl, onPlay, sa
     await save({ testDocIds: (course.testDocIds ?? []).filter(x => x !== id) })
   }
 
-  async function resyncRaterSet() {
-    const set = raterCourseSet(tests)
-    if (!confirm(`Replace this course's audio with the current Rater Course set (${set.length} recordings)? Attendees will then count as having heard exactly those.`)) return
+  const set = setForCourse(tests, course)
+  const setIds = new Set(set.map(t => t.id))
+  const inRun = new Set(course.testDocIds ?? [])
+  const leftOut = set.filter(t => !inRun.has(t.id)).length
+  const label = setLabel(course)
+
+  async function resyncFromSet() {
+    const tweaks = courseTests.filter(t => !setIds.has(t.id)).length + leftOut
+    if (!confirm(`Replace this course's audio with the current ${label} (${set.length} recordings)?${tweaks ? ' Changes made for this run will be lost.' : ''} Attendees will then count as having heard exactly those.`)) return
     await save({ testDocIds: set.map(t => t.id) })
   }
 
   // Rater runs are grouped by the day each recording is tagged with
   const groups: [string, Test[]][] = course.kind === 'rater'
     ? [1, 2, 3, 4, 5, 0]
-        .map(d => [d ? `Day ${d}` : 'Other', courseTests.filter(t => (t.raterCourseDay ?? 0) === d)] as [string, Test[]])
+        .map(d => [d ? `Day ${d}` : 'Added for this run', courseTests.filter(t => (t.raterCourseDay ?? 0) === d)] as [string, Test[]])
         .filter(([, ts]) => ts.length > 0)
     : [['', courseTests]]
 
@@ -294,23 +300,25 @@ function AudioSection({ course, courses, tests, testById, playingUrl, onPlay, sa
     <section className="space-y-3">
       <div className="flex items-baseline justify-between gap-2 flex-wrap">
         <h2 className="text-lg font-semibold">Audio <span className="text-muted-foreground font-normal">({courseTests.length})</span></h2>
-        {course.kind === 'rater' ? (
-          <Button size="sm" variant="outline" onClick={resyncRaterSet}>Update from Rater Course set</Button>
-        ) : (
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={resyncFromSet} disabled={set.length === 0}>Update from {label}</Button>
           <Button size="sm" onClick={() => setAdding(a => !a)}>{adding ? 'Done adding' : 'Add audio'}</Button>
-        )}
+        </div>
       </div>
-      <p className="text-xs text-muted-foreground">Everyone on this course counts as having heard all of this audio.</p>
+      <p className="text-xs text-muted-foreground">
+        Everyone on this course counts as having heard all of this audio. Starts from the {label}; add or remove recordings for this run only.
+        {leftOut > 0 && ` ${leftOut} recording${leftOut === 1 ? '' : 's'} from the set ${leftOut === 1 ? 'is' : 'are'} left out of this run.`}
+      </p>
 
-      {adding && course.kind === 'refresher' && (
+      {adding && (
         <AddAudioPanel course={course} courses={courses} tests={tests} playingUrl={playingUrl} onPlay={onPlay} save={save} />
       )}
 
       {courseTests.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          {course.kind === 'rater'
-            ? 'No audio — tag Training recordings with a Rater Course day in Test Bank, then update from the set.'
-            : 'No audio yet — use Add audio to choose recordings from the Training pool.'}
+          {set.length === 0
+            ? `No audio — the ${label} is empty. Tag Training recordings ${course.kind === 'rater' ? 'with a Rater Course day' : `as RC${course.number ?? '?'}`} in Test Bank, then update from the set.`
+            : `No audio yet — use “Update from ${label}”.`}
         </p>
       ) : (
         groups.map(([label, ts]) => (
@@ -319,11 +327,10 @@ function AudioSection({ course, courses, tests, testById, playingUrl, onPlay, sa
             <ul className="rounded-md border divide-y">
               {ts.map(t => (
                 <TestRow key={t.id} test={t} playing={playingUrl === t.recordingUrl} onPlay={onPlay}>
-                  {course.kind === 'refresher' && (
-                    <Button variant="ghost" size="icon" className="size-7" aria-label="Remove from course" onClick={() => remove(t.id)}>
-                      <X className="size-3.5" />
-                    </Button>
-                  )}
+                  {!setIds.has(t.id) && <span className="text-[10px] text-muted-foreground border rounded px-1">added for this run</span>}
+                  <Button variant="ghost" size="icon" className="size-7" aria-label="Remove from this run" onClick={() => remove(t.id)}>
+                    <X className="size-3.5" />
+                  </Button>
                 </TestRow>
               ))}
             </ul>
@@ -364,16 +371,16 @@ function AddAudioPanel({ course, courses, tests, playingUrl, onPlay, save }: {
 }) {
   const [search, setSearch] = useState('')
   const [onlyNew, setOnlyNew] = useState(true)
-  // Everyone on a refresher did the Initial Rater Course at some point, so
-  // its fixed set is assumed heard even where that run isn't recorded here.
-  const [hideRaterSet, setHideRaterSet] = useState(true)
+  // Recordings in a course set have been heard by everyone who took that
+  // course, including cohorts not recorded here — hidden by default.
+  const [hideSetAudio, setHideSetAudio] = useState(true)
 
   const exposure = useMemo(() => cohortExposure(courses, course), [courses, course])
   const inCourse = new Set(course.testDocIds ?? [])
 
   const candidates = tests
     .filter(t => t.category === 'training' && t.status === 'active' && !inCourse.has(t.id))
-    .filter(t => !hideRaterSet || !t.raterCourseDay)
+    .filter(t => !hideSetAudio || !inAnySet(t))
     .filter(t => !onlyNew || !exposure.has(t.id))
     .filter(t => {
       const s = search.toLowerCase()
@@ -394,8 +401,8 @@ function AddAudioPanel({ course, courses, tests, playingUrl, onPlay, save }: {
           New to everyone on this course
         </label>
         <label className="flex items-center gap-1.5 text-sm cursor-pointer">
-          <input type="checkbox" checked={hideRaterSet} onChange={e => setHideRaterSet(e.target.checked)} />
-          Hide Rater Course set
+          <input type="checkbox" checked={hideSetAudio} onChange={e => setHideSetAudio(e.target.checked)} />
+          Hide audio already in a course set
         </label>
       </div>
       {course.attendees.length === 0 && (

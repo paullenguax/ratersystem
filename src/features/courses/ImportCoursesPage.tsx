@@ -5,7 +5,7 @@ import { addDoc, collection, doc, serverTimestamp, updateDoc } from 'firebase/fi
 import { ChevronLeft } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import type { CourseAttendee } from '@/types'
-import { fetchCourses, mergeAttendees, raterCourseSet } from '@/lib/courses'
+import { fetchCourses, mergeAttendees, setForCourse } from '@/lib/courses'
 import {
   buildImport, COLUMN_LABELS, guessColumns, parseTable, type ColumnRole, type ImportGroup,
 } from '@/lib/courseImport'
@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 
-const ROLES: ColumnRole[] = ['name', 'course', 'startDate', 'endDate', 'number', 'email']
+const ROLES: ColumnRole[] = ['name', 'surname', 'course', 'startDate', 'endDate', 'number', 'email']
 const REQUIRED: ColumnRole[] = ['name', 'course']
 
 export function ImportCoursesPage() {
@@ -67,7 +67,6 @@ export function ImportCoursesPage() {
   async function runImport() {
     setImporting(true); setError('')
     try {
-      const set = raterCourseSet(tests).map(t => t.id)
       let created = 0, updated = 0
       for (const g of groups) {
         const incoming: CourseAttendee[] = g.rows.map(r => {
@@ -93,9 +92,9 @@ export function ImportCoursesPage() {
             trainerIds: [],
             canvasSections: [],
             attendees: mergeAttendees([], incoming, people),
-            // Rater runs take the Rater Course set if it's tagged yet; if not,
-            // "Apply Rater Course set" on the Courses page fills them later.
-            testDocIds: g.kind === 'rater' ? set : [],
+            // The run's set if it's tagged yet; if not, "Apply course sets"
+            // on the Courses page fills it later.
+            testDocIds: setForCourse(tests, g).map(t => t.id),
             notes: 'Imported from spreadsheet',
             createdAt: serverTimestamp(),
           })
@@ -120,8 +119,8 @@ export function ImportCoursesPage() {
         </Link>
         <h1 className="text-2xl font-semibold">Import past courses</h1>
         <p className="text-sm text-muted-foreground">
-          One row per attendee per course. Needs a name and the course type ("Initial", "Rater course", "Refresher 3", "RC3"…);
-          dates, email and a separate refresher-number column are optional. Recordings are added afterwards on each course's page.
+          One row per attendee per course. Needs a name and the course type (“Initial”, “RC3”, “RC1 (2022) & RC2 (2023)”, “Refresher 3”…);
+          a date is strongly recommended — each date becomes its own course run. Recordings come from each course's set in Test Bank.
         </p>
       </div>
 
@@ -189,10 +188,15 @@ export function ImportCoursesPage() {
               </div>
 
               {problems.length > 0 && (
-                <details className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" open={problems.length <= 5}>
-                  <summary className="cursor-pointer">{problems.length} row{problems.length === 1 ? '' : 's'} need a look</summary>
-                  <ul className="mt-1 space-y-0.5">
-                    {problems.map((p, i) => <li key={i}>Row {p.line}: {p.message}</li>)}
+                <details className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" open>
+                  <summary className="cursor-pointer">
+                    {problems.length} note{problems.length === 1 ? '' : 's'}
+                    {problems.some(p => p.skipped) && ` — ${problems.filter(p => p.skipped).length} row(s) skipped`}
+                  </summary>
+                  <ul className="mt-1 space-y-0.5 max-h-64 overflow-y-auto">
+                    {problems.map((p, i) => (
+                      <li key={i} className={p.skipped ? 'font-medium' : ''}>Row {p.line}: {p.message}</li>
+                    ))}
                   </ul>
                 </details>
               )}

@@ -9,12 +9,14 @@ export async function fetchCourses(): Promise<Course[]> {
     .sort((a, b) => (b.startDate ?? '').localeCompare(a.startDate ?? '') || a.name.localeCompare(b.name))
 }
 
-export function courseLabel(c: Pick<Course, 'kind' | 'number' | 'name'>): string {
-  return c.name || (c.kind === 'refresher' && c.number ? `Refresher Course ${c.number}` : 'Rater Course')
-}
-
-export function nextRefresherNumber(courses: Course[]): number {
-  return Math.max(0, ...courses.filter(c => c.kind === 'refresher').map(c => c.number ?? 0)) + 1
+// The newest refresher set in use (by courses or by tagged recordings) —
+// the default for a new refresher run. A brand-new set is this + 1.
+export function latestRefresherNumber(courses: Course[], tests: Test[]): number {
+  return Math.max(
+    0,
+    ...courses.filter(c => c.kind === 'refresher').map(c => c.number ?? 0),
+    ...tests.map(t => t.refresherNumber ?? 0),
+  ) || 1
 }
 
 // The Initial Rater Course's fixed audio set: Training tests tagged with a
@@ -23,6 +25,35 @@ export function raterCourseSet(tests: Test[]): Test[] {
   return tests
     .filter(t => t.category === 'training' && t.status === 'active' && t.raterCourseDay)
     .sort((a, b) => (a.raterCourseDay! - b.raterCourseDay!) || ((a.testId ?? 999) - (b.testId ?? 999)))
+}
+
+// Refresher set RC N: Training tests tagged with that number.
+export function refresherSet(tests: Test[], n: number): Test[] {
+  return tests
+    .filter(t => t.category === 'training' && t.status === 'active' && t.refresherNumber === n)
+    .sort((a, b) => (a.testId ?? 999) - (b.testId ?? 999))
+}
+
+// The set a run starts from: the Rater Course set, or its RC number's set.
+export function setForCourse(tests: Test[], c: Pick<Course, 'kind' | 'number'>): Test[] {
+  if (c.kind === 'rater') return raterCourseSet(tests)
+  return c.number ? refresherSet(tests, c.number) : []
+}
+
+// "Refresher Course 1 — February 2025", "Rater Course — July 2026"
+export function autoCourseName(kind: Course['kind'], number: number | null | undefined, startDate: string | null | undefined): string {
+  const when = startDate
+    ? new Date(startDate + 'T00:00:00').toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
+    : 'undated'
+  return kind === 'refresher' ? `Refresher Course ${number ?? '?'} — ${when}` : `Rater Course — ${when}`
+}
+
+export function setLabel(c: Pick<Course, 'kind' | 'number'>): string {
+  return c.kind === 'rater' ? 'Rater Course set' : c.number ? `RC${c.number} set` : 'refresher set'
+}
+
+export function inAnySet(t: Test): boolean {
+  return !!(t.raterCourseDay || t.refresherNumber)
 }
 
 const norm = (e?: string | null) => (e ?? '').toLowerCase().trim()

@@ -6,7 +6,7 @@ import { collection, addDoc, doc, updateDoc, deleteDoc, serverTimestamp } from '
 import { useQueryClient } from '@tanstack/react-query'
 import { db } from '@/lib/firebase'
 import type { Course, Person, Test } from '@/types'
-import { raterCourseSet } from '@/lib/courses'
+import { autoCourseName, setForCourse, setLabel } from '@/lib/courses'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -14,7 +14,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from '@/components/ui/sheet'
 
 const schema = z.object({
-  name: z.string().min(1, 'Required'),
+  // Blank = generated from the set number and start date
+  name: z.string().optional(),
   number: z.number().int().min(1).optional(),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
@@ -25,7 +26,7 @@ type FormData = z.infer<typeof schema>
 interface Props {
   open: boolean
   onClose: () => void
-  // Creating: which kind, and the number to suggest for a refresher
+  // Creating: which kind, and the refresher set to suggest (the newest)
   kind: Course['kind']
   suggestedNumber?: number
   course?: Course
@@ -45,8 +46,12 @@ export function CourseDrawer({ open, onClose, kind, suggestedNumber, course, peo
     .filter(p => p.role === 'admin' || p.isTrainer)
     .sort((a, b) => a.name.localeCompare(b.name))
 
-  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } =
+  const { register, handleSubmit, reset, watch, setError, formState: { errors, isSubmitting } } =
     useForm<FormData>({ resolver: zodResolver(schema) })
+  const numberValue = watch('number')
+  const startValue = watch('startDate')
+  const autoName = autoCourseName(effectiveKind, numberValue, startValue)
+  const startingSet = setForCourse(tests, { kind: effectiveKind, number: numberValue ?? null })
 
   useEffect(() => {
     if (!open) return
@@ -58,7 +63,7 @@ export function CourseDrawer({ open, onClose, kind, suggestedNumber, course, peo
       setTrainerIds(course.trainerIds ?? [])
     } else {
       reset({
-        name: kind === 'refresher' ? `Refresher Course ${suggestedNumber ?? 1}` : 'Rater Course — ',
+        name: '',
         number: kind === 'refresher' ? suggestedNumber : undefined,
         startDate: '', endDate: '', notes: '',
       })
@@ -67,8 +72,12 @@ export function CourseDrawer({ open, onClose, kind, suggestedNumber, course, peo
   }, [open, course, kind, suggestedNumber, reset])
 
   async function onSubmit(data: FormData) {
+    if (effectiveKind === 'refresher' && !data.number) {
+      setError('number', { message: 'Which RC set is this run of?' })
+      return
+    }
     const payload = {
-      name: data.name.trim(),
+      name: data.name?.trim() || autoName,
       number: effectiveKind === 'refresher' ? data.number ?? null : null,
       startDate: data.startDate || null,
       endDate: data.endDate || null,
@@ -81,9 +90,8 @@ export function CourseDrawer({ open, onClose, kind, suggestedNumber, course, peo
       const ref = await addDoc(collection(db, 'courses'), {
         ...payload,
         kind,
-        // Rater runs start from the current Rater Course set; refresher
-        // audio is chosen afterwards on the course page.
-        testDocIds: kind === 'rater' ? raterCourseSet(tests).map(t => t.id) : [],
+        // Starts from the run's set; per-run tweaks are made on the course page
+        testDocIds: startingSet.map(t => t.id),
         attendees: [],
         canvasSections: [],
         createdAt: serverTimestamp(),
@@ -115,18 +123,22 @@ export function CourseDrawer({ open, onClose, kind, suggestedNumber, course, peo
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4 py-4">
           <div className="space-y-1">
             <Label>Name</Label>
-            <Input {...register('name')} placeholder={effectiveKind === 'refresher' ? 'Refresher Course 7' : 'Rater Course — July 2026'} />
-            {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
+            <Input {...register('name')} placeholder={autoName} />
+            <p className="text-xs text-muted-foreground">Leave blank to use “{autoName}”.</p>
           </div>
 
           {effectiveKind === 'refresher' && (
             <div className="space-y-1">
-              <Label>Refresher number</Label>
-              <Input
-                type="number" min={1} className="w-32"
-                {...register('number', { setValueAs: v => (v === '' ? undefined : Number(v)) })}
-              />
-              <p className="text-xs text-muted-foreground">Next in sequence is suggested; change it when recording a past refresher.</p>
+              <Label>Refresher set</Label>
+              <div className="flex items-center gap-1">
+                <span className="text-sm text-muted-foreground">RC</span>
+                <Input
+                  type="number" min={1} className="w-24"
+                  {...register('number', { setValueAs: v => (v === '' ? undefined : Number(v)) })}
+                />
+              </div>
+              {errors.number && <p className="text-xs text-destructive">{errors.number.message}</p>}
+              <p className="text-xs text-muted-foreground">The newest set is suggested. A new set (e.g. RC{(suggestedNumber ?? 0) + 1}) starts empty until its recordings are tagged in Test Bank.</p>
             </div>
           )}
 
@@ -161,9 +173,9 @@ export function CourseDrawer({ open, onClose, kind, suggestedNumber, course, peo
             )}
           </div>
 
-          {!isEdit && effectiveKind === 'rater' && (
+          {!isEdit && (
             <p className="text-xs text-muted-foreground">
-              Starts with the current Rater Course set ({raterCourseSet(tests).length} recordings tagged Day 1–5 in Test Bank).
+              Starts with the {setLabel({ kind: effectiveKind, number: numberValue ?? null })} — {startingSet.length} recording{startingSet.length === 1 ? '' : 's'} tagged in Test Bank.
             </p>
           )}
 

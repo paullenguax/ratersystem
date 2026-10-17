@@ -29,6 +29,20 @@ function legacyRaterCourseDay(t: Test): number | null {
   return n >= 1 && n <= 5 ? n : null
 }
 
+function matchesSetFilter(t: Test, f: string): boolean {
+  if (f === 'all') return true
+  if (f === 'none') return !t.raterCourseDay && !t.refresherNumber
+  const [kind, n] = f.split(':')
+  return kind === 'day' ? t.raterCourseDay === Number(n) : t.refresherNumber === Number(n)
+}
+
+function setFilterLabel(f: string): string {
+  if (f === 'all') return 'Course set — any'
+  if (f === 'none') return 'Not in any course set'
+  const [kind, n] = f.split(':')
+  return kind === 'day' ? `Rater Course Day ${n}` : `RC${n} set`
+}
+
 // Moves tests into a non-certification pool. Each gets the next number in
 // that pool's own sequence (S/T), since its old number belongs to another
 // namespace and would usually collide there.
@@ -43,6 +57,7 @@ async function moveTests(tests: Test[], allTests: Test[], target: 'standardizati
       category: target,
       testId: next++,
       raterCourseDay: target === 'training' ? (t.raterCourseDay ?? legacyRaterCourseDay(t)) : null,
+      refresherNumber: target === 'training' ? (t.refresherNumber ?? null) : null,
     })
   }
   await batch.commit()
@@ -54,7 +69,8 @@ export function TestBankPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | Test['status']>('all')
   const [poolFilter, setPoolFilter] = useState<'all' | 'pool' | 'excluded'>('all')
   const [categoryFilter, setCategoryFilter] = useState<'all' | NonNullable<Test['category']>>('all')
-  const [dayFilter, setDayFilter] = useState<'all' | 'none' | '1' | '2' | '3' | '4' | '5'>('all')
+  // 'all' | 'none' (in no set) | 'day:N' (Rater Course day) | 'rc:N' (refresher set)
+  const [setFilter, setSetFilter] = useState('all')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [moving, setMoving] = useState(false)
   const queryClient = useQueryClient()
@@ -74,9 +90,38 @@ export function TestBankPage() {
       (statusFilter === 'all' || t.status === statusFilter) &&
       (poolFilter === 'all' || (poolFilter === 'excluded' ? !!t.excludeFromPool : !t.excludeFromPool)) &&
       (categoryFilter === 'all' || testCategory(t) === categoryFilter) &&
-      (dayFilter === 'all' || (dayFilter === 'none' ? !t.raterCourseDay : t.raterCourseDay === Number(dayFilter)))
+      matchesSetFilter(t, setFilter)
     )
-  }), [tests, search, typeFilter, statusFilter, poolFilter, categoryFilter, dayFilter])
+  }), [tests, search, typeFilter, statusFilter, poolFilter, categoryFilter, setFilter])
+
+  const rcNumbers = useMemo(
+    () => [...new Set(tests.map(t => t.refresherNumber).filter((n): n is number => !!n))].sort((a, b) => a - b),
+    [tests],
+  )
+
+  // Bulk-tag the selection into a set. Only Training audio can be in a set.
+  async function handleTag(field: 'refresherNumber' | 'raterCourseDay') {
+    const isRc = field === 'refresherNumber'
+    const input = prompt(isRc
+      ? 'Tag the selected Training tests as which refresher set? (e.g. 6 for RC6 — leave blank to remove from any RC set)'
+      : 'Put the selected Training tests on which Rater Course day (1–5)? Leave blank to remove them from the Rater Course set.')
+    if (input === null) return
+    const n = input.trim() === '' ? null : Number(input.replace(/\D/g, ''))
+    if (n !== null && (!Number.isInteger(n) || n < 1 || (!isRc && n > 5))) { alert(isRc ? 'Enter a set number like 6.' : 'Enter a day from 1 to 5.'); return }
+    const training = selectedTests.filter(t => t.category === 'training')
+    const skipped = selectedTests.length - training.length
+    if (training.length === 0) { alert('Only Training tests can be in a course set — move them to Training first.'); return }
+    setMoving(true)
+    try {
+      const batch = writeBatch(db)
+      training.forEach(t => batch.update(doc(db, 'test_bank', t.id), { [field]: n }))
+      await batch.commit()
+      await queryClient.invalidateQueries({ queryKey: ['tests'] })
+      if (skipped) alert(`${skipped} selected test${skipped === 1 ? ' isn\'t' : 's aren\'t'} Training audio and ${skipped === 1 ? 'was' : 'were'} left alone.`)
+    } finally {
+      setMoving(false)
+    }
+  }
 
   const selectedTests = tests.filter(t => selectedIds.has(t.id))
 
@@ -183,7 +228,14 @@ export function TestBankPage() {
       sortUndefined: 'last',
       cell: ({ row }) => {
         const t = row.original
-        if (t.raterCourseDay) return <Badge variant="outline">Rater Course · Day {t.raterCourseDay}</Badge>
+        if (t.raterCourseDay || t.refresherNumber) {
+          return (
+            <div className="flex gap-1 flex-wrap">
+              {t.raterCourseDay && <Badge variant="outline">Rater Course · Day {t.raterCourseDay}</Badge>}
+              {t.refresherNumber && <Badge variant="outline">RC{t.refresherNumber}</Badge>}
+            </div>
+          )
+        }
         // Legacy tag, shown faintly as a hint while sorting tests into pools
         if (t.courseTag || t.dayLabel) {
           return (
@@ -324,14 +376,15 @@ export function TestBankPage() {
             <SelectItem value="excluded">Excluded</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={dayFilter} onValueChange={v => setDayFilter(v as typeof dayFilter)}>
+        <Select value={setFilter} onValueChange={v => setSetFilter(v as string)}>
           <SelectTrigger className="w-48">
-            <SelectValue>{(v: string) => v === 'all' ? 'Rater Course — any' : v === 'none' ? 'Not in Rater Course' : `Rater Course Day ${v}`}</SelectValue>
+            <SelectValue>{(v: string) => setFilterLabel(v)}</SelectValue>
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Rater Course — any</SelectItem>
-            {['1', '2', '3', '4', '5'].map(d => <SelectItem key={d} value={d}>Rater Course Day {d}</SelectItem>)}
-            <SelectItem value="none">Not in Rater Course</SelectItem>
+            <SelectItem value="all">{setFilterLabel('all')}</SelectItem>
+            {['1', '2', '3', '4', '5'].map(d => <SelectItem key={d} value={`day:${d}`}>{setFilterLabel(`day:${d}`)}</SelectItem>)}
+            {rcNumbers.map(n => <SelectItem key={n} value={`rc:${n}`}>{setFilterLabel(`rc:${n}`)}</SelectItem>)}
+            <SelectItem value="none">{setFilterLabel('none')}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -342,6 +395,9 @@ export function TestBankPage() {
           <span className="text-muted-foreground">Move to:</span>
           <Button size="sm" variant="outline" disabled={moving} onClick={() => handleMove('training')}>Training</Button>
           <Button size="sm" variant="outline" disabled={moving} onClick={() => handleMove('standardization')}>In-session</Button>
+          <span className="text-muted-foreground ml-2">Tag:</span>
+          <Button size="sm" variant="outline" disabled={moving} onClick={() => handleTag('refresherNumber')}>RC set…</Button>
+          <Button size="sm" variant="outline" disabled={moving} onClick={() => handleTag('raterCourseDay')}>Rater Course day…</Button>
           <Button size="sm" variant="ghost" disabled={moving} onClick={() => setSelectedIds(new Set())}>Clear</Button>
           <span className="text-xs text-muted-foreground">To make a test exam-eligible (Certification), edit it individually.</span>
         </div>

@@ -560,16 +560,17 @@ export interface CourseAttendee {
 export interface Course {
   id: string
   kind: 'rater' | 'refresher'
-  // Refreshers are numbered in sequence (Refresher Course 1, 2, 3…)
+  // Refreshers: which set this run delivered (RC1, RC2…). The same set is
+  // run for many cohorts; each new number is a new set of recordings.
   number?: number | null
   name: string
   startDate?: string | null   // YYYY-MM-DD
   endDate?: string | null
   canvasSections?: { id: number; name: string }[]
   trainerIds?: string[]
-  // Rater runs: a copy of the Rater Course set (Test.raterCourseDay) taken
-  // when the run is created, so later changes to the set don't rewrite
-  // what an earlier cohort heard. Refresher runs: chosen by the trainer.
+  // A copy of the run's set (Test.raterCourseDay / Test.refresherNumber)
+  // taken when the run is created, so later changes to the set don't rewrite
+  // what an earlier cohort heard — plus any per-run tweaks by the trainer.
   testDocIds: string[]
   attendees: CourseAttendee[]
   notes?: string
@@ -614,9 +615,11 @@ export interface Test {
   // 'training' is audio played to trainees on rater/refresher courses.
   category?: 'rater_course' | 'standardization' | 'training'
   // Training audio only: which day (1–5) of the Initial Rater Course's fixed
-  // audio set this recording belongs to. Refresher audio isn't tagged here —
-  // it's attached to each refresher run instead.
+  // audio set this recording belongs to.
   raterCourseDay?: number | null
+  // Training audio only: which refresher set (RC1, RC2…) this recording
+  // belongs to. Every run of RC N starts from the recordings tagged N.
+  refresherNumber?: number | null
   // Legacy free-form course tags, superseded by raterCourseDay. No longer
   // editable; still shown read-only in the test drawer as a sorting hint.
   courseTag?: 'rater_course' | 'refresher_course' | 'other'
