@@ -1,7 +1,21 @@
 {
-  "functions": {
-    "source": "functions"
-  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default"
+    },
+    {
+      "source": "functions-py",
+      "codebase": "teac",
+      "runtime": "python312",
+      "ignore": [
+        "venv",
+        ".git",
+        "__pycache__",
+        "*.local"
+      ]
+    }
+  ],
   "firestore": {
     "rules": "firestore.rules"
   },
