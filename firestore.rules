@@ -89,6 +89,11 @@ service cloud.firestore {
     match /test_bank/{testId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
+      // Trainers can edit a recording's teaching notes from the Teach view,
+      // and nothing else on it.
+      allow update: if isTrainer() &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['teachingNotes', 'teachingNotesUpdatedBy', 'teachingNotesUpdatedAt']);
     }
 
     // ── courses ───────────────────────────────────────────────────────────────

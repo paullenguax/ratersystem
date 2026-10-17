@@ -11,6 +11,7 @@ import type { Test } from '@/types'
 import { formatTestNumber } from '@/lib/testNumber'
 import { CATEGORY_LABELS, LEGACY_COURSE_TAG_LABELS, type TestCategory } from '@/lib/testPool'
 import { HeardBySection } from '@/features/courses/CourseExposure'
+import { useCurrentPersonName } from '@/features/courses/MaterialsSection'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -34,13 +35,14 @@ const schema = z.object({
   raterCourseDay: z.enum(['none', '1', '2', '3', '4', '5']),
   refresherNumber: z.number().int().min(1).optional(),
   notes: z.string().optional(),
+  teachingNotes: z.string().optional(),
 })
 type FormData = z.infer<typeof schema>
 
 const EMPTY: FormData = {
   recordingUrl: '', candidateName: '', candidateNationality: '',
   testType: 'PPL', durationSeconds: undefined, status: 'active', testId: undefined, category: 'rater_course',
-  raterCourseDay: 'none', refresherNumber: undefined, notes: '',
+  raterCourseDay: 'none', refresherNumber: undefined, notes: '', teachingNotes: '',
 }
 
 interface Props {
@@ -52,6 +54,7 @@ interface Props {
 export function TestDrawer({ open, onClose, test }: Props) {
   const queryClient = useQueryClient()
   const isEdit = !!test
+  const myName = useCurrentPersonName()
   const [previewUrl, setPreviewUrl] = useState('')
   const [excludeFromPool, setExcludeFromPool] = useState(false)
 
@@ -94,6 +97,7 @@ export function TestDrawer({ open, onClose, test }: Props) {
         raterCourseDay: test.raterCourseDay ? String(test.raterCourseDay) as FormData['raterCourseDay'] : 'none',
         refresherNumber: test.refresherNumber ?? undefined,
         notes: test.notes ?? '',
+        teachingNotes: test.teachingNotes ?? '',
       } : EMPTY
       reset(vals)
       setPreviewUrl(test?.recordingUrl ?? '')
@@ -161,6 +165,12 @@ export function TestDrawer({ open, onClose, test }: Props) {
       refresherNumber: data.category === 'training' ? data.refresherNumber ?? null : null,
       excludeFromPool,
       notes: data.notes ?? '',
+      teachingNotes: data.teachingNotes ?? '',
+      // Stamp who last changed the teaching notes, only when they changed
+      ...((data.teachingNotes ?? '') !== (test?.teachingNotes ?? '') && {
+        teachingNotesUpdatedBy: myName,
+        teachingNotesUpdatedAt: serverTimestamp(),
+      }),
     }
     if (isEdit) {
       await updateDoc(doc(db, 'test_bank', test.id), payload)
@@ -325,7 +335,16 @@ export function TestDrawer({ open, onClose, test }: Props) {
           <div className="space-y-1">
             <Label>Notes</Label>
             <Textarea {...register('notes')} rows={3} />
+            <p className="text-xs text-muted-foreground">Admin-only.</p>
           </div>
+
+          {categoryValue === 'training' && (
+            <div className="space-y-1">
+              <Label>Teaching notes</Label>
+              <Textarea {...register('teachingNotes')} rows={5} className="font-mono text-xs" placeholder={'What to point out to the class, e.g.\n0:42 — listen for the readback error\n- **Fluency**: long pauses before numbers'} />
+              <p className="text-xs text-muted-foreground">Shown to trainers in the Teach view, where m:ss timestamps jump the player. Markdown works.</p>
+            </div>
+          )}
 
           {isEdit && test.category === 'training' && <HeardBySection testDocId={test.id} />}
 

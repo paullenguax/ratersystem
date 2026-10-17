@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { deleteField, doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { ChevronLeft, Play, Pause, FileText, NotebookPen, ExternalLink, Printer, Users } from 'lucide-react'
+import { ChevronLeft, Play, Pause, FileText, NotebookPen, ExternalLink, Printer, Users, MessageSquareText } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import type { Course, CourseMaterial, Test } from '@/types'
 import { fetchCourses } from '@/lib/courses'
@@ -12,8 +12,11 @@ import { fetchMaterials, materialsForCourse } from '@/lib/courseMaterials'
 import { formatTestNumber } from '@/lib/testNumber'
 import { printDocument } from '@/lib/printDocument'
 import { fetchAllTests, formatDateRange } from './CoursesPage'
+import { TeachingNotesView } from './TeachingNotes'
+import { useCurrentPersonName } from './MaterialsSection'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Textarea } from '@/components/ui/textarea'
 
 const SPEEDS = [0.75, 1, 1.25, 1.5]
 // Tab keys: '1'…'5' (Rater Course days), 'extra' (added for this run),
@@ -28,6 +31,12 @@ export function TeachPage() {
   const [nowPlaying, setNowPlaying] = useState<Test | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [speed, setSpeed] = useState(1)
+  const myName = useCurrentPersonName()
+  // Which recordings have their teaching notes open, and which one is being edited
+  const [openNotes, setOpenNotes] = useState<Set<string>>(new Set())
+  const [editingNotes, setEditingNotes] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
+  const [savingNotes, setSavingNotes] = useState(false)
 
   const { data: courses = [], isLoading } = useQuery({ queryKey: ['courses'], queryFn: fetchCourses })
   const { data: tests = [] } = useQuery({ queryKey: ['tests'], queryFn: fetchAllTests })
@@ -62,6 +71,43 @@ export function TeachPage() {
     tab.tests.forEach(t => { patch[`playedAt.${t.id}`] = deleteField() })
     await updateDoc(doc(db, 'courses', course!.id), patch)
     queryClient.invalidateQueries({ queryKey: ['courses'] })
+  }
+
+  function toggleNotes(id: string) {
+    setOpenNotes(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  async function saveNotes(t: Test) {
+    setSavingNotes(true)
+    try {
+      await updateDoc(doc(db, 'test_bank', t.id), {
+        teachingNotes: draft,
+        teachingNotesUpdatedBy: myName,
+        teachingNotesUpdatedAt: serverTimestamp(),
+      })
+      await queryClient.invalidateQueries({ queryKey: ['tests'] })
+      setEditingNotes(null)
+    } finally {
+      setSavingNotes(false)
+    }
+  }
+
+  // Jump to a teaching-note timestamp, loading that recording first if needed
+  function seek(t: Test, seconds: number) {
+    const el = audioRef.current
+    if (!el) return
+    if (nowPlaying?.id !== t.id) {
+      setNowPlaying(t)
+      el.src = t.recordingUrl
+      el.addEventListener('loadedmetadata', () => { el.currentTime = seconds; el.play() }, { once: true })
+      return
+    }
+    el.currentTime = seconds
+    el.play()
   }
 
   function playToggle(t: Test) {
@@ -162,24 +208,72 @@ export function TeachPage() {
                 {tab.tests.map(t => {
                   const isCurrent = nowPlaying?.id === t.id
                   const when = played[t.id]?.toDate?.()
+                  const hasNotes = !!t.teachingNotes?.trim()
+                  const notesOpen = openNotes.has(t.id)
                   return (
-                    <li key={t.id} className={`flex items-center gap-3 px-3 py-2 ${isCurrent ? 'bg-primary/5' : ''}`}>
-                      <input
-                        type="checkbox"
-                        className="size-4"
-                        checked={!!played[t.id]}
-                        onChange={e => setPlayed(t.id, e.target.checked)}
-                        aria-label={`Played ${t.candidateName}`}
-                      />
-                      <Button variant={isCurrent && isPlaying ? 'default' : 'outline'} size="icon" className="size-8 shrink-0" onClick={() => playToggle(t)} aria-label={isCurrent && isPlaying ? 'Pause' : 'Play'}>
-                        {isCurrent && isPlaying ? <Pause className="size-4" /> : <Play className="size-4" />}
-                      </Button>
-                      <span className="font-mono text-xs text-muted-foreground w-10 shrink-0">{formatTestNumber(t.testId, t.category)}</span>
-                      <span className={`flex-1 min-w-0 truncate text-sm ${played[t.id] ? 'text-muted-foreground line-through decoration-1' : ''}`}>{t.candidateName}</span>
-                      <Badge variant="outline" className="hidden sm:inline-flex">{t.testType}</Badge>
-                      <span className="text-xs text-muted-foreground w-12 text-right hidden sm:inline">
-                        {when ? when.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : ''}
-                      </span>
+                    <li key={t.id} className={isCurrent ? 'bg-primary/5' : ''}>
+                      <div className="flex items-center gap-3 px-3 py-2">
+                        <input
+                          type="checkbox"
+                          className="size-4"
+                          checked={!!played[t.id]}
+                          onChange={e => setPlayed(t.id, e.target.checked)}
+                          aria-label={`Played ${t.candidateName}`}
+                        />
+                        <Button variant={isCurrent && isPlaying ? 'default' : 'outline'} size="icon" className="size-8 shrink-0" onClick={() => playToggle(t)} aria-label={isCurrent && isPlaying ? 'Pause' : 'Play'}>
+                          {isCurrent && isPlaying ? <Pause className="size-4" /> : <Play className="size-4" />}
+                        </Button>
+                        <span className="font-mono text-xs text-muted-foreground w-10 shrink-0">{formatTestNumber(t.testId, t.category)}</span>
+                        <span className={`flex-1 min-w-0 truncate text-sm ${played[t.id] ? 'text-muted-foreground line-through decoration-1' : ''}`}>{t.candidateName}</span>
+                        <Badge variant="outline" className="hidden sm:inline-flex">{t.testType}</Badge>
+                        <span className="text-xs text-muted-foreground w-12 text-right hidden sm:inline">
+                          {when ? when.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : ''}
+                        </span>
+                        <Button
+                          variant={notesOpen ? 'secondary' : 'ghost'}
+                          size="icon"
+                          className={`size-8 shrink-0 ${hasNotes ? 'text-primary' : 'text-muted-foreground/50'}`}
+                          onClick={() => toggleNotes(t.id)}
+                          aria-expanded={notesOpen}
+                          aria-label={hasNotes ? `Teaching notes for ${t.candidateName}` : `Add teaching notes for ${t.candidateName}`}
+                          title={hasNotes ? 'Teaching notes' : 'No teaching notes yet — click to add'}
+                        >
+                          <MessageSquareText className="size-4" />
+                        </Button>
+                      </div>
+                      {notesOpen && (
+                        <div className="px-3 pb-3 pl-[4.75rem]">
+                          {editingNotes === t.id ? (
+                            <div className="space-y-2">
+                              <Textarea
+                                value={draft}
+                                onChange={e => setDraft(e.target.value)}
+                                rows={6}
+                                autoFocus
+                                className="font-mono text-xs"
+                                placeholder={'What to point out to the class, e.g.\n0:42 — listen for the readback error\n- **Fluency**: long pauses before numbers'}
+                              />
+                              <div className="flex items-center gap-2">
+                                <Button size="sm" onClick={() => saveNotes(t)} disabled={savingNotes}>{savingNotes ? 'Saving…' : 'Save notes'}</Button>
+                                <Button size="sm" variant="ghost" onClick={() => setEditingNotes(null)}>Cancel</Button>
+                                <span className="text-xs text-muted-foreground">Shared by every course that plays this recording. m:ss timestamps become jump buttons.</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="rounded-md border bg-muted/30 px-3 py-2 space-y-1">
+                              {hasNotes
+                                ? <TeachingNotesView markdown={t.teachingNotes!} onSeek={sec => seek(t, sec)} />
+                                : <p className="text-sm text-muted-foreground">No teaching notes for this recording yet.</p>}
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <button type="button" className="underline hover:text-foreground" onClick={() => { setDraft(t.teachingNotes ?? ''); setEditingNotes(t.id) }}>
+                                  {hasNotes ? 'Edit' : 'Add notes'}
+                                </button>
+                                {t.teachingNotesUpdatedBy && <span>· last edited by {t.teachingNotesUpdatedBy}</span>}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </li>
                   )
                 })}

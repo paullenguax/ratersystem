@@ -46,3 +46,6 @@ docs/*.xlsx
 *_overrides.py
 live/
 scratch/
+
+# Personal data (course attendee records) — this repository is public
+docs/*.csv

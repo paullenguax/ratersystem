@@ -655,5 +655,11 @@ export interface Test {
   }
   anchor?: boolean
   notes?: string
+  // Markdown shown to trainers in the Teach view: what to point out to the
+  // class. "1:23"-style timestamps become jump-to buttons. Trainers may edit
+  // these three fields (and only these) — see firestore.rules test_bank.
+  teachingNotes?: string
+  teachingNotesUpdatedBy?: string
+  teachingNotesUpdatedAt?: Timestamp
   createdAt?: Timestamp
 }
