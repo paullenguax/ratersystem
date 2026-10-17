@@ -30,3 +30,19 @@ public/player-shell
 
 # working spreadsheets shared for analysis — not repo content
 docs/*.xlsx
+
+# ── Secure test content ───────────────────────────────────────────────────
+# Live TEAC item content is secure test material and must never be committed
+# here. This repository is public; the rules repository (paullenguax/teac) is
+# private, and even there item content is excluded. Item text belongs in
+# Firestore behind access rules, never in the codebase.
+# See docs/teac-content-review-spec.md.
+*.xlsx
+*.xlsm
+*.docx
+*.wav
+*.mp3
+*_data.py
+*_overrides.py
+live/
+scratch/
