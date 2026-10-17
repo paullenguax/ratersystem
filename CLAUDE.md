@@ -48,6 +48,22 @@ Both sets of env vars are required for a full build.
 
 The item editor there (`ItemForm`/`BenchmarkItem` in `src/features/benchmark/`) matches the benchmark project's live Firestore schema exactly (`stem`/`form`/index-based `correct`/`stimulus`/`audioRef`/`notes`/`correctedAt`) — this schema drifted out of sync once before and silently corrupted saves; don't reintroduce fields that aren't in the actual documents without checking live data first.
 
+## Secure test content
+
+**This repository is public.** Live TEAC item content — Part 1/2/3/4 scripts,
+questions and recordings — is secure test material and must never be committed
+here, in any form: not as a workbook, not as a fixture, not as sample data in a
+test, not pasted into a comment or a commit message. `.gitignore` blocks the
+obvious file types; it cannot block a script pasted into a `.tsx`.
+
+Item text belongs in Firestore behind access rules. When you need example content
+while building, invent it — do not copy a real item.
+
+The rules, skills and validators that govern item generation live in
+`paullenguax/teac` (private). That repo is the source of truth for what a legal
+item is; never copy its rules into this one, because a second copy drifts within
+a week. See `docs/teac-content-review-spec.md`.
+
 ## SiteGround caching
 
 Hard refresh (Ctrl+Shift+R) after every deploy. The cache is aggressive.
