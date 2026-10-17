@@ -1,39 +1,54 @@
 # Admin tools  *(admin)*
 
-The **Admin** tab groups the setup and one‑off jobs.
+The **Admin** tab groups setup tools and one-off jobs. Each tile opens its
+own page.
 
 ## Canvas
 
-- **Canvas Sync** — run at the **start of every course**. Matches the
-  Canvas course roster to People records (by email, with a fuzzy name
-  fallback) and creates records for anyone new. This is how a Canvas user
-  gets a People record before they can sign in.
-- **Canvas Enroll** — the manual enrolment wizard for adding someone to a
-  Canvas course from here.
-- **Canvas Audit** / **Enrollment Log** — history of enrolment activity
-  (WooCommerce purchases, the wizard, and bulk sync all land in one log).
+- **Canvas Sync**: run this at the **start of every course**. It compares
+  the Canvas course roster with People, matching on Canvas account first
+  and then email. For each Canvas user it shows whether they're already set
+  up ("Canvas login ready") or **Not in system**. From there you can add new
+  people (choosing their role) or link existing ones, then apply the
+  changes. This is how a Canvas user gets a People record before they can
+  sign in. The page's settings panel also holds the Canvas API token, the
+  **notification email** that receives "scores confirmed" alerts, and the
+  list of Canvas courses the system works with. Add each year's new course
+  there.
+- **Enrol in Canvas**: a wizard for adding someone to a Canvas course
+  section. It looks up existing accounts, warns about duplicates, and can
+  move someone from a previous section.
+- **Enrolment Log**: one log of every Canvas enrolment, whether from a
+  WooCommerce purchase or the wizard. It flags probable duplicates and
+  name-matched accounts for you to check.
+- **Canvas Audit**: health checks. It scans for probable duplicate Canvas
+  accounts, and for students enrolled in more than one section of the same
+  course.
 
-Course and section naming follows a convention (a course clone per year, a
-section per cohort) — keep to it or Canvas Sync and self‑serve entry can
-misfire.
+Course and section naming follows a convention: one course clone per year
+and one section per cohort. Stick to it, or Canvas Sync and self-serve
+entry can go wrong. Give each section an **end date** once its cohort
+finishes. Sections that ended more than a week ago are hidden from the
+pickers.
 
-## Marking setup
+## Marking
 
-- **Auto‑assign Tests** — balanced test assignment across the raters in a
-  session, avoiding repeats.
-- **Import Rasch Results** — paste a Facets `.out` file to load rater
-  measures and the Wright map for Statistics and Reports.
-- **Import Historical Scores** — one‑off bulk import of older results.
+- **Auto-assign Tests**: builds balanced exam sets for a whole cohort. See
+  **Assignments → Creating assignments**.
+- **Practice Sessions**: live in-class scoring exercises. See **Practice
+  Sessions**.
+- **Import Historical Scores**: fills in scores for people the original
+  migration missed, from a scores CSV and a rater-number-to-name list. It
+  only matches people who already exist and never creates new ones.
+
+The Rasch analysis isn't here any more. It's run from the **Reports**
+page (and viewed live on **Statistics**).
 
 ## Assets and content
 
-- **Cert Assets** — per certificate type: upload a new template image, a
-  display image, or the source artwork. Changes apply to new certificates
-  and the public validation page immediately.
-- **Pronunciation** — admin for the pronunciation tool at
-  `lenguax.com/pronunciation/`.
-
-## Good to know
-
-Migration tools (import raters / tests / historical scores) are mostly done
-with; they're kept for the occasional backfill, not day‑to‑day use.
+- **Certificate Assets**: for each certificate type, upload a new template
+  image, display image or source (PSD) artwork. New certificates and the
+  public validation page use the change straight away.
+- **Pronunciation Tool**: admin for the pronunciation charts at
+  `lenguax.com/pronunciation/`. It manages each language's status, checks
+  storage for missing audio files, and generates voice-actor scripts.

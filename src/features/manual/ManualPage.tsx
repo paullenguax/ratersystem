@@ -17,7 +17,8 @@ interface Section {
   slug: string
   title: string
   file: string
-  roles: Role[] | 'all'
+  // 'trainer' follows the Courses tab: anyone with the Trainer tick, plus admins
+  roles: Role[] | 'all' | 'trainer'
 }
 
 // Order here is the order in the sidebar.
@@ -27,12 +28,14 @@ const SECTIONS: Section[] = [
   { slug: 'scoring', title: 'Scoring', file: 'scoring.md', roles: ['admin', 'senior_rater', 'trainee'] },
   { slug: 'standardization', title: 'Standardization', file: 'standardization.md', roles: ['admin', 'senior_rater', 'trainee', 'examiner'] },
   { slug: 'sample-collection', title: 'Sample Collection', file: 'sample-collection.md', roles: ['admin', 'senior_rater', 'trainee'] },
-  { slug: 'feedback-reports', title: 'Feedback Reports', file: 'feedback-reports.md', roles: ['admin', 'senior_rater'] },
+  { slug: 'feedback-reports', title: 'Feedback', file: 'feedback-reports.md', roles: ['admin', 'senior_rater'] },
   { slug: 'people', title: 'People', file: 'people.md', roles: ['admin'] },
   { slug: 'test-bank', title: 'Test Bank', file: 'test-bank.md', roles: ['admin'] },
   { slug: 'events-sessions', title: 'Events (Sessions)', file: 'events-sessions.md', roles: ['admin'] },
+  { slug: 'courses', title: 'Courses', file: 'courses.md', roles: 'trainer' },
   { slug: 'assignments', title: 'Assignments', file: 'assignments.md', roles: ['admin'] },
   { slug: 'scores', title: 'Scores', file: 'scores.md', roles: ['admin'] },
+  { slug: 'standardization-results', title: 'Standardization Results', file: 'standardization-results.md', roles: ['admin'] },
   { slug: 'statistics', title: 'Statistics', file: 'statistics.md', roles: ['admin'] },
   { slug: 'reports', title: 'Reports', file: 'reports.md', roles: ['admin'] },
   { slug: 'certificates', title: 'Certificates & Official Forms', file: 'certificates.md', roles: ['admin'] },
@@ -47,14 +50,17 @@ function bodyFor(file: string): string {
   return key ? FILES[key] : `# Not written yet\n\nThis section (\`${file}\`) hasn't been documented yet.`
 }
 
-function visibleTo(role: Role | null): Section[] {
-  return SECTIONS.filter(s => s.roles === 'all' || (role != null && s.roles.includes(role)))
+function visibleTo(role: Role | null, isTrainer: boolean): Section[] {
+  return SECTIONS.filter(s =>
+    s.roles === 'all' ? true
+      : s.roles === 'trainer' ? isTrainer
+        : role != null && s.roles.includes(role))
 }
 
 export function ManualPage() {
-  const { role } = useAuth()
+  const { role, isTrainer } = useAuth()
   const { slug } = useParams()
-  const sections = useMemo(() => visibleTo(role), [role])
+  const sections = useMemo(() => visibleTo(role, isTrainer), [role, isTrainer])
   const current = sections.find(s => s.slug === slug) ?? sections[0]
 
   if (slug && !sections.some(s => s.slug === slug)) {

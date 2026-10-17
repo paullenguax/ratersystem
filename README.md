@@ -1578,6 +1578,10 @@ sidebar as "User Manual".
 
 - **Reports page — event dropdowns grouped**: both event selectors (rater email and Run analysis) now list "Active" events — any score still unpublished — first, then "Completed (all scores published)" below, each newest first by latest score. Nothing is hidden; an event moves to Completed once everything in it is published.
 
+## User Manual
+
+`/manual` renders the Markdown in `docs/manual/*.md` (`ManualPage.tsx`); the `SECTIONS` list there sets sidebar order and who sees each page (`roles` array, `'all'`, or `'trainer'` for the Courses-tab audience). Keep these pages in step with UI changes — button names in **bold** match the on-screen labels.
+
 ## Last updated
 
-2026-10-16
+2026-10-17

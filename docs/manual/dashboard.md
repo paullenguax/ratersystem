@@ -1,18 +1,27 @@
 # Dashboard
 
-The landing page after you sign in. It's a summary and a set of shortcuts —
-nothing is edited here.
+The page you land on after signing in. It's a summary with shortcuts.
+Nothing is edited here.
 
-## What it shows
+## Raters, trainees and examiners
 
-- **Trainees / raters**: your current scoring assignment, if you have one,
-  with a button straight into the Scoring player, plus whether you've
-  confirmed your scores yet.
-- **Admins**: quick counts and links into the areas that usually need
-  attention (open assignments, recent self‑serve exam submissions, etc.).
+You see **My Assignments**: one card for each set of tests you still need to
+score, with the event name, a progress bar ("2/4 scored") and its status.
 
-## How to use it
+- Click a card to open **Scoring**, then pick the assignment from the list
+  there.
+- Once you've confirmed your scores, the card disappears because there's
+  nothing left to do.
+- "No active assignments" means nothing is waiting for you. When an admin
+  sets something up for you, it appears here.
 
-Treat it as a jumping‑off point. If you're a rater and there's a card
-saying you have tests to score, click through from there — it opens the
-right assignment for you automatically.
+## Admins
+
+- **Four counts** along the top: active raters, tests in the bank, open
+  events, and published scores.
+- **An amber banner**, "N self-serve submissions awaiting review", shows
+  trainees who have finished and confirmed a self-serve exam. Click it to go
+  to **Assignments**.
+- **Active assignments**: every assignment not yet published, with its
+  event, rater and progress (tests scored out of total). **View** opens the
+  score breakdown for that assignment (see **Assignments → Reviewing**).
