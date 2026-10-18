@@ -7,15 +7,15 @@ audio.
 
 Every test belongs to exactly one pool. The pool decides where a recording
 may be used. The buttons along the top (**All / Certification /
-In-session / Training**) switch between them.
+Standardization / Training**) switch between them.
 
 | Pool | Numbered | Used for |
 |---|---|---|
 | **Certification** | 1, 2, 3… | **Exams only.** These are the only recordings that end-of-course exams (self-serve or Auto-assign) can hand out. Keep them unheard before the exam. |
-| **In-session** | S1, S2… | Standardization exercises (the **Standardization** pipeline). |
+| **Standardization** | S1, S2… | Standardization exercises (the **Standardization** pipeline). |
 | **Training** | T1, T2… | Audio played on courses, and the only pool offered in **Practice Sessions**. It can never reach an exam. |
 
-Moving a test into In-session or Training gives it the next number in that
+Moving a test into Standardization or Training gives it the next number in that
 pool. Moving a test **into Certification** is deliberately a one-at-a-time
 job: open the test, click **Edit**, and change its **Category**.
 
@@ -41,7 +41,7 @@ Filters: search (candidate or nationality), test type, status
 ## Moving several tests at once
 
 Tick the rows (or the header box to tick everything shown). A bar appears:
-**Move to: Training / In-session**. It asks you to confirm, then renumbers
+**Move to: Training / Standardization**. It asks you to confirm, then renumbers
 the tests in their new pool. **Clear** unticks everything.
 
 ## Adding or editing a test
@@ -56,7 +56,7 @@ the tests in their new pool. **Clear** unticks everything.
   recording as part of the fixed Initial Rater Course audio set. Refresher
   audio isn't tagged here. It's chosen for each refresher run on
   **Courses**.
-- **Test number**: leave it blank for In-session or Training tests and the
+- **Test number**: leave it blank for Standardization or Training tests and the
   next number is filled in. The system blocks a duplicate number within the
   same pool.
 - **Exclude from rater course pool**: keeps a Certification test out of

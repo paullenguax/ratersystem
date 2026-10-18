@@ -9,7 +9,7 @@ export function CategoryBadge({ category }: { category?: Category }) {
   if (category === 'standardization') {
     return (
       <span className="text-[10px] text-violet-700 bg-violet-50 border border-violet-200 rounded px-1 py-0.5 font-normal">
-        in-session
+        standardization
       </span>
     )
   }

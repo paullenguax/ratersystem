@@ -252,7 +252,7 @@ export function AssignmentsPage() {
           <SelectContent>
             <SelectItem value="all">All types</SelectItem>
             <SelectItem value="rater_course">Certification</SelectItem>
-            <SelectItem value="standardization">In-session</SelectItem>
+            <SelectItem value="standardization">Standardization</SelectItem>
           </SelectContent>
         </Select>
         <span className="text-xs text-muted-foreground ml-auto">

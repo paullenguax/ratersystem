@@ -315,7 +315,7 @@ export function TestBankPage() {
         {([
           ['all', 'All'],
           ['rater_course', 'Certification'],
-          ['standardization', 'In-session'],
+          ['standardization', 'Standardization'],
           ['training', 'Training'],
         ] as const).map(([value, label]) => (
           <button
@@ -394,7 +394,7 @@ export function TestBankPage() {
           <span className="font-medium">{selectedTests.length} selected</span>
           <span className="text-muted-foreground">Move to:</span>
           <Button size="sm" variant="outline" disabled={moving} onClick={() => handleMove('training')}>Training</Button>
-          <Button size="sm" variant="outline" disabled={moving} onClick={() => handleMove('standardization')}>In-session</Button>
+          <Button size="sm" variant="outline" disabled={moving} onClick={() => handleMove('standardization')}>Standardization</Button>
           <span className="text-muted-foreground ml-2">Tag:</span>
           <Button size="sm" variant="outline" disabled={moving} onClick={() => handleTag('refresherNumber')}>RC set…</Button>
           <Button size="sm" variant="outline" disabled={moving} onClick={() => handleTag('raterCourseDay')}>Rater Course day…</Button>

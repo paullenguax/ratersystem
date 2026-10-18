@@ -14,7 +14,7 @@ Click **New session** and fill in:
 - **Type**: Rater Course, Refresher Course, Reliability Check, Calibration,
   Examiner Standardization, Ad hoc, or Historical Import. This is only a
   label for organising. It doesn't restrict which kind of assignment
-  (Certification or In-session) the event can hold. Once any scores have
+  (Certification or Standardization) the event can hold. Once any scores have
   been submitted for the event, the type is **locked**.
 - **Status**:
   - **Open**: the event is in use. Only open events appear when you create

@@ -12,7 +12,7 @@ amber **self-serve** means the trainee created the assignment themselves
 through the exam link.
 
 Filters: **Hide published**, **Senior raters only**, and the type
-(**Certification** or **In-session**).
+(**Certification** or **Standardization**).
 
 Buttons on each row:
 
@@ -31,7 +31,7 @@ There are four ways:
 - **Self-serve** (most exams): a trainee using `/take-test` gets a 4-test
   Certification set built automatically. You don't need to do anything.
 - **New assignment**: pick the **Assignment type** (Certification or
-  In-session), an open **Event**, the **Rater**, and tick the **Tests**.
+  Standardization), an open **Event**, the **Rater**, and tick the **Tests**.
   Tests the rater has already scored are hidden, so you don't repeat one by
   accident. The type can't be changed afterwards. If you edit an assignment
   and untick every test, the assignment is deleted.
@@ -79,5 +79,5 @@ join the main pool that **Scores**, **Statistics** and future Rasch
 analyses count as established. It **can't be undone**, so do it after
 you've sent the feedback (**Reports**).
 
-In-session (standardization) assignments have no publish step. Their scores
+Standardization assignments have no publish step. Their scores
 count as soon as they're saved, so the button doesn't appear.

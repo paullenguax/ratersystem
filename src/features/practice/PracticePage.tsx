@@ -69,7 +69,7 @@ async function fetchTests(): Promise<Test[]> {
     .map(d => ({ id: d.id, ...d.data() }) as Test)
     // Only Training audio — the recordings played live on courses — is
     // offered here. Certification tests must stay unseen until the final
-    // exam, and In-session (standardization) tests may eventually join the
+    // exam, and Standardization tests may eventually join the
     // exam pool, so neither is ever previewed in a live practice session.
     .filter(t => t.category === 'training')
     .sort((a, b) => (a.testId ?? 999) - (b.testId ?? 999))

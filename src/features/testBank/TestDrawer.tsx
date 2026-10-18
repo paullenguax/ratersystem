@@ -107,7 +107,7 @@ export function TestDrawer({ open, onClose, test }: Props) {
 
   useEffect(() => { setPreviewUrl(recordingUrlValue) }, [recordingUrlValue])
 
-  // In-session and Training tests are each numbered in their own sequence
+  // Standardization and Training tests are each numbered in their own sequence
   // (S1, S2… / T1, T2…), separate from the legacy Certification numbers —
   // auto-assigned here whenever the number is left blank, whether that's a
   // brand-new test or an existing test being switched into the category
@@ -138,10 +138,10 @@ export function TestDrawer({ open, onClose, test }: Props) {
     // A manually typed number always wins (this is also how the 3
     // standardization tests created before auto-numbering existed get
     // backfilled — just edit each one and type S1/S2/S3's plain number in).
-    // Otherwise, any test landing in the In-session category with a blank
+    // Otherwise, any test landing in the Standardization category with a blank
     // number gets the next one automatically — whether it's brand-new or an
     // existing Certification test switched over; everything else (non-
-    // In-session, blank) is left unnumbered, same as always.
+    // Standardization, blank) is left unnumbered, same as always.
     let testId = data.testId
     if (testId === undefined && data.category !== 'rater_course') {
       testId = await nextCategoryNumber(data.category)
@@ -272,7 +272,7 @@ export function TestDrawer({ open, onClose, test }: Props) {
                   <SelectTrigger><SelectValue>{(v: TestCategory) => CATEGORY_LABELS[v]}</SelectValue></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="rater_course">Certification</SelectItem>
-                    <SelectItem value="standardization">In-session</SelectItem>
+                    <SelectItem value="standardization">Standardization</SelectItem>
                     <SelectItem value="training">Training</SelectItem>
                   </SelectContent>
                 </Select>
@@ -318,7 +318,7 @@ export function TestDrawer({ open, onClose, test }: Props) {
             <Label>Test number</Label>
             <Input type="number" min={1} {...register('testId', {
               setValueAs: v => (v === '' ? undefined : Number(v)),
-            })} placeholder="Auto-assigned for in-session/training tests if left blank" />
+            })} placeholder="Auto-assigned for standardization/training tests if left blank" />
             {errors.testId && <p className="text-xs text-destructive">{errors.testId.message}</p>}
           </div>
 

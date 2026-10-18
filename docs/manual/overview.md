@@ -60,7 +60,7 @@ each step:
   work, such as one course cohort.
 - **Assignment**: one rater, one event, and a set of tests to score.
 - **Test**: one candidate recording in the **Test Bank**.
-- **Certification / In-session / Training**: the three pools a recording
+- **Certification / Standardization / Training**: the three pools a recording
   can belong to. Only Certification recordings are used in exams. See
   **Test Bank**.
 - **Publish**: makes an assignment's scores official, so they count
