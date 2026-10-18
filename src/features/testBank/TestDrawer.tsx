@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { collection, addDoc, doc, updateDoc, getDocs, query, where, serverTimestamp } from 'firebase/firestore'
+import { collection, addDoc, doc, updateDoc, getDocs, serverTimestamp } from 'firebase/firestore'
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage'
 import { useQueryClient } from '@tanstack/react-query'
 import { Upload } from 'lucide-react'
@@ -107,15 +107,25 @@ export function TestDrawer({ open, onClose, test }: Props) {
 
   useEffect(() => { setPreviewUrl(recordingUrlValue) }, [recordingUrlValue])
 
-  // Standardization and Training tests are each numbered in their own sequence
-  // (S1, S2… / T1, T2…), separate from the legacy Certification numbers —
-  // auto-assigned here whenever the number is left blank, whether that's a
-  // brand-new test or an existing test being switched into the category
-  // (which otherwise carries its old id straight into the new namespace,
-  // where it usually collides with a number already in use there).
-  async function nextCategoryNumber(category: 'standardization' | 'training'): Promise<number> {
-    const snap = await getDocs(query(collection(db, 'test_bank'), where('category', '==', category)))
-    const nums = snap.docs.map(d => (d.data().testId as number | undefined) ?? 0)
+  // Moving an existing test to another pool takes the next number in that
+  // pool (S3 → T13), the same as Test Bank's bulk move, rather than carrying
+  // its old number into the new namespace (S3 → T3, usually a collision).
+  // Switching back restores the original; a number typed afterwards wins.
+  const originalCategory = test ? (test.category ?? 'rater_course') : null
+  const categoryChanged = !!originalCategory && categoryValue !== originalCategory
+  useEffect(() => {
+    if (!open || !test) return
+    setValue('testId', categoryChanged ? undefined : (test.testId ?? undefined))
+  }, [open, test, categoryChanged, setValue])
+
+  // Each pool has its own number sequence (#1… / S1… / T1…). Scans the
+  // whole collection: legacy Certification tests have no `category` field,
+  // so a where('category', ...) query would miss them.
+  async function nextCategoryNumber(category: TestCategory): Promise<number> {
+    const snap = await getDocs(collection(db, 'test_bank'))
+    const nums = snap.docs
+      .filter(d => d.id !== test?.id && ((d.data().category as Test['category']) ?? 'rater_course') === category)
+      .map(d => (d.data().testId as number | undefined) ?? 0)
     return Math.max(0, ...nums) + 1
   }
 
@@ -135,15 +145,12 @@ export function TestDrawer({ open, onClose, test }: Props) {
   }
 
   async function onSubmit(data: FormData) {
-    // A manually typed number always wins (this is also how the 3
-    // standardization tests created before auto-numbering existed get
-    // backfilled — just edit each one and type S1/S2/S3's plain number in).
-    // Otherwise, any test landing in the Standardization category with a blank
-    // number gets the next one automatically — whether it's brand-new or an
-    // existing Certification test switched over; everything else (non-
-    // Standardization, blank) is left unnumbered, same as always.
+    // A manually typed number always wins. Otherwise a blank number is filled
+    // with the next in the pool for Standardization/Training tests, and for
+    // any test moved into another pool (including Certification). A brand-new
+    // Certification test left blank stays unnumbered, as before.
     let testId = data.testId
-    if (testId === undefined && data.category !== 'rater_course') {
+    if (testId === undefined && (data.category !== 'rater_course' || categoryChanged)) {
       testId = await nextCategoryNumber(data.category)
     }
 
@@ -318,7 +325,7 @@ export function TestDrawer({ open, onClose, test }: Props) {
             <Label>Test number</Label>
             <Input type="number" min={1} {...register('testId', {
               setValueAs: v => (v === '' ? undefined : Number(v)),
-            })} placeholder="Auto-assigned for standardization/training tests if left blank" />
+            })} placeholder={categoryChanged ? 'Next number in the new pool (or type one)' : 'Auto-assigned for standardization/training tests if left blank'} />
             {errors.testId && <p className="text-xs text-destructive">{errors.testId.message}</p>}
           </div>
 
