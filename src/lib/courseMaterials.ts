@@ -1,7 +1,7 @@
 import { addDoc, collection, deleteDoc, doc, getDocs, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { deleteObject, getDownloadURL, ref as storageRef, uploadBytesResumable } from 'firebase/storage'
 import { db, storage } from '@/lib/firebase'
-import type { Course, CourseMaterial } from '@/types'
+import type { Course, CourseMaterial, MaterialPlacement } from '@/types'
 
 export async function fetchMaterials(): Promise<CourseMaterial[]> {
   const snap = await getDocs(collection(db, 'course_materials'))
@@ -24,9 +24,26 @@ export const SCOPE_LABELS: Record<CourseMaterial['scope'], string> = {
   library: 'General documents',
 }
 
-// A run shows its own materials plus the shared ones for its kind.
-export function materialsForCourse(all: CourseMaterial[], course: Course): CourseMaterial[] {
-  return all.filter(m => (m.scope === 'course' && m.courseId === course.id) || m.scope === course.kind)
+// A run shows its own materials, the shared ones for its kind, and any
+// General documents set to show on its kind.
+export function materialsForCourse(all: CourseMaterial[], course: Pick<Course, 'id' | 'kind'>): CourseMaterial[] {
+  return all.filter(m =>
+    (m.scope === 'course' && m.courseId === course.id)
+    || m.scope === course.kind
+    || (m.scope === 'library' && (m.showIn ?? []).some(p => p.kind === course.kind)))
+}
+
+// Which days of a run an item appears on: a day number, or null for the
+// whole course. Refreshers have no days, so everything is whole-course.
+export function materialDays(m: CourseMaterial, course: Pick<Course, 'kind'>): (number | null)[] {
+  const days = m.scope === 'library'
+    ? (m.showIn ?? []).filter(p => p.kind === course.kind).map(p => p.day ?? null)
+    : [m.day ?? null]
+  return course.kind === 'refresher' ? [null] : [...new Set(days)]
+}
+
+export function placementLabel(p: MaterialPlacement): string {
+  return p.kind === 'refresher' ? 'Refreshers' : p.day ? `Rater · Day ${p.day}` : 'Rater · any day'
 }
 
 export async function uploadMaterialFile(

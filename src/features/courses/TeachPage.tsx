@@ -8,7 +8,7 @@ import { ChevronLeft, Play, Pause, FileText, NotebookPen, ExternalLink, Printer,
 import { db } from '@/lib/firebase'
 import type { Course, CourseMaterial, Test } from '@/types'
 import { fetchCourses } from '@/lib/courses'
-import { fetchMaterials, materialsForCourse } from '@/lib/courseMaterials'
+import { fetchMaterials, materialDays, materialsForCourse } from '@/lib/courseMaterials'
 import { formatTestNumber } from '@/lib/testNumber'
 import { printDocument } from '@/lib/printDocument'
 import { fetchAllTests, formatDateRange } from './CoursesPage'
@@ -126,8 +126,11 @@ export function TeachPage() {
   // This day's materials first, then the ones for the whole course
   const allMaterials = materialsForCourse(materials, course)
   const dayNumber = Number(tab.key)
-  const dayMaterials = course.kind === 'rater' && dayNumber ? allMaterials.filter(m => m.day === dayNumber) : []
-  const generalMaterials = allMaterials.filter(m => !m.day)
+  const dayMaterials = course.kind === 'rater' && dayNumber ? allMaterials.filter(m => materialDays(m, course).includes(dayNumber)) : []
+  const generalMaterials = allMaterials.filter(m => materialDays(m, course).includes(null))
+  // Every General document, folded at the bottom — minus any already shown above
+  const shownIds = new Set([...dayMaterials, ...generalMaterials].map(m => m.id))
+  const libraryDocs = materials.filter(m => m.scope === 'library' && !shownIds.has(m.id))
 
   return (
     <div className="space-y-4">
@@ -283,6 +286,16 @@ export function TeachPage() {
 
           {dayMaterials.length > 0 && <MaterialsList title={`${tab.label} materials`} items={dayMaterials} courseName={course.name} />}
           <MaterialsList title={course.kind === 'rater' ? 'Whole-course materials' : 'Materials'} items={generalMaterials} courseName={course.name} emptyHint />
+          {libraryDocs.length > 0 && (
+            <details className="group">
+              <summary className="cursor-pointer text-lg font-semibold">
+                General documents <span className="text-muted-foreground font-normal text-base">({libraryDocs.length})</span>
+              </summary>
+              <div className="pt-2">
+                <MaterialsList title="" items={libraryDocs} courseName={course.name} />
+              </div>
+            </details>
+          )}
         </div>
 
         <aside className="space-y-2">
@@ -313,7 +326,7 @@ function MaterialsList({ title, items, courseName, emptyHint }: {
 }) {
   return (
     <section className="space-y-2">
-      <h2 className="text-lg font-semibold">{title}</h2>
+      {title && <h2 className="text-lg font-semibold">{title}</h2>}
       {items.length === 0 ? (
         emptyHint ? <p className="text-sm text-muted-foreground">No materials — add them on the course page or under Materials &amp; documents.</p> : null
       ) : (

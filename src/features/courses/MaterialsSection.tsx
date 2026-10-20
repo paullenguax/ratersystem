@@ -2,12 +2,12 @@ import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore'
-import { FileText, NotebookPen, Upload, Plus, Trash2, Pencil, ExternalLink, FileDown } from 'lucide-react'
+import { FileText, NotebookPen, Upload, Plus, Trash2, Pencil, ExternalLink, FileDown, Eye } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
-import type { CourseMaterial } from '@/types'
+import type { CourseMaterial, MaterialPlacement } from '@/types'
 import {
-  createNote, deleteMaterial, formatSize, uploadMaterialFile, SCOPE_LABELS, type MaterialTarget,
+  createNote, deleteMaterial, formatSize, uploadMaterialFile, placementLabel, SCOPE_LABELS, type MaterialTarget,
 } from '@/lib/courseMaterials'
 import { fetchPeople } from './CoursesPage'
 import { Button } from '@/components/ui/button'
@@ -38,6 +38,7 @@ export function MaterialsSection({ title = 'Materials', materials, addTargets, a
   const fileInput = useRef<HTMLInputElement>(null)
   const mdInput = useRef<HTMLInputElement>(null)
   const [targetIndex, setTargetIndex] = useState(0)
+  const [placingId, setPlacingId] = useState<string | null>(null)
   const [day, setDay] = useState('')
   const [progress, setProgress] = useState<string | null>(null)
   const [error, setError] = useState('')
@@ -165,25 +166,46 @@ export function MaterialsSection({ title = 'Materials', materials, addTargets, a
             {showGroupHeadings && <h3 className="text-sm font-medium text-muted-foreground">{SCOPE_LABELS[scope]}</h3>}
             <ul className="rounded-md border divide-y">
               {ms.map(m => (
-                <li key={m.id} className="flex items-center gap-2 px-3 py-1.5 text-sm">
-                  {m.kind === 'markdown'
-                    ? <NotebookPen className="size-4 text-muted-foreground shrink-0" />
-                    : <FileText className="size-4 text-muted-foreground shrink-0" />}
-                  <button type="button" onClick={() => open(m)} className="flex-1 min-w-0 text-left truncate hover:underline">
-                    {m.title}
-                    {m.kind === 'file' && <ExternalLink className="inline size-3 ml-1 text-muted-foreground" />}
-                  </button>
-                  {m.day && <span className="text-xs text-muted-foreground border rounded px-1">Day {m.day}</span>}
-                  <span className="text-xs text-muted-foreground hidden sm:inline">
-                    {m.kind === 'file' ? formatSize(m.size) : 'note'}
-                    {m.updatedByName && ` · ${m.updatedByName}`}
-                  </span>
-                  <Button variant="ghost" size="icon" className="size-7" aria-label={`Rename ${m.title}`} onClick={() => handleRename(m)}>
-                    <Pencil className="size-3.5" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="size-7" aria-label={`Delete ${m.title}`} onClick={() => handleDelete(m)}>
-                    <Trash2 className="size-3.5" />
-                  </Button>
+                <li key={m.id} className="text-sm">
+                  <div className="flex items-center gap-2 px-3 py-1.5 flex-wrap">
+                    {m.kind === 'markdown'
+                      ? <NotebookPen className="size-4 text-muted-foreground shrink-0" />
+                      : <FileText className="size-4 text-muted-foreground shrink-0" />}
+                    <button type="button" onClick={() => open(m)} className="flex-1 min-w-0 text-left truncate hover:underline">
+                      {m.title}
+                      {m.kind === 'file' && <ExternalLink className="inline size-3 ml-1 text-muted-foreground" />}
+                    </button>
+                    {m.day && <span className="text-xs text-muted-foreground border rounded px-1">Day {m.day}</span>}
+                    {m.scope === 'library' && (
+                      (m.showIn ?? []).length
+                        ? (m.showIn ?? []).map(p => (
+                            <span key={`${p.kind}-${p.day ?? 'any'}`} className="text-[10px] text-teal-800 bg-teal-50 border border-teal-200 rounded px-1">{placementLabel(p)}</span>
+                          ))
+                        : <span className="text-[10px] text-muted-foreground border rounded px-1">Not on any course</span>
+                    )}
+                    <span className="text-xs text-muted-foreground hidden sm:inline">
+                      {m.kind === 'file' ? formatSize(m.size) : 'note'}
+                      {m.updatedByName && ` · ${m.updatedByName}`}
+                    </span>
+                    <Button variant="ghost" size="icon" className="size-7" aria-label={`Rename ${m.title}`} onClick={() => handleRename(m)}>
+                      <Pencil className="size-3.5" />
+                    </Button>
+                    {m.scope === 'library' && (
+                      <Button
+                        variant={placingId === m.id ? 'secondary' : 'ghost'} size="sm" className="h-7 px-2 text-xs"
+                        aria-expanded={placingId === m.id}
+                        onClick={() => setPlacingId(placingId === m.id ? null : m.id)}
+                      >
+                        <Eye className="size-3.5 mr-1" /> Show in…
+                      </Button>
+                    )}
+                    <Button variant="ghost" size="icon" className="size-7" aria-label={`Delete ${m.title}`} onClick={() => handleDelete(m)}>
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </div>
+                  {placingId === m.id && (
+                    <PlacementEditor material={m} onDone={() => { setPlacingId(null); refresh() }} />
+                  )}
                 </li>
               ))}
             </ul>
@@ -191,5 +213,60 @@ export function MaterialsSection({ title = 'Materials', materials, addTargets, a
         ))
       )}
     </section>
+  )
+}
+
+// Where a General document also appears. "Any day" and specific days are
+// mutually exclusive for rater courses — any day already shows on every day.
+function PlacementEditor({ material, onDone }: { material: CourseMaterial; onDone: () => void }) {
+  const initial = material.showIn ?? []
+  const [raterAny, setRaterAny] = useState(initial.some(p => p.kind === 'rater' && !p.day))
+  const [raterDays, setRaterDays] = useState<number[]>(initial.filter(p => p.kind === 'rater' && p.day).map(p => p.day!))
+  const [refresher, setRefresher] = useState(initial.some(p => p.kind === 'refresher'))
+  const [saving, setSaving] = useState(false)
+
+  function toggleDay(d: number) {
+    setRaterAny(false)
+    setRaterDays(ds => ds.includes(d) ? ds.filter(x => x !== d) : [...ds, d].sort())
+  }
+
+  async function save() {
+    const showIn: MaterialPlacement[] = [
+      ...(raterAny ? [{ kind: 'rater' as const, day: null }] : raterDays.map(d => ({ kind: 'rater' as const, day: d }))),
+      ...(refresher ? [{ kind: 'refresher' as const, day: null }] : []),
+    ]
+    setSaving(true)
+    try {
+      await updateDoc(doc(db, 'course_materials', material.id), { showIn })
+      onDone()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const chip = (on: boolean) =>
+    `px-2 py-0.5 rounded border text-xs ${on ? 'bg-primary text-primary-foreground border-primary' : 'border-input hover:bg-muted'}`
+
+  return (
+    <div className="mx-3 mb-2 rounded-md border bg-muted/30 p-3 space-y-2">
+      <p className="text-xs text-muted-foreground">
+        Also show this document on courses — it stays one General document, so edits show everywhere.
+      </p>
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <span className="text-xs font-medium w-28">Rater courses</span>
+        <button type="button" aria-pressed={raterAny} className={chip(raterAny)} onClick={() => { setRaterAny(!raterAny); setRaterDays([]) }}>Any day</button>
+        {[1, 2, 3, 4, 5].map(d => (
+          <button key={d} type="button" aria-pressed={raterDays.includes(d)} className={chip(raterDays.includes(d))} onClick={() => toggleDay(d)}>Day {d}</button>
+        ))}
+      </div>
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <span className="text-xs font-medium w-28">Refresher courses</span>
+        <button type="button" aria-pressed={refresher} className={chip(refresher)} onClick={() => setRefresher(!refresher)}>All refreshers</button>
+      </div>
+      <div className="flex gap-2">
+        <Button size="sm" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Button>
+        <Button size="sm" variant="ghost" onClick={onDone}>Cancel</Button>
+      </div>
+    </div>
   )
 }

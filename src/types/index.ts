@@ -580,6 +580,11 @@ export interface Course {
   createdAt?: Timestamp
 }
 
+export interface MaterialPlacement {
+  kind: 'rater' | 'refresher'
+  day?: number | null
+}
+
 // Teacher notes and handouts for courses — an uploaded file or a markdown
 // note edited in the app. Trainer-only.
 export interface CourseMaterial {
@@ -590,6 +595,10 @@ export interface CourseMaterial {
   courseId?: string | null
   // Optional, for rater-course material that belongs to one day (1–5)
   day?: number | null
+  // General documents only: also shown on these course types — a rater
+  // placement can name a day (1–5), or none for the whole course. The
+  // document stays a single General document wherever it appears.
+  showIn?: MaterialPlacement[]
   title: string
   kind: 'file' | 'markdown'
   fileName?: string | null
