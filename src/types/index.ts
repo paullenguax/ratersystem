@@ -601,6 +601,10 @@ export interface CourseMaterial {
   showIn?: MaterialPlacement[]
   title: string
   kind: 'file' | 'markdown'
+  // Markdown notes only: the running order for a session. Shown open at the
+  // top of the Teach tab it's placed on; "T12" references become play buttons
+  // and set the order of that tab's audio checklist.
+  isSessionPlan?: boolean
   fileName?: string | null
   storagePath?: string | null
   url?: string | null

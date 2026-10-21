@@ -97,6 +97,13 @@ export function MaterialEditorPage() {
   }
 
   const course = material?.courseId ? courses.find(c => c.id === material.courseId) : undefined
+
+  // Saved straight away (separately from the text), like the toggle in the materials list
+  async function toggleSessionPlan() {
+    if (!material) return
+    await updateDoc(doc(db, 'course_materials', material.id), { isSessionPlan: !material.isSessionPlan })
+    await queryClient.invalidateQueries({ queryKey: ['course-materials'] })
+  }
   const returnTo = (location.state as { returnTo?: string } | null)?.returnTo
     ?? (course ? `/courses/${course.id}` : '/courses/materials')
 
@@ -127,6 +134,15 @@ export function MaterialEditorPage() {
         {' · '}
         {dirty ? <span className="text-amber-700">Unsaved changes</span> : savedAt ? `Saved ${savedAt.toLocaleTimeString()}` : material.updatedByName ? `Last edited by ${material.updatedByName}` : ''}
       </p>
+      <label className="flex items-start gap-2 text-sm cursor-pointer select-none w-fit">
+        <input type="checkbox" className="mt-0.5" checked={!!material.isSessionPlan} onChange={toggleSessionPlan} />
+        <span>
+          <span className="font-medium">Session plan</span>
+          <span className="block text-xs text-muted-foreground">
+            Shown open at the top of the Teach view for {material.day ? `Day ${material.day}` : 'every day it applies to'}. Write recordings as <code>T12</code> to make them play buttons and set the order of the audio list.
+          </span>
+        </span>
+      </label>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Textarea

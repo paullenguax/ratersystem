@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore'
-import { FileText, NotebookPen, Upload, Plus, Trash2, Pencil, ExternalLink, FileDown, Eye } from 'lucide-react'
+import { FileText, NotebookPen, Upload, Plus, Trash2, Pencil, ExternalLink, FileDown, Eye, ListChecks } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
 import type { CourseMaterial, MaterialPlacement } from '@/types'
@@ -83,6 +83,11 @@ export function MaterialsSection({ title = 'Materials', materials, addTargets, a
       if (mdInput.current) mdInput.current.value = ''
       refresh()
     }
+  }
+
+  async function toggleSessionPlan(m: CourseMaterial) {
+    await updateDoc(doc(db, 'course_materials', m.id), { isSessionPlan: !m.isSessionPlan, updatedByName: myName, updatedAt: serverTimestamp() })
+    refresh()
   }
 
   async function handleRename(m: CourseMaterial) {
@@ -169,12 +174,15 @@ export function MaterialsSection({ title = 'Materials', materials, addTargets, a
                 <li key={m.id} className="text-sm">
                   <div className="flex items-center gap-2 px-3 py-1.5 flex-wrap">
                     {m.kind === 'markdown'
-                      ? <NotebookPen className="size-4 text-muted-foreground shrink-0" />
+                      ? m.isSessionPlan
+                        ? <ListChecks className="size-4 text-primary shrink-0" />
+                        : <NotebookPen className="size-4 text-muted-foreground shrink-0" />
                       : <FileText className="size-4 text-muted-foreground shrink-0" />}
                     <button type="button" onClick={() => open(m)} className="flex-1 min-w-0 text-left truncate hover:underline">
                       {m.title}
                       {m.kind === 'file' && <ExternalLink className="inline size-3 ml-1 text-muted-foreground" />}
                     </button>
+                    {m.isSessionPlan && <span className="text-[10px] text-primary border border-primary/40 rounded px-1">session plan</span>}
                     {m.day && <span className="text-xs text-muted-foreground border rounded px-1">Day {m.day}</span>}
                     {m.scope === 'library' && (
                       (m.showIn ?? []).length
@@ -190,6 +198,16 @@ export function MaterialsSection({ title = 'Materials', materials, addTargets, a
                     <Button variant="ghost" size="icon" className="size-7" aria-label={`Rename ${m.title}`} onClick={() => handleRename(m)}>
                       <Pencil className="size-3.5" />
                     </Button>
+                    {m.kind === 'markdown' && (
+                      <Button
+                        variant="ghost" size="sm" className="h-7 px-2 text-xs"
+                        aria-pressed={!!m.isSessionPlan}
+                        onClick={() => toggleSessionPlan(m)}
+                        title={m.isSessionPlan ? 'Stop using this as a session plan' : 'Show this note open at the top of Teach, with T-numbers as play buttons'}
+                      >
+                        {m.isSessionPlan ? 'Unset plan' : 'Make plan'}
+                      </Button>
+                    )}
                     {m.scope === 'library' && (
                       <Button
                         variant={placingId === m.id ? 'secondary' : 'ghost'} size="sm" className="h-7 px-2 text-xs"

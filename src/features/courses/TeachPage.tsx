@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { deleteField, doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { ChevronLeft, Play, Pause, FileText, NotebookPen, ExternalLink, Printer, Users, MessageSquareText } from 'lucide-react'
+import { ChevronLeft, Play, Pause, FileText, NotebookPen, ExternalLink, Printer, Users, MessageSquareText, ListChecks } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import type { Course, CourseMaterial, Test } from '@/types'
 import { fetchCourses } from '@/lib/courses'
@@ -12,7 +12,7 @@ import { fetchMaterials, materialDays, materialsForCourse } from '@/lib/courseMa
 import { formatTestNumber } from '@/lib/testNumber'
 import { printDocument } from '@/lib/printDocument'
 import { fetchAllTests, formatDateRange } from './CoursesPage'
-import { TeachingNotesView } from './TeachingNotes'
+import { TeachingNotesView, SessionPlanView, recordingRefsInOrder, type PlanRecording } from './TeachingNotes'
 import { useCurrentPersonName } from './MaterialsSection'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -132,6 +132,29 @@ export function TeachPage() {
   const shownIds = new Set([...dayMaterials, ...generalMaterials].map(m => m.id))
   const libraryDocs = materials.filter(m => m.scope === 'library' && !shownIds.has(m.id))
 
+  // Session plans placed on this tab show open at the top instead of in the
+  // materials lists. Their "T12" references can be any recording in the run.
+  const isPlan = (m: CourseMaterial) => m.kind === 'markdown' && !!m.isSessionPlan
+  const plans = [...dayMaterials, ...generalMaterials].filter(isPlan)
+  const planRecordings = new Map<number, PlanRecording>(
+    courseTests
+      .filter(t => t.category === 'training' && t.testId != null)
+      .map(t => [t.testId!, { id: t.id, label: formatTestNumber(t.testId, t.category), name: t.candidateName }]),
+  )
+  // The tab's checklist follows the order the plans mention recordings in;
+  // anything not mentioned keeps its place after them.
+  const planOrder = plans.flatMap(m => recordingRefsInOrder(m.markdown ?? ''))
+  const rank = (t: Test) => {
+    const i = t.testId != null ? planOrder.indexOf(t.testId) : -1
+    return i < 0 ? Number.MAX_SAFE_INTEGER : i
+  }
+  const orderedTests = tab.tests
+    .map((t, i) => ({ t, i }))
+    .sort((a, b) => rank(a.t) - rank(b.t) || a.i - b.i)
+    .map(x => x.t)
+  const playedIds = new Set(Object.keys(played))
+  const playById = (id: string) => { const t = testById.get(id); if (t) playToggle(t) }
+
   return (
     <div className="space-y-4">
       <div className="space-y-1">
@@ -194,6 +217,23 @@ export function TeachPage() {
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
         <div className="space-y-6 min-w-0">
+          {plans.map(plan => (
+            <section key={plan.id} className="rounded-md border-2 border-primary/30 bg-primary/[0.03] px-4 py-3 space-y-2">
+              <div className="flex items-center gap-2">
+                <ListChecks className="size-4 text-primary" />
+                <h2 className="text-lg font-semibold flex-1">{plan.title}</h2>
+                <Link to={`/courses/materials/${plan.id}`} state={{ returnTo: `/courses/${course.id}/teach?day=${tab.key}` }} className="text-xs text-muted-foreground hover:underline">Edit</Link>
+              </div>
+              <SessionPlanView
+                markdown={plan.markdown ?? ''}
+                recordings={planRecordings}
+                playedIds={playedIds}
+                currentId={nowPlaying?.id ?? null}
+                onPlay={playById}
+              />
+            </section>
+          ))}
+
           <section className="space-y-2">
             <div className="flex items-baseline justify-between gap-2">
               <h2 className="text-lg font-semibold">
@@ -208,7 +248,7 @@ export function TeachPage() {
               </p>
             ) : (
               <ul className="rounded-md border divide-y">
-                {tab.tests.map(t => {
+                {orderedTests.map(t => {
                   const isCurrent = nowPlaying?.id === t.id
                   const when = played[t.id]?.toDate?.()
                   const hasNotes = !!t.teachingNotes?.trim()
@@ -284,8 +324,8 @@ export function TeachPage() {
             )}
           </section>
 
-          {dayMaterials.length > 0 && <MaterialsList title={`${tab.label} materials`} items={dayMaterials} courseName={course.name} />}
-          <MaterialsList title={course.kind === 'rater' ? 'Whole-course materials' : 'Materials'} items={generalMaterials} courseName={course.name} emptyHint />
+          {dayMaterials.some(m => !isPlan(m)) && <MaterialsList title={`${tab.label} materials`} items={dayMaterials.filter(m => !isPlan(m))} courseName={course.name} />}
+          <MaterialsList title={course.kind === 'rater' ? 'Whole-course materials' : 'Materials'} items={generalMaterials.filter(m => !isPlan(m))} courseName={course.name} emptyHint />
           {libraryDocs.length > 0 && (
             <details className="group">
               <summary className="cursor-pointer text-lg font-semibold">
