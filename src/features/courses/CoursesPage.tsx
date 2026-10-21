@@ -26,7 +26,8 @@ export function formatDateRange(c: Pick<Course, 'startDate' | 'endDate'>): strin
   return c.endDate && c.endDate !== c.startDate ? `${fmt(c.startDate)} – ${fmt(c.endDate)}` : fmt(c.startDate)
 }
 
-const RECENT_DAYS = 90
+// How many finished courses show under Recent before the rest fold into Earlier
+const RECENT_COUNT = 3
 
 export function CoursesPage() {
   const navigate = useNavigate()
@@ -79,11 +80,15 @@ export function CoursesPage() {
     return names.length > 0 || normName(c.name).includes(query)
   })
 
-  // Anything that ended in the last RECENT_DAYS, is running, or is coming up
-  const cutoff = new Date(Date.now() - RECENT_DAYS * 86400000).toISOString().slice(0, 10)
-  const isRecent = (c: Course) => !!c.startDate && (c.endDate ?? c.startDate) >= cutoff
-  const recent = inTab.filter(isRecent)
-  const earlier = inTab.filter(c => !isRecent(c))
+  // Coming up: running now or in the future, soonest first. Recent: the last
+  // few that have finished, newest first. Earlier: everything else.
+  const today = new Date().toISOString().slice(0, 10)
+  const comingUp = inTab
+    .filter(c => !!c.startDate && (c.endDate ?? c.startDate) >= today)
+    .sort((a, b) => a.startDate!.localeCompare(b.startDate!))
+  const finished = inTab.filter(c => !comingUp.includes(c)) // already newest first; undated last
+  const recent = finished.filter(c => c.startDate).slice(0, RECENT_COUNT)
+  const earlier = finished.filter(c => !recent.includes(c))
 
   return (
     <div className="space-y-4">
@@ -159,11 +164,17 @@ export function CoursesPage() {
           ) : (
             <>
               <section className="space-y-2">
-                <h2 className="text-sm font-medium text-muted-foreground">Upcoming &amp; recent</h2>
-                {recent.length === 0
-                  ? <p className="text-sm text-muted-foreground">Nothing in the last {RECENT_DAYS / 30} months or coming up.</p>
-                  : <CourseTable rows={recent} />}
+                <h2 className="text-sm font-medium text-muted-foreground">Coming up</h2>
+                {comingUp.length === 0
+                  ? <p className="text-sm text-muted-foreground">Nothing scheduled — add a course with a start date to see it here.</p>
+                  : <CourseTable rows={comingUp} />}
               </section>
+              {recent.length > 0 && (
+                <section className="space-y-2">
+                  <h2 className="text-sm font-medium text-muted-foreground">Recent</h2>
+                  <CourseTable rows={recent} />
+                </section>
+              )}
               {earlier.length > 0 && (
                 <details className="group">
                   <summary className="cursor-pointer text-sm font-medium text-muted-foreground py-1">
