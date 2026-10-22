@@ -98,6 +98,15 @@ export function MaterialEditorPage() {
 
   const course = material?.courseId ? courses.find(c => c.id === material.courseId) : undefined
 
+  // Rater-course material can be tied to a day; saved straight away like the
+  // session-plan toggle, independent of the text
+  const canHaveDay = material?.scope === 'rater' || (material?.scope === 'course' && course?.kind === 'rater')
+  async function changeDay(value: string) {
+    if (!material) return
+    await updateDoc(doc(db, 'course_materials', material.id), { day: value ? Number(value) : null })
+    await queryClient.invalidateQueries({ queryKey: ['course-materials'] })
+  }
+
   // Saved straight away (separately from the text), like the toggle in the materials list
   async function toggleSessionPlan() {
     if (!material) return
@@ -130,7 +139,20 @@ export function MaterialEditorPage() {
       </div>
       <p className="text-xs text-muted-foreground">
         {course ? course.name : SCOPE_LABELS[material.scope]}
-        {material.day ? ` · Day ${material.day}` : ''}
+        {canHaveDay ? (
+          <>
+            {' · '}
+            <select
+              value={material.day ?? ''}
+              onChange={e => changeDay(e.target.value)}
+              aria-label="Day"
+              className="border rounded px-1 py-0.5 bg-background text-foreground"
+            >
+              <option value="">Any day</option>
+              {[1, 2, 3, 4, 5].map(d => <option key={d} value={d}>Day {d}</option>)}
+            </select>
+          </>
+        ) : material.day ? ` · Day ${material.day}` : ''}
         {' · '}
         {dirty ? <span className="text-amber-700">Unsaved changes</span> : savedAt ? `Saved ${savedAt.toLocaleTimeString()}` : material.updatedByName ? `Last edited by ${material.updatedByName}` : ''}
       </p>

@@ -3,7 +3,7 @@ import type { Test } from '@/types'
 export type TestCategory = NonNullable<Test['category']>
 
 // Display names for the three test pools. 'standardization' was shown as
-// "Standardization" while it doubled as the live-practice pool; since Practice
+// "In-session" while it doubled as the live-practice pool; since Practice
 // Sessions moved to Training (2026-10) it's labelled by what it is again.
 export const CATEGORY_LABELS: Record<TestCategory, string> = {
   rater_course: 'Certification',

@@ -90,6 +90,13 @@ export function MaterialsSection({ title = 'Materials', materials, addTargets, a
     refresh()
   }
 
+  async function changeDay(m: CourseMaterial, value: string) {
+    await updateDoc(doc(db, 'course_materials', m.id), {
+      day: value ? Number(value) : null, updatedByName: myName, updatedAt: serverTimestamp(),
+    })
+    refresh()
+  }
+
   async function handleRename(m: CourseMaterial) {
     const name = prompt('Rename to:', m.title)?.trim()
     if (!name || name === m.title) return
@@ -183,7 +190,20 @@ export function MaterialsSection({ title = 'Materials', materials, addTargets, a
                       {m.kind === 'file' && <ExternalLink className="inline size-3 ml-1 text-muted-foreground" />}
                     </button>
                     {m.isSessionPlan && <span className="text-[10px] text-primary border border-primary/40 rounded px-1">session plan</span>}
-                    {m.day && <span className="text-xs text-muted-foreground border rounded px-1">Day {m.day}</span>}
+                    {allowDay && m.scope !== 'library' ? (
+                      // Rater-course material: the day can be corrected in place
+                      <select
+                        value={m.day ?? ''}
+                        onChange={e => changeDay(m, e.target.value)}
+                        aria-label={`Day for ${m.title}`}
+                        className={`text-xs border rounded px-1 py-0.5 bg-background ${m.day ? '' : 'text-muted-foreground'}`}
+                      >
+                        <option value="">Any day</option>
+                        {[1, 2, 3, 4, 5].map(d => <option key={d} value={d}>Day {d}</option>)}
+                      </select>
+                    ) : m.day ? (
+                      <span className="text-xs text-muted-foreground border rounded px-1">Day {m.day}</span>
+                    ) : null}
                     {m.scope === 'library' && (
                       (m.showIn ?? []).length
                         ? (m.showIn ?? []).map(p => (
