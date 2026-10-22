@@ -42,8 +42,9 @@ each step:
 1. **Before the course**: run **Canvas Sync** so every attendee gets a
    People record (**Admin tools**), and record the course run and who's
    attending (**Courses**).
-2. **During the course**: play Training audio and collect the room's
-   scores live (**Practice Sessions**).
+2. **During the course**: run each session from the **Teach** view, which
+   has the day's plan, audio and materials in one place (**Teaching a
+   course**), and collect the room's scores live (**Practice Sessions**).
 3. **The exam**: each trainee scores 4 Certification recordings. They
    either use the self-serve link, which needs no setup, or you build their
    sets yourself (**Assignments**, **Auto-assign**).

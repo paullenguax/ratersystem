@@ -33,6 +33,7 @@ const SECTIONS: Section[] = [
   { slug: 'test-bank', title: 'Test Bank', file: 'test-bank.md', roles: ['admin'] },
   { slug: 'events-sessions', title: 'Events (Sessions)', file: 'events-sessions.md', roles: ['admin'] },
   { slug: 'courses', title: 'Courses', file: 'courses.md', roles: 'trainer' },
+  { slug: 'teach', title: 'Teaching a course', file: 'teach.md', roles: 'trainer' },
   { slug: 'assignments', title: 'Assignments', file: 'assignments.md', roles: ['admin'] },
   { slug: 'scores', title: 'Scores', file: 'scores.md', roles: ['admin'] },
   { slug: 'standardization-results', title: 'Standardization Results', file: 'standardization-results.md', roles: ['admin'] },
