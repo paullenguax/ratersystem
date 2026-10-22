@@ -1,11 +1,14 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { doc, updateDoc } from 'firebase/firestore'
+import { doc, serverTimestamp, updateDoc, type FieldValue } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { ChevronLeft, Play, Square, X, RefreshCw, UserPlus } from 'lucide-react'
 import { db, functions } from '@/lib/firebase'
 import type { Course, CourseAttendee, Person, Test } from '@/types'
+
+// A Firestore update to a course, which may use sentinels like serverTimestamp()
+type CoursePatch = { [K in keyof Course]?: Course[K] | FieldValue }
 import {
   fetchCourses, mergeAttendees, cohortExposure, setForCourse, setLabel, inAnySet,
 } from '@/lib/courses'
@@ -39,7 +42,7 @@ export function CourseDetailPage() {
   const course = courses.find(c => c.id === courseId)
   const testById = useMemo(() => new Map(tests.map(t => [t.id, t])), [tests])
 
-  async function save(patch: Partial<Course>) {
+  async function save(patch: CoursePatch) {
     if (!course) return
     await updateDoc(doc(db, 'courses', course.id), patch)
     await queryClient.invalidateQueries({ queryKey: ['courses'] })
@@ -121,7 +124,7 @@ export function CourseDetailPage() {
 function AttendeesSection({ course, people, save }: {
   course: Course
   people: Person[]
-  save: (p: Partial<Course>) => Promise<void>
+  save: (p: CoursePatch) => Promise<void>
 }) {
   const [sections, setSections] = useState<CanvasSection[] | null>(null)
   const [sectionId, setSectionId] = useState('')
@@ -270,14 +273,14 @@ function AudioSection({ course, courses, tests, testById, playingUrl, onPlay, sa
   testById: Map<string, Test>
   playingUrl: string | null
   onPlay: (url: string) => void
-  save: (p: Partial<Course>) => Promise<void>
+  save: (p: CoursePatch) => Promise<void>
 }) {
   const [adding, setAdding] = useState(false)
   const courseTests = (course.testDocIds ?? []).map(id => testById.get(id)).filter((t): t is Test => !!t)
   const missing = (course.testDocIds ?? []).length - courseTests.length
 
   async function remove(id: string) {
-    await save({ testDocIds: (course.testDocIds ?? []).filter(x => x !== id) })
+    await save({ testDocIds: (course.testDocIds ?? []).filter(x => x !== id), audioTweakedAt: serverTimestamp() })
   }
 
   const set = setForCourse(tests, course)
@@ -289,7 +292,7 @@ function AudioSection({ course, courses, tests, testById, playingUrl, onPlay, sa
   async function resyncFromSet() {
     const tweaks = courseTests.filter(t => !setIds.has(t.id)).length + leftOut
     if (!confirm(`Replace this course's audio with the current ${label} (${set.length} recordings)?${tweaks ? ' Changes made for this run will be lost.' : ''} Attendees will then count as having heard exactly those.`)) return
-    await save({ testDocIds: set.map(t => t.id) })
+    await save({ testDocIds: set.map(t => t.id), audioTweakedAt: null })
   }
 
   // Rater runs are grouped by the day each recording is tagged with
@@ -370,7 +373,7 @@ function AddAudioPanel({ course, courses, tests, playingUrl, onPlay, save }: {
   tests: Test[]
   playingUrl: string | null
   onPlay: (url: string) => void
-  save: (p: Partial<Course>) => Promise<void>
+  save: (p: CoursePatch) => Promise<void>
 }) {
   const [search, setSearch] = useState('')
   const [onlyNew, setOnlyNew] = useState(true)
@@ -392,7 +395,7 @@ function AddAudioPanel({ course, courses, tests, playingUrl, onPlay, save }: {
     .sort((a, b) => (exposure.get(a.id)?.length ?? 0) - (exposure.get(b.id)?.length ?? 0) || (a.testId ?? 999) - (b.testId ?? 999))
 
   async function add(id: string) {
-    await save({ testDocIds: [...(course.testDocIds ?? []), id] })
+    await save({ testDocIds: [...(course.testDocIds ?? []), id], audioTweakedAt: serverTimestamp() })
   }
 
   return (

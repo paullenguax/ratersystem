@@ -575,6 +575,10 @@ export interface Course {
   // Teach view checklist: when each recording was played to this cohort.
   // Progress only — attending still counts as having heard the run's audio.
   playedAt?: Record<string, Timestamp>
+  // Set when a trainer adds or removes a recording on this run by hand;
+  // cleared when the run is re-copied from its set. Bulk re-sync skips
+  // these runs so per-cohort changes aren't lost.
+  audioTweakedAt?: Timestamp | null
   attendees: CourseAttendee[]
   notes?: string
   createdAt?: Timestamp

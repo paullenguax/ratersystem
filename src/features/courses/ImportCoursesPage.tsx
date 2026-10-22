@@ -92,7 +92,7 @@ export function ImportCoursesPage() {
             trainerIds: [],
             canvasSections: [],
             attendees: mergeAttendees([], incoming, people),
-            // The run's set if it's tagged yet; if not, "Apply course sets"
+            // The run's set if it's tagged yet; if not, "Re-sync from sets"
             // on the Courses page fills it later.
             testDocIds: setForCourse(tests, g).map(t => t.id),
             notes: 'Imported from spreadsheet',

@@ -15,15 +15,20 @@ People record.
   - the **Start date** and **End date**
   - the **Trainers**: anyone with the Trainer tick
   - **Notes**, if needed
-  - for refreshers, the **Refresher number**. The next number in sequence
-    is suggested. Change it when you're recording a past refresher.
-- **Shared materials**: files and notes shown on every course of a type
-  (see *Materials* below).
+  - for refreshers, the **Refresher set** (RC number) this run delivers.
+    The newest set is suggested.
+- **Materials & documents**: files and notes shown on every course of a
+  type, plus general documents (see *Materials* below).
 - **Import past courses**: bulk-add old courses from a spreadsheet (see
   below).
-- If any rater courses have no audio yet, a banner offers **Apply Rater
-  Course set**. This fills all of them with the standard Rater Course
-  audio in one go.
+- **Re-sync from sets** copies a set's current recordings (the Rater Course
+  set, or an RC set) into its courses. Use it as you tag recordings in Test
+  Bank: tag Day 1, re-sync, tag Day 2, re-sync again. Courses where a
+  trainer added or removed audio by hand are skipped and listed. Once a set
+  is settled, fill in **Only courses starting on or after** so a later
+  change only reaches current and future cohorts, and past courses keep the
+  audio they actually heard. If any courses have no audio yet, a banner
+  opens this panel.
 
 Click a course to open it. **Edit** on the course page changes its details
 or deletes it.
@@ -42,16 +47,17 @@ or deletes it.
 
 ## Audio
 
-- **Rater courses** come with the standard Rater Course audio set (Training
-  recordings tagged with a day in **Test Bank**), grouped by day. If the set
-  has changed since the course was created, **Update from Rater Course
-  set** copies the current set in.
-- **Refresher courses** start with no audio. Click **Add audio** and search
-  the Training pool. Two filters are on by default:
+- Every course starts with its **set**: the Rater Course set (Training
+  recordings tagged with a day in **Test Bank**, grouped by day here) or
+  its RC set (recordings tagged with that RC number). **Update from set**
+  copies the current set in again, replacing any changes made for this
+  course.
+- **Add audio** adds a recording for this course only. Search the Training
+  pool; two filters are on by default:
   - **New to everyone on this course** hides anything an attendee has
     already heard on another course, so add the attendees first.
-  - **Hide Rater Course set** hides the standard set, since every refresher
-    attendee has already done the initial course.
+  - **Hide audio already in a course set** hides recordings that belong to
+    a set, since those have been heard by everyone who took that course.
 
   A **heard by N** label shows how many attendees have heard a recording.
   Hover it to see who. **Done adding** closes the picker.

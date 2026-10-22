@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { collection, doc, getDocs, writeBatch } from 'firebase/firestore'
-import { Plus, Search } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { collection, getDocs } from 'firebase/firestore'
+import { Plus, Search, RefreshCw } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import type { Course, Person, Test } from '@/types'
 import { fetchCourses, latestRefresherNumber, normName, setForCourse } from '@/lib/courses'
 import { CourseDrawer } from './CourseDrawer'
+import { ResyncPanel } from './ResyncPanel'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -38,26 +39,12 @@ export function CoursesPage() {
   const { data: courses = [], isLoading } = useQuery({ queryKey: ['courses'], queryFn: fetchCourses })
   const { data: people = [] } = useQuery({ queryKey: ['people'], queryFn: fetchPeople })
   const { data: tests = [] } = useQuery({ queryKey: ['tests'], queryFn: fetchAllTests })
-  const queryClient = useQueryClient()
+  const [showResync, setShowResync] = useState(false)
 
   // Runs created before their set was tagged (e.g. imported past courses)
-  // have no audio; this gives each one its set in one go.
+  // have no audio; Re-sync from sets fills them.
   const emptyRuns = courses.filter(c => !(c.testDocIds?.length))
-  const fillable = emptyRuns
-    .map(c => ({ course: c, set: setForCourse(tests, c) }))
-    .filter(x => x.set.length > 0)
-
-  async function applySets() {
-    if (!confirm(`Give ${fillable.length} course${fillable.length === 1 ? '' : 's'} with no audio the recordings from their set? Their attendees will then count as having heard them.`)) return
-    // Firestore batches cap at 500 writes
-    for (let i = 0; i < fillable.length; i += 450) {
-      const batch = writeBatch(db)
-      fillable.slice(i, i + 450).forEach(({ course, set }) =>
-        batch.update(doc(db, 'courses', course.id), { testDocIds: set.map(t => t.id) }))
-      await batch.commit()
-    }
-    queryClient.invalidateQueries({ queryKey: ['courses'] })
-  }
+  const fillable = emptyRuns.filter(c => setForCourse(tests, c).length > 0)
 
   // Set tabs (URL ?set=all|initial|rc3) and a person/course search
   const tabKey = params.get('set') ?? 'all'
@@ -100,6 +87,9 @@ export function CoursesPage() {
         <div className="flex gap-2 flex-wrap">
           <Button variant="ghost" nativeButton={false} render={<Link to="/courses/materials" />}>Materials &amp; documents</Button>
           <Button variant="ghost" nativeButton={false} render={<Link to="/courses/import" />}>Import past courses</Button>
+          <Button variant="ghost" onClick={() => setShowResync(s => !s)} aria-expanded={showResync}>
+            <RefreshCw className="size-4 mr-2" /> Re-sync from sets
+          </Button>
           <Button variant="outline" onClick={() => setCreating('rater')}>
             <Plus className="size-4 mr-2" /> Rater course
           </Button>
@@ -109,14 +99,23 @@ export function CoursesPage() {
         </div>
       </div>
 
-      {emptyRuns.length > 0 && (
+      {showResync && (
+        <ResyncPanel
+          courses={courses}
+          tests={tests}
+          initialSet={tabKey === 'all' ? 'initial' : tabKey}
+          onClose={() => setShowResync(false)}
+        />
+      )}
+
+      {emptyRuns.length > 0 && !showResync && (
         <div className="flex items-center gap-3 flex-wrap rounded-md border bg-muted/40 px-3 py-2 text-sm">
           <span>
             {emptyRuns.length} course{emptyRuns.length === 1 ? ' has' : 's have'} no audio yet.
             {fillable.length < emptyRuns.length && ' Tag recordings with a Rater Course day or RC set in Test Bank to fill the rest.'}
           </span>
           {fillable.length > 0 && (
-            <Button size="sm" variant="outline" onClick={applySets}>Apply course sets ({fillable.length})</Button>
+            <Button size="sm" variant="outline" onClick={() => setShowResync(true)}>Re-sync from sets…</Button>
           )}
         </div>
       )}
@@ -240,7 +239,7 @@ function CourseTable({ rows, matchedNames }: { rows: Course[]; matchedNames?: Ma
                 <TableCell className="text-right tabular-nums">
                   {c.testDocIds?.length
                     ? c.testDocIds.length
-                    : <span className="text-amber-700" title="No audio yet — tag its set in Test Bank, then Apply course sets">none</span>}
+                    : <span className="text-amber-700" title="No audio yet — tag its set in Test Bank, then Re-sync from sets">none</span>}
                 </TableCell>
                 <TableCell className="text-right">
                   <Button size="sm" variant="ghost" nativeButton={false} render={<Link to={`/courses/${c.id}/teach`} />} onClick={e => e.stopPropagation()}>
