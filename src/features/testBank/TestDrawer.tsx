@@ -34,6 +34,7 @@ const schema = z.object({
   // stripped back to null at the Firestore-payload boundary.
   raterCourseDay: z.enum(['none', '1', '2', '3', '4', '5']),
   refresherNumber: z.number().int().min(1).optional(),
+  refresherDay: z.enum(['none', '1', '2', '3']),
   notes: z.string().optional(),
   teachingNotes: z.string().optional(),
 })
@@ -42,7 +43,7 @@ type FormData = z.infer<typeof schema>
 const EMPTY: FormData = {
   recordingUrl: '', candidateName: '', candidateNationality: '',
   testType: 'PPL', durationSeconds: undefined, status: 'active', testId: undefined, category: 'rater_course',
-  raterCourseDay: 'none', refresherNumber: undefined, notes: '', teachingNotes: '',
+  raterCourseDay: 'none', refresherNumber: undefined, refresherDay: 'none', notes: '', teachingNotes: '',
 }
 
 interface Props {
@@ -96,6 +97,7 @@ export function TestDrawer({ open, onClose, test }: Props) {
         category: test.category ?? 'rater_course',
         raterCourseDay: test.raterCourseDay ? String(test.raterCourseDay) as FormData['raterCourseDay'] : 'none',
         refresherNumber: test.refresherNumber ?? undefined,
+        refresherDay: test.refresherDay ? String(test.refresherDay) as FormData['refresherDay'] : 'none',
         notes: test.notes ?? '',
         teachingNotes: test.teachingNotes ?? '',
       } : EMPTY
@@ -170,6 +172,7 @@ export function TestDrawer({ open, onClose, test }: Props) {
       category: data.category,
       raterCourseDay: data.category === 'training' && data.raterCourseDay !== 'none' ? Number(data.raterCourseDay) : null,
       refresherNumber: data.category === 'training' ? data.refresherNumber ?? null : null,
+      refresherDay: data.category === 'training' && data.refresherNumber && data.refresherDay !== 'none' ? Number(data.refresherDay) : null,
       excludeFromPool,
       notes: data.notes ?? '',
       teachingNotes: data.teachingNotes ?? '',
@@ -308,6 +311,15 @@ export function TestDrawer({ open, onClose, test }: Props) {
                   <Input type="number" min={1} className="w-20" placeholder="—" {...register('refresherNumber', {
                     setValueAs: v => (v === '' || v == null ? undefined : Number(v)),
                   })} />
+                  <Controller name="refresherDay" control={control} render={({ field }) => (
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger className="w-28" aria-label="Refresher day"><SelectValue>{(v: string) => v === 'none' ? 'No day' : `Day ${v}`}</SelectValue></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No day</SelectItem>
+                        {['1', '2', '3'].map(d => <SelectItem key={d} value={d}>Day {d}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  )} />
                 </div>
               </div>
               <p className="col-span-2 text-xs text-muted-foreground">

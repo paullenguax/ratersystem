@@ -81,7 +81,9 @@ teaching view.
 
 ### Audio
 
-- The course's recordings, grouped by day for a rater course. **▶** plays
+- The course's recordings, grouped by day. On a refresher course, admins
+  can set each recording's day with its **Day** drop-down. That sets it for
+  the whole RC set, so every course of that set uses it. **▶** plays
   one and **✕** removes it from this course.
 - **Update from set** copies the current set in again, replacing any
   changes made for this course.
@@ -122,9 +124,9 @@ In any section:
   notes* below).
 - **Import .md** turns existing Markdown files into editable notes, one
   note per file.
-- For rater-course material, pick the **day** before adding (*Any day* or
-  Day 1–5). Each item's **Day** drop-down changes it afterwards, for example
-  if a note was filed under the wrong day.
+- Pick the **day** before adding (*Any day*, or Day 1–5 for rater courses
+  and Day 1–3 for refreshers). Each item's **Day** drop-down changes it
+  afterwards, for example if a note was filed under the wrong day.
 - For refresher material, pick **All refreshers** or one set (**RC3 only**)
   before adding. RC3 notes then appear on every RC3 course, past and
   future, but not on RC4. Each item's **RC** drop-down changes it
@@ -141,10 +143,11 @@ A general document isn't on any course until you say so. Click **Show in…**
 on it and choose:
 
 - **Rater courses: Any day**, or particular days (Day 1–5)
-- **Refresher courses: All refreshers**, or particular RC sets
+- **Refresher courses: All refreshers**, or particular RC sets, then
+  **Any day** or particular days (Day 1–3)
 
 Click **Save**. Badges on the row show where it appears (*Rater · Day 2*,
-*RC3*, *All refreshers*), or *Not on any course*. It stays a single document, so an
+*RC3*, *RC3 · Day 1*, *All refreshers*), or *Not on any course*. It stays a single document, so an
 edit shows everywhere it appears. In the teaching view, every general
 document is also listed at the bottom, whether or not it's shown on the
 course.

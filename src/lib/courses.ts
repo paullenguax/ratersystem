@@ -31,7 +31,22 @@ export function raterCourseSet(tests: Test[]): Test[] {
 export function refresherSet(tests: Test[], n: number): Test[] {
   return tests
     .filter(t => t.category === 'training' && t.status === 'active' && t.refresherNumber === n)
-    .sort((a, b) => (a.testId ?? 999) - (b.testId ?? 999))
+    .sort((a, b) => ((a.refresherDay ?? 9) - (b.refresherDay ?? 9)) || ((a.testId ?? 999) - (b.testId ?? 999)))
+}
+
+// How many days each kind of course runs for
+export const COURSE_DAYS: Record<Course['kind'], number> = { rater: 5, refresher: 3 }
+
+export function courseDayNumbers(kind: Course['kind']): number[] {
+  return Array.from({ length: COURSE_DAYS[kind] }, (_, i) => i + 1)
+}
+
+// The day a recording is played on in a run: its Rater Course day, or its
+// day within the run's RC set. null when it has none (not given a day yet,
+// or added to this run by hand from outside the set).
+export function recordingDay(t: Test, c: Pick<Course, 'kind' | 'number'>): number | null {
+  if (c.kind === 'rater') return t.raterCourseDay ?? null
+  return t.refresherNumber === c.number ? t.refresherDay ?? null : null
 }
 
 // The set a run starts from: the Rater Course set, or its RC number's set.

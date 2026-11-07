@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronLeft } from 'lucide-react'
 import { fetchMaterials } from '@/lib/courseMaterials'
-import { fetchCourses, refresherNumberOptions } from '@/lib/courses'
+import { COURSE_DAYS, fetchCourses, refresherNumberOptions } from '@/lib/courses'
 import { MaterialsSection } from './MaterialsSection'
 import { fetchAllTests } from './CoursesPage'
 
@@ -37,7 +37,7 @@ export function SharedMaterialsPage() {
               title="General documents"
               materials={materials.filter(m => m.scope === 'library')}
               addTargets={[{ label: 'General documents', target: { scope: 'library' } }]}
-              allowDay={false}
+              dayCount={0}
               rcNumbers={rcNumbers}
               returnTo="/courses/materials"
             />
@@ -46,7 +46,7 @@ export function SharedMaterialsPage() {
             title="Rater courses"
             materials={materials.filter(m => m.scope === 'rater')}
             addTargets={[{ label: 'All rater courses', target: { scope: 'rater' } }]}
-            allowDay
+            dayCount={COURSE_DAYS.rater}
             returnTo="/courses/materials"
           />
           <MaterialsSection
@@ -54,7 +54,7 @@ export function SharedMaterialsPage() {
             materials={[...materials.filter(m => m.scope === 'refresher')]
               .sort((a, b) => (a.refresherNumber ?? 0) - (b.refresherNumber ?? 0))}
             addTargets={[{ label: 'Refresher courses', target: { scope: 'refresher' } }]}
-            allowDay={false}
+            dayCount={COURSE_DAYS.refresher}
             rcNumbers={rcNumbers}
             returnTo="/courses/materials"
           />

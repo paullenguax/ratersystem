@@ -19,8 +19,9 @@ interface Props {
   materials: CourseMaterial[]
   // Where "Upload"/"New note" can put things; the first is the default
   addTargets: AddTarget[]
-  // Rater-course material can be tied to a day
-  allowDay: boolean
+  // Days material can be tied to (5 for rater courses, 3 for refreshers);
+  // 0 for none
+  dayCount: number
   // RC sets refresher material can be filed under (RC3 notes but not RC4)
   rcNumbers?: number[]
   // Path the note editor's back link returns to
@@ -33,7 +34,9 @@ export function useCurrentPersonName(): string {
   return people.find(p => p.id === user?.uid)?.name ?? user?.email ?? 'Unknown'
 }
 
-export function MaterialsSection({ title = 'Materials', materials, addTargets, allowDay, rcNumbers, returnTo }: Props) {
+export function MaterialsSection({ title = 'Materials', materials, addTargets, dayCount, rcNumbers, returnTo }: Props) {
+  const allowDay = dayCount > 0
+  const dayNumbers = Array.from({ length: dayCount }, (_, i) => i + 1)
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const myName = useCurrentPersonName()
@@ -161,7 +164,7 @@ export function MaterialsSection({ title = 'Materials', materials, addTargets, a
         {allowDay && (
           <select value={day} onChange={e => setDay(e.target.value)} className="border border-input rounded-md px-2 py-1 bg-background">
             <option value="">Any day</option>
-            {[1, 2, 3, 4, 5].map(d => <option key={d} value={d}>Day {d}</option>)}
+            {dayNumbers.map(d => <option key={d} value={d}>Day {d}</option>)}
           </select>
         )}
         {chooseRc && (
@@ -214,7 +217,7 @@ export function MaterialsSection({ title = 'Materials', materials, addTargets, a
                     </button>
                     {m.isSessionPlan && <span className="text-[10px] text-primary border border-primary/40 rounded px-1">session plan</span>}
                     {allowDay && m.scope !== 'library' ? (
-                      // Rater-course material: the day can be corrected in place
+                      // The day can be corrected in place
                       <select
                         value={m.day ?? ''}
                         onChange={e => changeDay(m, e.target.value)}
@@ -222,7 +225,8 @@ export function MaterialsSection({ title = 'Materials', materials, addTargets, a
                         className={`text-xs border rounded px-1 py-0.5 bg-background ${m.day ? '' : 'text-muted-foreground'}`}
                       >
                         <option value="">Any day</option>
-                        {[1, 2, 3, 4, 5].map(d => <option key={d} value={d}>Day {d}</option>)}
+                        {[...new Set([...dayNumbers, ...(m.day ? [m.day] : [])])].sort((a, b) => a - b)
+                          .map(d => <option key={d} value={d}>Day {d}</option>)}
                       </select>
                     ) : m.day ? (
                       <span className="text-xs text-muted-foreground border rounded px-1">Day {m.day}</span>
@@ -302,6 +306,9 @@ function PlacementEditor({ material, rcNumbers, onDone }: { material: CourseMate
   const [refresherAll, setRefresherAll] = useState(initial.some(p => p.kind === 'refresher' && !p.number))
   const [refresherSets, setRefresherSets] = useState<number[]>(initial.filter(p => p.kind === 'refresher' && p.number).map(p => p.number!))
   const rcChoices = [...new Set([...rcNumbers, ...refresherSets])].sort((a, b) => a - b)
+  // …and on any day of those refreshers, or particular days (1–3)
+  const [refresherDays, setRefresherDays] = useState<number[]>(
+    [...new Set(initial.filter(p => p.kind === 'refresher' && p.day).map(p => p.day!))].sort())
   const [saving, setSaving] = useState(false)
 
   function toggleDay(d: number) {
@@ -315,11 +322,11 @@ function PlacementEditor({ material, rcNumbers, onDone }: { material: CourseMate
   }
 
   async function save() {
+    const sets = refresherAll ? [null] : refresherSets
+    const days = refresherDays.length ? refresherDays : [null]
     const showIn: MaterialPlacement[] = [
       ...(raterAny ? [{ kind: 'rater' as const, day: null }] : raterDays.map(d => ({ kind: 'rater' as const, day: d }))),
-      ...(refresherAll
-        ? [{ kind: 'refresher' as const, day: null, number: null }]
-        : refresherSets.map(n => ({ kind: 'refresher' as const, day: null, number: n }))),
+      ...sets.flatMap(n => days.map(d => ({ kind: 'refresher' as const, day: d, number: n }))),
     ]
     setSaving(true)
     try {
@@ -352,6 +359,20 @@ function PlacementEditor({ material, rcNumbers, onDone }: { material: CourseMate
           <button key={n} type="button" aria-pressed={refresherSets.includes(n)} className={chip(refresherSets.includes(n))} onClick={() => toggleSet(n)}>RC{n}</button>
         ))}
       </div>
+      {(refresherAll || refresherSets.length > 0) && (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-xs font-medium w-28">…on</span>
+          <button type="button" aria-pressed={!refresherDays.length} className={chip(!refresherDays.length)} onClick={() => setRefresherDays([])}>Any day</button>
+          {[1, 2, 3].map(d => (
+            <button
+              key={d} type="button" aria-pressed={refresherDays.includes(d)} className={chip(refresherDays.includes(d))}
+              onClick={() => setRefresherDays(ds => ds.includes(d) ? ds.filter(x => x !== d) : [...ds, d].sort())}
+            >
+              Day {d}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="flex gap-2">
         <Button size="sm" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Button>
         <Button size="sm" variant="ghost" onClick={onDone}>Cancel</Button>

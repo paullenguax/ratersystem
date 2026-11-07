@@ -6,10 +6,13 @@ plan, the audio to play, the students, and the materials. Open it with
 
 ## Layout
 
-- **Day tabs** (rater courses): **Day 1** to **Day 5**, each showing how
-  many of its recordings have been played (e.g. *3/8*). An **Added for this
-  run** tab appears if recordings were added to this course by hand.
-  Refresher courses have a single list.
+- **Day tabs**: **Day 1** to **Day 5** on a rater course, **Day 1** to
+  **Day 3** on a refresher. Each shows how many of its recordings have been
+  played (e.g. *3/8*). Each tab has that day's recordings, session plan and
+  materials.
+- An extra tab holds recordings without a day: **Added for this run** on a
+  rater course, **No day** on a refresher (recordings added by hand, or
+  ones not yet given a day in their RC set).
 - **Session plan** for the day, open at the top (see below).
 - **Audio checklist** for the day.
 - **Materials** for the day, then whole-course materials, then **General
@@ -61,8 +64,20 @@ day it's for.
 - **Edit** on the plan opens it and brings you back to the same day.
 
 A plan set to **Any day** shows on every day, which suits a whole-course
-overview. For refreshers, write one plan with a heading for each day, and
-file it under its RC set (**RC3 only**) so each set has its own plan.
+overview. For refreshers, file each day's plan under its RC set and day
+(**RC3 only**, **Day 2**), so each set has its own plan for each day.
+
+## Giving refresher recordings a day
+
+A refresher recording's day belongs to its RC set, so you set it once and
+every course of that set uses it. Either:
+
+- on a refresher course page, use the **Day** drop-down on each recording in
+  the **Audio** list (admins), or
+- in **Test Bank**, use the **Day** drop-down in the **Course** column, or
+  tick several and use **Tag: RC day…**.
+
+Recordings you haven't given a day yet appear under **No day**.
 
 ## Teaching notes on a recording
 

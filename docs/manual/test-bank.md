@@ -49,12 +49,19 @@ Tick the rows (or the header box to tick everything shown). A bar appears:
   renumbers the tests in their new pool.
 - **Tag: RC set…** puts the ticked Training tests in a refresher set (type
   the number, e.g. 6). Leave it blank to take them out of any RC set.
+- **Tag: RC day…** sets which day (1–3) of their refresher set the ticked
+  recordings are played on. Leave it blank for no day.
 - **Tag: Rater Course day…** puts them on a day of the Initial Rater Course
   (1–5). Leave it blank to take them out of the Rater Course set.
 - **Clear** unticks everything.
 
 Only Training tests can be in a course set; any others ticked are left
-alone. Tagging changes the *set*. To pass it on to courses, use **Re-sync
+alone.
+
+In the **Course** column, a recording in an RC set has a **Day** drop-down
+next to its RC badge, so you can set each day straight from the list. Click
+the **Course** heading to sort by it: Rater Course days first, then each RC
+set in day order. Tagging changes the *set*. To pass it on to courses, use **Re-sync
 from sets** on **Courses**.
 
 ## Adding or editing a test
@@ -66,7 +73,8 @@ from sets** on **Courses**.
 - **Status**: *Retired* tests stay on record but aren't assigned any more.
 - **Category**: the pool (see above).
 - **Initial Rater Course day** and **Refresher set** (Training tests only):
-  which course set the recording belongs to. A recording can be in both.
+  which course set the recording belongs to, and for a refresher set which
+  day (1–3) it's played on. A recording can be in both.
 - **Test number**: leave it blank for Standardization or Training tests and
   the next number is filled in. If you change the **Category**, the number
   clears and the test takes the next number in its new pool when you save.

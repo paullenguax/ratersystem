@@ -43,16 +43,16 @@ export function materialsForCourse(all: CourseMaterial[], course: Pick<Course, '
 }
 
 // Which days of a run an item appears on: a day number, or null for the
-// whole course. Refreshers have no days, so everything is whole-course.
+// whole course.
 export function materialDays(m: CourseMaterial, course: Pick<Course, 'kind' | 'number'>): (number | null)[] {
   const days = m.scope === 'library'
     ? (m.showIn ?? []).filter(p => placementReaches(p, course)).map(p => p.day ?? null)
     : [m.day ?? null]
-  return course.kind === 'refresher' ? [null] : [...new Set(days)]
+  return [...new Set(days)]
 }
 
 export function placementLabel(p: MaterialPlacement): string {
-  if (p.kind === 'refresher') return p.number ? `RC${p.number}` : 'All refreshers'
+  if (p.kind === 'refresher') return `${p.number ? `RC${p.number}` : 'All refreshers'}${p.day ? ` · Day ${p.day}` : ''}`
   return p.day ? `Rater · Day ${p.day}` : 'Rater · any day'
 }
 

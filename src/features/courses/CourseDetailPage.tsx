@@ -5,12 +5,14 @@ import { doc, serverTimestamp, updateDoc, type FieldValue } from 'firebase/fires
 import { httpsCallable } from 'firebase/functions'
 import { ChevronLeft, Play, Square, X, RefreshCw, UserPlus } from 'lucide-react'
 import { db, functions } from '@/lib/firebase'
+import { useAuth } from '@/context/AuthContext'
 import type { Course, CourseAttendee, Person, Test } from '@/types'
 
 // A Firestore update to a course, which may use sentinels like serverTimestamp()
 type CoursePatch = { [K in keyof Course]?: Course[K] | FieldValue }
 import {
   fetchCourses, mergeAttendees, cohortExposure, setForCourse, setLabel, inAnySet, refresherNumberOptions,
+  COURSE_DAYS, courseDayNumbers, recordingDay,
 } from '@/lib/courses'
 import { formatTestNumber } from '@/lib/testNumber'
 import { CourseDrawer } from './CourseDrawer'
@@ -107,7 +109,7 @@ export function CourseDetailPage() {
             ? { label: 'All rater courses', target: { scope: 'rater' as const } }
             : { label: 'All refresher courses', target: { scope: 'refresher' as const, refresherNumber: null } },
         ]}
-        allowDay={course.kind === 'rater'}
+        dayCount={COURSE_DAYS[course.kind]}
         rcNumbers={course.kind === 'refresher' ? refresherNumberOptions(courses, tests) : undefined}
         returnTo={`/courses/${course.id}`}
       />
@@ -282,6 +284,8 @@ function AudioSection({ course, courses, tests, testById, playingUrl, onPlay, sa
   save: (p: CoursePatch) => Promise<void>
 }) {
   const [adding, setAdding] = useState(false)
+  const { role } = useAuth()
+  const queryClient = useQueryClient()
   const courseTests = (course.testDocIds ?? []).map(id => testById.get(id)).filter((t): t is Test => !!t)
   const missing = (course.testDocIds ?? []).length - courseTests.length
 
@@ -295,18 +299,24 @@ function AudioSection({ course, courses, tests, testById, playingUrl, onPlay, sa
   const leftOut = set.filter(t => !inRun.has(t.id)).length
   const label = setLabel(course)
 
+  // A refresher recording's day belongs to its RC set, so changing it here
+  // changes it for every run of that set. Test Bank edits are admin-only.
+  const canSetDay = course.kind === 'refresher' && role === 'admin'
+  async function changeDay(t: Test, value: string) {
+    await updateDoc(doc(db, 'test_bank', t.id), { refresherDay: value ? Number(value) : null })
+    queryClient.invalidateQueries({ queryKey: ['tests'] })
+  }
+
   async function resyncFromSet() {
     const tweaks = courseTests.filter(t => !setIds.has(t.id)).length + leftOut
     if (!confirm(`Replace this course's audio with the current ${label} (${set.length} recordings)?${tweaks ? ' Changes made for this run will be lost.' : ''} Attendees will then count as having heard exactly those.`)) return
     await save({ testDocIds: set.map(t => t.id), audioTweakedAt: null })
   }
 
-  // Rater runs are grouped by the day each recording is tagged with
-  const groups: [string, Test[]][] = course.kind === 'rater'
-    ? [1, 2, 3, 4, 5, 0]
-        .map(d => [d ? `Day ${d}` : 'Added for this run', courseTests.filter(t => (t.raterCourseDay ?? 0) === d)] as [string, Test[]])
-        .filter(([, ts]) => ts.length > 0)
-    : [['', courseTests]]
+  // Grouped by the day each recording is tagged with in its set
+  const groups: [string, Test[]][] = [...courseDayNumbers(course.kind), 0]
+    .map(d => [d ? `Day ${d}` : course.kind === 'rater' ? 'Added for this run' : 'No day', courseTests.filter(t => (recordingDay(t, course) ?? 0) === d)] as [string, Test[]])
+    .filter(([, ts]) => ts.length > 0)
 
   return (
     <section className="space-y-3">
@@ -340,6 +350,18 @@ function AudioSection({ course, courses, tests, testById, playingUrl, onPlay, sa
               {ts.map(t => (
                 <TestRow key={t.id} test={t} playing={playingUrl === t.recordingUrl} onPlay={onPlay}>
                   {!setIds.has(t.id) && <span className="text-[10px] text-muted-foreground border rounded px-1">added for this run</span>}
+                  {canSetDay && t.refresherNumber === course.number && (
+                    <select
+                      value={t.refresherDay ?? ''}
+                      onChange={e => changeDay(t, e.target.value)}
+                      aria-label={`Day for ${t.candidateName}`}
+                      title={`Day in the RC${course.number} set — applies to every RC${course.number} course`}
+                      className={`text-xs border rounded px-1 py-0.5 bg-background ${t.refresherDay ? '' : 'text-muted-foreground'}`}
+                    >
+                      <option value="">No day</option>
+                      {courseDayNumbers('refresher').map(d => <option key={d} value={d}>Day {d}</option>)}
+                    </select>
+                  )}
                   <Button variant="ghost" size="icon" className="size-7" aria-label="Remove from this run" onClick={() => remove(t.id)}>
                     <X className="size-3.5" />
                   </Button>

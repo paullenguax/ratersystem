@@ -7,7 +7,7 @@ import remarkGfm from 'remark-gfm'
 import { ChevronLeft, Play, Pause, FileText, NotebookPen, ExternalLink, Printer, Users, MessageSquareText, ListChecks } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import type { Course, CourseMaterial, Test } from '@/types'
-import { fetchCourses } from '@/lib/courses'
+import { courseDayNumbers, fetchCourses, recordingDay } from '@/lib/courses'
 import { fetchMaterials, materialDays, materialsForCourse } from '@/lib/courseMaterials'
 import { formatTestNumber } from '@/lib/testNumber'
 import { printDocument } from '@/lib/printDocument'
@@ -19,8 +19,8 @@ import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 
 const SPEEDS = [0.75, 1, 1.25, 1.5]
-// Tab keys: '1'…'5' (Rater Course days), 'extra' (added for this run),
-// 'all' (refreshers — no day-by-day)
+// Tab keys: '1'…'5' (course days — 3 for refreshers), 'extra' (recordings
+// with no day: added for this run, or not yet given a day in their RC set)
 type Tab = string
 
 export function TeachPage() {
@@ -46,12 +46,14 @@ export function TeachPage() {
   const testById = useMemo(() => new Map(tests.map(t => [t.id, t])), [tests])
   const courseTests = (course?.testDocIds ?? []).map(id => testById.get(id)).filter((t): t is Test => !!t)
 
-  const tabs: { key: Tab; label: string; tests: Test[] }[] = !course ? [] : course.kind === 'rater'
-    ? [
-        ...[1, 2, 3, 4, 5].map(d => ({ key: String(d), label: `Day ${d}`, tests: courseTests.filter(t => t.raterCourseDay === d) })),
-        { key: 'extra', label: 'Added for this run', tests: courseTests.filter(t => !t.raterCourseDay) },
-      ].filter(t => t.key !== 'extra' || t.tests.length > 0)
-    : [{ key: 'all', label: 'Audio', tests: courseTests }]
+  const tabs: { key: Tab; label: string; tests: Test[] }[] = !course ? [] : [
+    ...courseDayNumbers(course.kind).map(d => ({ key: String(d), label: `Day ${d}`, tests: courseTests.filter(t => recordingDay(t, course) === d) })),
+    {
+      key: 'extra',
+      label: course.kind === 'rater' ? 'Added for this run' : 'No day',
+      tests: courseTests.filter(t => recordingDay(t, course) === null),
+    },
+  ].filter(t => t.key !== 'extra' || t.tests.length > 0)
   const tab = tabs.find(t => t.key === params.get('day')) ?? tabs[0]
 
   if (isLoading) return <p className="text-sm text-muted-foreground">Loading…</p>
@@ -126,7 +128,7 @@ export function TeachPage() {
   // This day's materials first, then the ones for the whole course
   const allMaterials = materialsForCourse(materials, course)
   const dayNumber = Number(tab.key)
-  const dayMaterials = course.kind === 'rater' && dayNumber ? allMaterials.filter(m => materialDays(m, course).includes(dayNumber)) : []
+  const dayMaterials = dayNumber ? allMaterials.filter(m => materialDays(m, course).includes(dayNumber)) : []
   const generalMaterials = allMaterials.filter(m => materialDays(m, course).includes(null))
   // Every General document, folded at the bottom — minus any already shown above
   const shownIds = new Set([...dayMaterials, ...generalMaterials].map(m => m.id))
@@ -237,14 +239,16 @@ export function TeachPage() {
           <section className="space-y-2">
             <div className="flex items-baseline justify-between gap-2">
               <h2 className="text-lg font-semibold">
-                {tab.label === 'Audio' ? 'Audio' : `${tab.label} audio`}
+                {tab.key === 'extra' ? `Audio — ${tab.label.toLowerCase()}` : `${tab.label} audio`}
                 <span className="text-muted-foreground font-normal text-base ml-2 tabular-nums">{playedCount(tab.tests)} of {tab.tests.length} played</span>
               </h2>
               {playedCount(tab.tests) > 0 && <Button size="sm" variant="ghost" onClick={resetTab}>Untick all</Button>}
             </div>
             {tab.tests.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                No recordings for {tab.label.toLowerCase()} — tag them in Test Bank and use “Update from set” on the course page.
+                No recordings for {tab.label.toLowerCase()} — {course.kind === 'rater'
+                  ? 'tag them in Test Bank and use “Update from set” on the course page.'
+                  : `give the RC${course.number ?? '?'} recordings a day on the course page or in Test Bank.`}
               </p>
             ) : (
               <ul className="rounded-md border divide-y">
@@ -325,7 +329,7 @@ export function TeachPage() {
           </section>
 
           {dayMaterials.some(m => !isPlan(m)) && <MaterialsList title={`${tab.label} materials`} items={dayMaterials.filter(m => !isPlan(m))} courseName={course.name} />}
-          <MaterialsList title={course.kind === 'rater' ? 'Whole-course materials' : 'Materials'} items={generalMaterials.filter(m => !isPlan(m))} courseName={course.name} emptyHint />
+          <MaterialsList title="Whole-course materials" items={generalMaterials.filter(m => !isPlan(m))} courseName={course.name} emptyHint />
           {libraryDocs.length > 0 && (
             <details className="group">
               <summary className="cursor-pointer text-lg font-semibold">

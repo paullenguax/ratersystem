@@ -599,13 +599,13 @@ export interface CourseMaterial {
   // 'library' = general documents not tied to any course (rater documents…)
   scope: 'rater' | 'refresher' | 'course' | 'library'
   courseId?: string | null
-  // Optional, for rater-course material that belongs to one day (1–5)
+  // Optional: the day it belongs to (rater 1–5, refresher 1–3)
   day?: number | null
   // Optional, for refresher material that belongs to one RC set (RC3 notes
   // shouldn't show on RC4). Blank = every refresher course.
   refresherNumber?: number | null
-  // General documents only: also shown on these course types — a rater
-  // placement can name a day (1–5), or none for the whole course. The
+  // General documents only: also shown on these course types — a placement
+  // can name a day (rater 1–5, refresher 1–3), or none for the whole course. The
   // document stays a single General document wherever it appears.
   showIn?: MaterialPlacement[]
   title: string
@@ -646,6 +646,9 @@ export interface Test {
   // Training audio only: which refresher set (RC1, RC2…) this recording
   // belongs to. Every run of RC N starts from the recordings tagged N.
   refresherNumber?: number | null
+  // Which day (1–3) of its refresher set this recording is played on.
+  // Unset = not yet given a day (shown under "No day" in Teach).
+  refresherDay?: number | null
   // Legacy free-form course tags, superseded by raterCourseDay. No longer
   // editable; still shown read-only in the test drawer as a sorting hint.
   courseTag?: 'rater_course' | 'refresher_course' | 'other'

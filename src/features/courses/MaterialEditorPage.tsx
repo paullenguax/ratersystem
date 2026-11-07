@@ -7,7 +7,7 @@ import remarkGfm from 'remark-gfm'
 import { ChevronLeft, Download, Printer } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { fetchMaterials, SCOPE_LABELS } from '@/lib/courseMaterials'
-import { fetchCourses, refresherNumberOptions } from '@/lib/courses'
+import { courseDayNumbers, fetchCourses, refresherNumberOptions } from '@/lib/courses'
 import { fetchAllTests } from './CoursesPage'
 import { printDocument } from '@/lib/printDocument'
 import { useCurrentPersonName } from './MaterialsSection'
@@ -100,9 +100,10 @@ export function MaterialEditorPage() {
 
   const course = material?.courseId ? courses.find(c => c.id === material.courseId) : undefined
 
-  // Rater-course material can be tied to a day; saved straight away like the
+  // Course material can be tied to a day; saved straight away like the
   // session-plan toggle, independent of the text
-  const canHaveDay = material?.scope === 'rater' || (material?.scope === 'course' && course?.kind === 'rater')
+  const dayKind = material?.scope === 'rater' || material?.scope === 'refresher' ? material.scope : course?.kind
+  const canHaveDay = !!dayKind && material?.scope !== 'library'
   async function changeDay(value: string) {
     if (!material) return
     await updateDoc(doc(db, 'course_materials', material.id), { day: value ? Number(value) : null })
@@ -175,7 +176,8 @@ export function MaterialEditorPage() {
               className="border rounded px-1 py-0.5 bg-background text-foreground"
             >
               <option value="">Any day</option>
-              {[1, 2, 3, 4, 5].map(d => <option key={d} value={d}>Day {d}</option>)}
+              {[...new Set([...courseDayNumbers(dayKind!), ...(material.day ? [material.day] : [])])].sort((a, b) => a - b)
+                .map(d => <option key={d} value={d}>Day {d}</option>)}
             </select>
           </>
         ) : material.day ? ` · Day ${material.day}` : ''}
