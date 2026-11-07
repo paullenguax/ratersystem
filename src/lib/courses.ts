@@ -48,6 +48,18 @@ export function autoCourseName(kind: Course['kind'], number: number | null | und
   return kind === 'refresher' ? `Refresher Course ${number ?? '?'} — ${when}` : `Rater Course — ${when}`
 }
 
+// RC numbers to offer when filing refresher material: every set in use by
+// courses or tagged recordings, plus the next one so a new set's materials
+// can be prepared before its first run.
+export function refresherNumberOptions(courses: Course[], tests: Test[]): number[] {
+  const used = new Set([
+    ...courses.filter(c => c.kind === 'refresher' && c.number).map(c => c.number!),
+    ...tests.map(t => t.refresherNumber ?? 0).filter(Boolean),
+  ])
+  const next = Math.max(0, ...used) + 1
+  return [...used, next].sort((a, b) => a - b)
+}
+
 export function setLabel(c: Pick<Course, 'kind' | 'number'>): string {
   return c.kind === 'rater' ? 'Rater Course set' : c.number ? `RC${c.number} set` : 'refresher set'
 }

@@ -10,7 +10,7 @@ import type { Course, CourseAttendee, Person, Test } from '@/types'
 // A Firestore update to a course, which may use sentinels like serverTimestamp()
 type CoursePatch = { [K in keyof Course]?: Course[K] | FieldValue }
 import {
-  fetchCourses, mergeAttendees, cohortExposure, setForCourse, setLabel, inAnySet,
+  fetchCourses, mergeAttendees, cohortExposure, setForCourse, setLabel, inAnySet, refresherNumberOptions,
 } from '@/lib/courses'
 import { formatTestNumber } from '@/lib/testNumber'
 import { CourseDrawer } from './CourseDrawer'
@@ -100,9 +100,15 @@ export function CourseDetailPage() {
         materials={materialsForCourse(materials, course)}
         addTargets={[
           { label: 'This course only', target: { scope: 'course', courseId: course.id } },
-          { label: course.kind === 'rater' ? 'All rater courses' : 'All refresher courses', target: { scope: course.kind } },
+          ...(course.kind === 'refresher' && course.number
+            ? [{ label: `All RC${course.number} courses`, target: { scope: 'refresher' as const, refresherNumber: course.number } }]
+            : []),
+          course.kind === 'rater'
+            ? { label: 'All rater courses', target: { scope: 'rater' as const } }
+            : { label: 'All refresher courses', target: { scope: 'refresher' as const, refresherNumber: null } },
         ]}
         allowDay={course.kind === 'rater'}
+        rcNumbers={course.kind === 'refresher' ? refresherNumberOptions(courses, tests) : undefined}
         returnTo={`/courses/${course.id}`}
       />
 

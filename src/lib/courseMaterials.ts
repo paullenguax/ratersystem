@@ -15,6 +15,8 @@ export interface MaterialTarget {
   scope: CourseMaterial['scope']
   courseId?: string | null
   day?: number | null
+  // Refresher scope: undefined = let the user choose, null = every refresher
+  refresherNumber?: number | null
 }
 
 export const SCOPE_LABELS: Record<CourseMaterial['scope'], string> = {
@@ -24,26 +26,34 @@ export const SCOPE_LABELS: Record<CourseMaterial['scope'], string> = {
   library: 'General documents',
 }
 
-// A run shows its own materials, the shared ones for its kind, and any
-// General documents set to show on its kind.
-export function materialsForCourse(all: CourseMaterial[], course: Pick<Course, 'id' | 'kind'>): CourseMaterial[] {
+// Does a placement (or a refresher item's RC number) reach this run? An RC
+// number limits refresher material to runs of that set.
+function placementReaches(p: MaterialPlacement, course: Pick<Course, 'kind' | 'number'>): boolean {
+  return p.kind === course.kind && (p.kind !== 'refresher' || !p.number || p.number === course.number)
+}
+
+// A run shows its own materials, the shared ones for its kind (for a
+// refresher: all-refresher ones plus its own RC set's), and any General
+// documents set to show on it.
+export function materialsForCourse(all: CourseMaterial[], course: Pick<Course, 'id' | 'kind' | 'number'>): CourseMaterial[] {
   return all.filter(m =>
     (m.scope === 'course' && m.courseId === course.id)
-    || m.scope === course.kind
-    || (m.scope === 'library' && (m.showIn ?? []).some(p => p.kind === course.kind)))
+    || (m.scope === course.kind && placementReaches({ kind: m.scope, number: m.refresherNumber }, course))
+    || (m.scope === 'library' && (m.showIn ?? []).some(p => placementReaches(p, course))))
 }
 
 // Which days of a run an item appears on: a day number, or null for the
 // whole course. Refreshers have no days, so everything is whole-course.
-export function materialDays(m: CourseMaterial, course: Pick<Course, 'kind'>): (number | null)[] {
+export function materialDays(m: CourseMaterial, course: Pick<Course, 'kind' | 'number'>): (number | null)[] {
   const days = m.scope === 'library'
-    ? (m.showIn ?? []).filter(p => p.kind === course.kind).map(p => p.day ?? null)
+    ? (m.showIn ?? []).filter(p => placementReaches(p, course)).map(p => p.day ?? null)
     : [m.day ?? null]
   return course.kind === 'refresher' ? [null] : [...new Set(days)]
 }
 
 export function placementLabel(p: MaterialPlacement): string {
-  return p.kind === 'refresher' ? 'Refreshers' : p.day ? `Rater · Day ${p.day}` : 'Rater · any day'
+  if (p.kind === 'refresher') return p.number ? `RC${p.number}` : 'All refreshers'
+  return p.day ? `Rater · Day ${p.day}` : 'Rater · any day'
 }
 
 export async function uploadMaterialFile(
@@ -57,6 +67,7 @@ export async function uploadMaterialFile(
     scope: target.scope,
     courseId: target.courseId ?? null,
     day: target.day ?? null,
+    refresherNumber: target.scope === 'refresher' ? target.refresherNumber ?? null : null,
     title: file.name.replace(/\.[^.]+$/, ''),
     kind: 'file',
     fileName: file.name,
@@ -86,6 +97,7 @@ export async function createNote(title: string, target: MaterialTarget, updatedB
     scope: target.scope,
     courseId: target.courseId ?? null,
     day: target.day ?? null,
+    refresherNumber: target.scope === 'refresher' ? target.refresherNumber ?? null : null,
     title,
     kind: 'markdown',
     markdown: markdown ?? `# ${title}\n\n`,

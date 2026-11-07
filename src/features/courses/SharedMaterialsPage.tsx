@@ -2,7 +2,9 @@ import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronLeft } from 'lucide-react'
 import { fetchMaterials } from '@/lib/courseMaterials'
+import { fetchCourses, refresherNumberOptions } from '@/lib/courses'
 import { MaterialsSection } from './MaterialsSection'
+import { fetchAllTests } from './CoursesPage'
 
 // Materials shared by every run of a course type — the rater course's
 // teacher notes, standing refresher handouts — plus general documents not
@@ -10,6 +12,9 @@ import { MaterialsSection } from './MaterialsSection'
 // course's own page.
 export function SharedMaterialsPage() {
   const { data: materials = [], isLoading } = useQuery({ queryKey: ['course-materials'], queryFn: fetchMaterials })
+  const { data: courses = [] } = useQuery({ queryKey: ['courses'], queryFn: fetchCourses })
+  const { data: tests = [] } = useQuery({ queryKey: ['tests'], queryFn: fetchAllTests })
+  const rcNumbers = refresherNumberOptions(courses, tests)
 
   return (
     <div className="space-y-6">
@@ -33,6 +38,7 @@ export function SharedMaterialsPage() {
               materials={materials.filter(m => m.scope === 'library')}
               addTargets={[{ label: 'General documents', target: { scope: 'library' } }]}
               allowDay={false}
+              rcNumbers={rcNumbers}
               returnTo="/courses/materials"
             />
           </div>
@@ -45,9 +51,11 @@ export function SharedMaterialsPage() {
           />
           <MaterialsSection
             title="Refresher courses"
-            materials={materials.filter(m => m.scope === 'refresher')}
-            addTargets={[{ label: 'All refresher courses', target: { scope: 'refresher' } }]}
+            materials={[...materials.filter(m => m.scope === 'refresher')]
+              .sort((a, b) => (a.refresherNumber ?? 0) - (b.refresherNumber ?? 0))}
+            addTargets={[{ label: 'Refresher courses', target: { scope: 'refresher' } }]}
             allowDay={false}
+            rcNumbers={rcNumbers}
             returnTo="/courses/materials"
           />
         </div>

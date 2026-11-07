@@ -61,7 +61,8 @@ day it's for.
 - **Edit** on the plan opens it and brings you back to the same day.
 
 A plan set to **Any day** shows on every day, which suits a whole-course
-overview. For refreshers, write one plan with a heading for each day.
+overview. For refreshers, write one plan with a heading for each day, and
+file it under its RC set (**RC3 only**) so each set has its own plan.
 
 ## Teaching notes on a recording
 

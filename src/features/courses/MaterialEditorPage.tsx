@@ -7,7 +7,8 @@ import remarkGfm from 'remark-gfm'
 import { ChevronLeft, Download, Printer } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { fetchMaterials, SCOPE_LABELS } from '@/lib/courseMaterials'
-import { fetchCourses } from '@/lib/courses'
+import { fetchCourses, refresherNumberOptions } from '@/lib/courses'
+import { fetchAllTests } from './CoursesPage'
 import { printDocument } from '@/lib/printDocument'
 import { useCurrentPersonName } from './MaterialsSection'
 import { Button } from '@/components/ui/button'
@@ -23,6 +24,7 @@ export function MaterialEditorPage() {
 
   const { data: materials = [], isLoading } = useQuery({ queryKey: ['course-materials'], queryFn: fetchMaterials })
   const { data: courses = [] } = useQuery({ queryKey: ['courses'], queryFn: fetchCourses })
+  const { data: tests = [] } = useQuery({ queryKey: ['tests'], queryFn: fetchAllTests })
   const material = materials.find(m => m.id === materialId)
 
   const [title, setTitle] = useState('')
@@ -107,6 +109,16 @@ export function MaterialEditorPage() {
     await queryClient.invalidateQueries({ queryKey: ['course-materials'] })
   }
 
+  // Refresher material can be limited to one RC set; saved straight away too
+  const rcChoices = material?.scope === 'refresher'
+    ? [...new Set([...refresherNumberOptions(courses, tests), ...(material.refresherNumber ? [material.refresherNumber] : [])])].sort((a, b) => a - b)
+    : []
+  async function changeRc(value: string) {
+    if (!material) return
+    await updateDoc(doc(db, 'course_materials', material.id), { refresherNumber: value ? Number(value) : null })
+    await queryClient.invalidateQueries({ queryKey: ['course-materials'] })
+  }
+
   // Saved straight away (separately from the text), like the toggle in the materials list
   async function toggleSessionPlan() {
     if (!material) return
@@ -138,7 +150,21 @@ export function MaterialEditorPage() {
         <Button onClick={save} disabled={!dirty || saving || !title.trim()}>{saving ? 'Saving…' : 'Save'}</Button>
       </div>
       <p className="text-xs text-muted-foreground">
-        {course ? course.name : SCOPE_LABELS[material.scope]}
+        {course ? course.name : material.scope === 'refresher' ? 'Refresher courses' : SCOPE_LABELS[material.scope]}
+        {material.scope === 'refresher' && (
+          <>
+            {' · '}
+            <select
+              value={material.refresherNumber ?? ''}
+              onChange={e => changeRc(e.target.value)}
+              aria-label="RC set"
+              className="border rounded px-1 py-0.5 bg-background text-foreground"
+            >
+              <option value="">All refreshers</option>
+              {rcChoices.map(n => <option key={n} value={n}>RC{n} only</option>)}
+            </select>
+          </>
+        )}
         {canHaveDay ? (
           <>
             {' · '}

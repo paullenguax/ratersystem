@@ -100,8 +100,10 @@ teaching view.
 ### Materials
 
 This course's own files and notes, plus everything shared with its course
-type (see below). **Add to: This course only** is for material that only
-applies to this group.
+type (for a refresher, its own RC set's materials and the all-refresher
+ones). **Add to** offers **This course only** for material that only
+applies to this group, and on a refresher course **All RC3 courses** (or
+whichever set it is).
 
 ## Materials & documents
 
@@ -110,7 +112,8 @@ Open it from the course list. It has three sections:
 - **General documents**: documents that stand on their own, such as the
   rater documents.
 - **Rater courses**: shown on every rater course.
-- **Refresher courses**: shown on every refresher course.
+- **Refresher courses**: shown on every refresher course, or on one RC set
+  only.
 
 In any section:
 
@@ -122,6 +125,11 @@ In any section:
 - For rater-course material, pick the **day** before adding (*Any day* or
   Day 1–5). Each item's **Day** drop-down changes it afterwards, for example
   if a note was filed under the wrong day.
+- For refresher material, pick **All refreshers** or one set (**RC3 only**)
+  before adding. RC3 notes then appear on every RC3 course, past and
+  future, but not on RC4. Each item's **RC** drop-down changes it
+  afterwards. The next new set (e.g. RC6) is offered too, so you can prepare
+  its materials before its first course.
 - **Make plan** turns a note into the **session plan** for its day (see
   **Teaching a course**). **Unset plan** turns it back into an ordinary
   note.
@@ -133,10 +141,10 @@ A general document isn't on any course until you say so. Click **Show in…**
 on it and choose:
 
 - **Rater courses: Any day**, or particular days (Day 1–5)
-- **Refresher courses: All refreshers**
+- **Refresher courses: All refreshers**, or particular RC sets
 
 Click **Save**. Badges on the row show where it appears (*Rater · Day 2*,
-*Refreshers*), or *Not on any course*. It stays a single document, so an
+*RC3*, *All refreshers*), or *Not on any course*. It stays a single document, so an
 edit shows everywhere it appears. In the teaching view, every general
 document is also listed at the bottom, whether or not it's shown on the
 course.
