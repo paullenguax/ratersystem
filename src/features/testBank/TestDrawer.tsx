@@ -4,13 +4,14 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { collection, addDoc, doc, updateDoc, getDocs, serverTimestamp } from 'firebase/firestore'
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Upload } from 'lucide-react'
 import { db, storage } from '@/lib/firebase'
 import type { Test } from '@/types'
 import { formatTestNumber } from '@/lib/testNumber'
 import { CATEGORY_LABELS, LEGACY_COURSE_TAG_LABELS, type TestCategory } from '@/lib/testPool'
 import { HeardBySection } from '@/features/courses/CourseExposure'
+import { copyStandardizationScores, countPendingStandardizationScores } from '@/lib/standardizationCalibration'
 import { useCurrentPersonName } from '@/features/courses/MaterialsSection'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -184,6 +185,14 @@ export function TestDrawer({ open, onClose, test }: Props) {
     }
     if (isEdit) {
       await updateDoc(doc(db, 'test_bank', test.id), payload)
+      // Leaving Standardization for Certification: offer its ratings as calibration scores
+      if (originalCategory === 'standardization' && data.category === 'rater_course') {
+        const { pending } = await countPendingStandardizationScores(test.id)
+        if (pending > 0 && confirm(`This test has ${pending} standardization rating${pending === 1 ? '' : 's'}. Bring ${pending === 1 ? 'it' : 'them'} across as published Certification scores, so ${pending === 1 ? 'it counts' : 'they count'} towards its calibration?\n\nThose raters will then also count as having heard it, so they won't be given it in an exam.`)) {
+          await copyStandardizationScores({ ...test, testId, candidateName: data.candidateName, testType: data.testType })
+          queryClient.invalidateQueries({ queryKey: ['scores'] })
+        }
+      }
     } else {
       await addDoc(collection(db, 'test_bank'), {
         ...payload,
@@ -366,6 +375,7 @@ export function TestDrawer({ open, onClose, test }: Props) {
           )}
 
           {isEdit && test.category === 'training' && <HeardBySection testDocId={test.id} />}
+          {isEdit && (test.category ?? 'rater_course') === 'rater_course' && <StandardizationRatingsSection test={test} />}
 
           <SheetFooter className="mt-2">
             <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
@@ -374,5 +384,50 @@ export function TestDrawer({ open, onClose, test }: Props) {
         </form>
       </SheetContent>
     </Sheet>
+  )
+}
+
+// A Certification test that came from Standardization: its standardization
+// ratings not yet copied across as calibration scores (e.g. it was moved
+// before this existed, or more ratings came in since)
+function StandardizationRatingsSection({ test }: { test: Test }) {
+  const queryClient = useQueryClient()
+  const [busy, setBusy] = useState(false)
+  const [done, setDone] = useState('')
+  const { data } = useQuery({
+    queryKey: ['std-pending', test.id],
+    queryFn: () => countPendingStandardizationScores(test.id),
+  })
+  if (!data?.total) return null
+
+  async function bringAcross() {
+    setBusy(true)
+    try {
+      const n = await copyStandardizationScores(test)
+      setDone(`Brought ${n} across. Run Statistics → Tests → Save calibration to update its difficulty.`)
+      queryClient.invalidateQueries({ queryKey: ['std-pending', test.id] })
+      queryClient.invalidateQueries({ queryKey: ['scores'] })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="rounded-md border p-3 space-y-1 text-sm">
+      <p className="font-medium">Standardization ratings</p>
+      {done ? <p className="text-xs text-green-700">{done}</p> : data.pending === 0 ? (
+        <p className="text-xs text-muted-foreground">All {data.total} count towards its calibration.</p>
+      ) : (
+        <>
+          <p className="text-xs text-muted-foreground">
+            {data.pending} of {data.total} {data.total === 1 ? 'isn\'t' : 'aren\'t'} counted yet. Bringing them across adds them as published scores, so they count
+            towards its calibration and those raters count as having heard it.
+          </p>
+          <Button type="button" size="sm" variant="outline" disabled={busy} onClick={bringAcross}>
+            {busy ? 'Bringing across…' : `Bring ${data.pending} across`}
+          </Button>
+        </>
+      )}
+    </div>
   )
 }

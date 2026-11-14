@@ -68,6 +68,9 @@ export interface Score {
   overallLevel: number
   published: boolean
   notes?: string
+  // Copied from a standardization score when its test moved into
+  // Certification (lib/standardizationCalibration.ts)
+  fromStandardizationScoreId?: string
   createdAt?: Timestamp
 }
 

@@ -80,6 +80,14 @@ from sets** on **Courses**.
   clears and the test takes the next number in its new pool when you save.
   Switch back to restore the old one. The system blocks a duplicate number
   within the same pool.
+- **Moving a Standardization test into Certification**: if people have
+  rated it in standardization, saving asks whether to bring those ratings
+  across as published Certification scores. Say **OK** to have them count
+  towards its calibration. Then run **Statistics → Tests → Save
+  calibration**. Those raters also count as having heard it, so the exam
+  pickers won't give it to them. A Certification test with standardization
+  ratings not yet brought across shows a **Bring N across** button in its
+  drawer, for tests moved earlier or ratings that arrive later.
 - **Exclude from rater course pool**: keeps a Certification test out of
   exams without moving it.
 - **Notes**: for admins only. Trainers don't see them.

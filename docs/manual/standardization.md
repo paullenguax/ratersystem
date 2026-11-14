@@ -21,6 +21,19 @@ ticked **Can do standardization work** on your People record.
    everything is scored, check the summary and click **Yes, that's my
    scores**. The admin is emailed when you confirm.
 
+## Using a standardization to calibrate a test
+
+A standardization can also calibrate a recording before it joins the exam
+pool. Several raters score it, and their ratings become its calibration.
+After the event, an admin moves the test to **Certification** in **Test
+Bank** and brings its standardization ratings across (see **Test Bank**).
+Then they run **Statistics → Tests → Save calibration**.
+
+For the result to be on the same scale as the rest of the pool, include
+raters who already have plenty of published certification scores, such as
+your senior raters. A test needs at least 10 raters before it gets a
+difficulty tier (easy, mid or hard) for Auto-assign and self-serve exams.
+
 ## Differences from Scoring
 
 - **No publish step.** Admins see the scores in **Standardization Results**

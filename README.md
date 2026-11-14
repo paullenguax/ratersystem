@@ -1596,6 +1596,10 @@ sidebar as "User Manual".
 
 - **Bulk sign-in links** (`/admin/sign-in-links`, `SignInLinksPage.tsx`; linked from People and Admin Tools): paste names/emails one per line → matched to `people` by email, then `normName`, with same-surname-and-initial "possible" matches to confirm; unmatched names pick up an email from course-import attendees if one was recorded. **`signInStatus`** (callable, admin) reports which matched people have an Auth user and its email, for the preview. Sending runs sequentially (600 ms apart, for Resend): existing people → optional `setPersonEmail` + record update, then `sendSignInLink`; new people → `invitePerson` with the chosen role. `invitePerson`'s email now also names the sign-in address.
 
+### Standardization ratings as calibration (2026-11-14)
+
+`lib/standardizationCalibration.ts`: when a Standardization test is moved to Certification in the test drawer, saving offers to copy its `standardization_scores` into `scores` as **published** scores (new Certification `testNumber`, `notes` = comments, `fromStandardizationScoreId` = source doc, original assignment/session/rater kept). They then feed `Statistics → Tests → Save calibration` (Rasch over published scores, matched by test number) and the exam pickers' seen-test logic (which reads `scores`), so standardization raters aren't later given that test in an exam. Idempotent: a Certification test's drawer shows "Standardization ratings — Bring N across" for any not yet copied. Copied raters may need **Assign numbers** on Scores. Calibration is only on the pool's scale if the standardization raters are linked to it (e.g. senior raters with many published scores); `canonicalDifficulty` needs `MIN_RATERS_FOR_DIFFICULTY` (10) raters.
+
 ## Last updated
 
 2026-11-14
