@@ -503,7 +503,8 @@ exports.setPersonEmail = onCall(async (request) => {
 // address they sign in with. For a record that has no login yet — e.g. a
 // rater from years ago recorded only for their scores — it first creates
 // one under the record's own ID, so their past scores and assignments stay
-// theirs.
+// theirs. If their login is still on an older address than the record's,
+// it's moved to the record's first.
 exports.sendSignInLink = onCall({ secrets: [RESEND_API_KEY] }, async (request) => {
   await assertAdmin(request)
   const { personId } = request.data || {}
@@ -515,6 +516,7 @@ exports.sendSignInLink = onCall({ secrets: [RESEND_API_KEY] }, async (request) =
   if (!email) throw new HttpsError('failed-precondition', 'This person has no email address')
 
   let created = false
+  let movedFrom = null
   let user = await admin.auth().getUser(personId).catch(() => null)
   if (!user) {
     const taken = await admin.auth().getUserByEmail(email).catch(() => null)
@@ -524,7 +526,14 @@ exports.sendSignInLink = onCall({ secrets: [RESEND_API_KEY] }, async (request) =
     user = await admin.auth().createUser({ uid: personId, email, displayName: name || undefined })
     created = true
   } else if ((user.email || '').toLowerCase() !== email.toLowerCase()) {
-    throw new HttpsError('failed-precondition', `Their sign-in email is ${user.email}, not ${email}. Save the record again to bring them into line, then resend.`)
+    // The record's email was changed before edits moved the login with it —
+    // the record wins, unless that address is someone else's login
+    const taken = await admin.auth().getUserByEmail(email).catch(() => null)
+    if (taken && taken.uid !== personId) {
+      throw new HttpsError('already-exists', `${email} is already the sign-in for another account. Link that account to this person instead (Firebase account, below).`)
+    }
+    await admin.auth().updateUser(personId, { email })
+    movedFrom = user.email || null
   }
 
   const resetLink = await admin.auth().generatePasswordResetLink(email, { url: 'https://lenguax.com/ratersystem/login' })
@@ -535,7 +544,7 @@ exports.sendSignInLink = onCall({ secrets: [RESEND_API_KEY] }, async (request) =
     text: `Hello${name ? ` ${name}` : ''},\n\nYou sign in to the Lenguax RaterSystem with this email address: ${email}\n\nSet your password here:\n\n${resetLink}\n\nThen sign in at https://lenguax.com/ratersystem/login with this address and your new password. If the link has expired, use "Forgot password?" on that page.`,
   })
   if (!sent) throw new HttpsError('internal', 'The email could not be sent. They can use "Forgot password?" on the login page with ' + email)
-  return { created, email }
+  return { created, movedFrom, email }
 })
 
 exports.canvasEnrollments = onCall(async (request) => {

@@ -19,7 +19,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 const setPersonEmailFn = httpsCallable<{ personId: string; email: string }, { hasLogin: boolean; changed: boolean }>(functions, 'setPersonEmail')
-const sendSignInLinkFn = httpsCallable<{ personId: string }, { created: boolean; email: string }>(functions, 'sendSignInLink')
+const sendSignInLinkFn = httpsCallable<{ personId: string }, { created: boolean; movedFrom: string | null; email: string }>(functions, 'sendSignInLink')
 
 const schema = z.object({
   name: z.string().min(1, 'Required'),
@@ -78,7 +78,10 @@ export function PersonDrawer({ open, onClose, person }: Props) {
     setLinkResult(null)
     try {
       const { data } = await sendSignInLinkFn({ personId: person.id })
-      setLinkResult({ ok: true, text: `Sent to ${data.email}${data.created ? ' — a login was created for them' : ''}.` })
+      setLinkResult({
+        ok: true,
+        text: `Sent to ${data.email}${data.created ? ' — a login was created for them' : data.movedFrom ? ` — their sign-in was moved here from ${data.movedFrom}` : ''}.`,
+      })
       if (data.created) queryClient.invalidateQueries({ queryKey: ['people'] })
     } catch (e) {
       setLinkResult({ ok: false, text: e instanceof Error ? e.message : 'Could not send the link' })

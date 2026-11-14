@@ -59,6 +59,9 @@ link to set a password. The email also tells them which address they sign
 in with, which helps people who've forgotten which email they used. If they
 have no login yet, for example a rater from an older course recorded only
 for their scores, it creates one first, and their past scores stay attached.
+If their sign-in is still on an older address (because the email was
+changed before email changes moved the sign-in too), it moves the sign-in to
+the address on the record first.
 Save any changes to the record before sending.
 
 ### Firebase account
