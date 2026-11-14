@@ -1,7 +1,13 @@
 import { Link } from 'react-router-dom'
-import { RefreshCw, Shuffle, Award, UserPlus, ClipboardList, Search, Mic2, Radio, History } from 'lucide-react'
+import { RefreshCw, Shuffle, Award, UserPlus, ClipboardList, Search, Mic2, Radio, History, Mail } from 'lucide-react'
 
 const tools = [
+  {
+    to: '/admin/sign-in-links',
+    icon: Mail,
+    label: 'Email Sign-in Links',
+    description: 'Paste a list of names and emails. Each person gets an email naming the address they sign in with and a link to set a password — logins are created and new people invited as needed.',
+  },
   {
     to: '/admin/canvas-enroll',
     icon: UserPlus,

@@ -46,6 +46,7 @@ import { ScoresPage } from '@/features/scores/ScoresPage'
 import { AdminPage } from '@/features/admin/AdminPage'
 import { CanvasSyncPage } from '@/features/admin/CanvasSyncPage'
 import { CanvasEnrollPage } from '@/features/admin/CanvasEnrollPage'
+import { SignInLinksPage } from '@/features/admin/SignInLinksPage'
 import { CanvasAuditPage } from '@/features/admin/CanvasAuditPage'
 import { EnrollmentLogPage } from '@/features/admin/EnrollmentLogPage'
 import { AutoAssignPage } from '@/features/admin/AutoAssignPage'
@@ -122,6 +123,7 @@ export default function App() {
                 <Route path="practice"   element={<ProtectedRoute allowedRoles={['admin']}><PracticePage /></ProtectedRoute>} />
                 <Route path="admin"       element={<ProtectedRoute allowedRoles={['admin']}><AdminPage /></ProtectedRoute>} />
                 <Route path="admin/canvas-sync"    element={<ProtectedRoute allowedRoles={['admin']}><CanvasSyncPage /></ProtectedRoute>} />
+                <Route path="admin/sign-in-links"  element={<ProtectedRoute allowedRoles={['admin']}><SignInLinksPage /></ProtectedRoute>} />
                 <Route path="admin/canvas-enroll"  element={<ProtectedRoute allowedRoles={['admin']}><CanvasEnrollPage /></ProtectedRoute>} />
                 <Route path="admin/canvas-audit"   element={<ProtectedRoute allowedRoles={['admin']}><CanvasAuditPage /></ProtectedRoute>} />
                 <Route path="admin/enrollment-log" element={<ProtectedRoute allowedRoles={['admin']}><EnrollmentLogPage /></ProtectedRoute>} />

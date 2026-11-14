@@ -467,7 +467,7 @@ exports.invitePerson = onCall({ secrets: [RESEND_API_KEY] }, async (request) => 
       from: 'RaterSystem <notifications@lenguax.com>',
       to: email,
       subject: 'Set your RaterSystem password',
-      text: `You've been added to the Lenguax RaterSystem. Set your password here:\n\n${resetLink}`,
+      text: `Hello ${name},\n\nYou've been added to the Lenguax RaterSystem. You sign in with this email address: ${email}\n\nSet your password here:\n\n${resetLink}\n\nThen sign in at https://lenguax.com/ratersystem/login with this address and your new password. If the link has expired, use "Forgot password?" on that page.`,
     })
   } catch (err) {
     console.error('invitePerson: failed to generate invite link', err)
@@ -497,6 +497,20 @@ exports.setPersonEmail = onCall(async (request) => {
   }
   await admin.auth().updateUser(personId, { email })
   return { hasLogin: true, changed: true, previousEmail: user.email || null }
+})
+
+// For the bulk sign-in links page: which of these people already have a
+// login (an Auth user under their people doc ID), and its email.
+exports.signInStatus = onCall(async (request) => {
+  await assertAdmin(request)
+  const ids = (request.data?.personIds || []).filter(id => typeof id === 'string' && id)
+  const out = {}
+  for (let i = 0; i < ids.length; i += 100) {
+    const { users } = await admin.auth().getUsers(ids.slice(i, i + 100).map(uid => ({ uid })))
+    for (const u of users) out[u.uid] = { hasLogin: true, authEmail: u.email || null }
+  }
+  for (const id of ids) if (!out[id]) out[id] = { hasLogin: false, authEmail: null }
+  return out
 })
 
 // Emails a person a link to set (or reset) their password, telling them which

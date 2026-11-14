@@ -64,6 +64,28 @@ changed before email changes moved the sign-in too), it moves the sign-in to
 the address on the record first.
 Save any changes to the record before sending.
 
+### Emailing many people at once
+
+**Email sign-in links** at the top of People (also in **Admin Tools**)
+does the same for a whole list:
+
+1. Paste the people, one per line: a name, an email, or both (*Jane Smith,
+   jane@example.com*). A list copied from a spreadsheet works.
+2. Click **Check list**. Each line is matched to a People record by email,
+   then by name, and shows what will happen:
+   - **send link**: they're in People. It notes if it will create their
+     login, move their sign-in to a new address, or change their email (untick
+     **use …** to keep the one on the record).
+   - **invite**: not in People, so they're added with the role in **New people
+     join as**, given a login and emailed. Names from the course-records
+     import are found this way, and their course history attaches by name.
+   - **sort out**: something needs you. Several people share the name, a
+     similar name was found (pick them, or **New person**), or there's no
+     email to send to. Fix the line in the box and click **Check list**
+     again, or untick it.
+3. Click **Email N sign-in links**. Each line then shows sent or the reason
+   it failed.
+
 ### Firebase account
 
 If someone's login was created separately (for example, in the Firebase

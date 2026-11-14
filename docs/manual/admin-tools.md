@@ -3,6 +3,13 @@
 The **Admin** tab groups setup tools and one-off jobs. Each tile opens its
 own page.
 
+## Sign-in
+
+- **Email Sign-in Links**: paste a list of names and emails, and each
+  person gets an email naming the address they sign in with and a link to
+  set a password. Logins are created and new people invited as needed. See
+  **People → Emailing many people at once**.
+
 ## Canvas
 
 - **Canvas Sync**: run this at the **start of every course**. It compares

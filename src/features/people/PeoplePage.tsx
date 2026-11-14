@@ -2,7 +2,8 @@ import { useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { collection, getDocs, deleteDoc, doc } from 'firebase/firestore'
 import { useReactTable, getCoreRowModel, getSortedRowModel, flexRender, type ColumnDef, type SortingState } from '@tanstack/react-table'
-import { Plus, UserPlus, ChevronUp, ChevronDown, ChevronsUpDown, Trash2 } from 'lucide-react'
+import { Plus, UserPlus, ChevronUp, ChevronDown, ChevronsUpDown, Trash2, Mail } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { db } from '@/lib/firebase'
 import type { Person } from '@/types'
 import { PersonDrawer } from './PersonDrawer'
@@ -155,6 +156,9 @@ export function PeoplePage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">People</h1>
         <div className="flex gap-2">
+          <Button variant="ghost" nativeButton={false} render={<Link to="/admin/sign-in-links" />}>
+            <Mail className="size-4 mr-2" /> Email sign-in links
+          </Button>
           <Button variant="outline" onClick={() => setInviteOpen(true)}>
             <UserPlus className="size-4 mr-2" /> Invite
           </Button>
