@@ -7,7 +7,8 @@ import {
   query, where, getDocs, writeBatch, serverTimestamp,
 } from 'firebase/firestore'
 import { useQueryClient } from '@tanstack/react-query'
-import { db } from '@/lib/firebase'
+import { httpsCallable } from 'firebase/functions'
+import { db, functions } from '@/lib/firebase'
 import type { Person } from '@/types'
 import { CoursesAttendedSection } from '@/features/courses/CourseExposure'
 import { Button } from '@/components/ui/button'
@@ -16,6 +17,9 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from '@/components/ui/sheet'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+
+const setPersonEmailFn = httpsCallable<{ personId: string; email: string }, { hasLogin: boolean; changed: boolean }>(functions, 'setPersonEmail')
+const sendSignInLinkFn = httpsCallable<{ personId: string }, { created: boolean; email: string }>(functions, 'sendSignInLink')
 
 const schema = z.object({
   name: z.string().min(1, 'Required'),
@@ -43,8 +47,10 @@ export function PersonDrawer({ open, onClose, person }: Props) {
   const [linking, setLinking] = useState(false)
   const [linkError, setLinkError] = useState('')
   const [linkDone, setLinkDone] = useState(false)
+  const [sendingLink, setSendingLink] = useState(false)
+  const [linkResult, setLinkResult] = useState<{ ok: boolean; text: string } | null>(null)
 
-  const { register, handleSubmit, control, reset, setError, formState: { errors, isSubmitting } } =
+  const { register, handleSubmit, control, reset, setError, watch, formState: { errors, isSubmitting, isDirty } } =
     useForm<FormData>({
       resolver: zodResolver(schema),
       defaultValues: { name: '', email: '', role: 'senior_rater', status: 'active', notes: '' },
@@ -62,8 +68,24 @@ export function PersonDrawer({ open, onClose, person }: Props) {
       setUidInput('')
       setLinkError('')
       setLinkDone(false)
+      setLinkResult(null)
     }
   }, [open, person, reset])
+
+  async function sendSignInLink() {
+    if (!person) return
+    setSendingLink(true)
+    setLinkResult(null)
+    try {
+      const { data } = await sendSignInLinkFn({ personId: person.id })
+      setLinkResult({ ok: true, text: `Sent to ${data.email}${data.created ? ' — a login was created for them' : ''}.` })
+      if (data.created) queryClient.invalidateQueries({ queryKey: ['people'] })
+    } catch (e) {
+      setLinkResult({ ok: false, text: e instanceof Error ? e.message : 'Could not send the link' })
+    } finally {
+      setSendingLink(false)
+    }
+  }
 
   async function onSubmit(data: FormData) {
     const q = query(collection(db, 'people'), where('email', '==', data.email))
@@ -84,6 +106,16 @@ export function PersonDrawer({ open, onClose, person }: Props) {
     }
 
     if (isEdit) {
+      // Move their sign-in to the new address first, so a refusal (address
+      // already someone else's login) leaves the record unchanged too
+      if (data.email.trim().toLowerCase() !== (person.email ?? '').trim().toLowerCase()) {
+        try {
+          await setPersonEmailFn({ personId: person.id, email: data.email })
+        } catch (e) {
+          setError('email', { message: e instanceof Error ? e.message : 'Could not change their sign-in email' })
+          return
+        }
+      }
       await updateDoc(doc(db, 'people', person.id), payload)
 
       // If name changed, propagate to denormalized raterName on scores + assignments
@@ -189,6 +221,14 @@ export function PersonDrawer({ open, onClose, person }: Props) {
             <Label>Email</Label>
             <Input type="email" {...register('email')} />
             {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
+            {isEdit && person.canvasUserId && watch('email') !== person.email && (
+              <p className="text-xs text-amber-700">
+                They sign in through Canvas, which resets this to their Canvas email at their next sign-in. To change it for good, change it in Canvas.
+              </p>
+            )}
+            {isEdit && !person.canvasUserId && (
+              <p className="text-xs text-muted-foreground">Their sign-in email changes with it.</p>
+            )}
           </div>
 
           <div className="space-y-1">
@@ -270,6 +310,17 @@ export function PersonDrawer({ open, onClose, person }: Props) {
           <div className="border-t pt-5 mt-2 space-y-3">
             <div>
               <p className="text-sm font-medium">Firebase account</p>
+            </div>
+            <div className="space-y-1">
+              <Button type="button" variant="outline" size="sm" disabled={sendingLink || isDirty || !person.email} onClick={sendSignInLink}>
+                {sendingLink ? 'Sending…' : 'Email a sign-in link'}
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                {isDirty
+                  ? 'Save your changes first.'
+                  : `Emails ${person.email || 'them'} a link to set a password, and tells them that's the address they sign in with. Creates a login if they don't have one yet.`}
+              </p>
+              {linkResult && <p className={`text-xs ${linkResult.ok ? 'text-green-700' : 'text-destructive'}`}>{linkResult.text}</p>}
             </div>
             {person.linkedAt || linkDone ? (
               <p className="text-sm text-green-700 font-medium">

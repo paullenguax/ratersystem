@@ -31,7 +31,7 @@ There are three ways, depending on how they'll sign in:
 
 | Field | What it does |
 |---|---|
-| **Name / Email** | Changing the name also updates it on their existing scores and assignments. |
+| **Name / Email** | Changing the name also updates it on their existing scores and assignments. Changing the email also changes the address they sign in with (see below). |
 | **Role** | Admin, Senior Rater, Trainee or Examiner. This decides which tabs they see (see **Overview**). |
 | **Can do standardization work** | Gives a trainee or senior rater the **Standardization** tab without making them an examiner. |
 | **Trainer** | Gives them the **Courses** tab. Admins always have it. |
@@ -41,6 +41,25 @@ There are three ways, depending on how they'll sign in:
 
 Below the form, **Courses attended** lists the course runs they're recorded
 on (see **Courses**).
+
+### Changing someone's email
+
+- **Email-and-password users**: saving a new email moves their sign-in to
+  it too, so they sign in and reset their password with the address shown
+  here. If the new address is already another account's sign-in, the save
+  is refused.
+- **Canvas users**: their next Canvas sign-in resets the email here to the
+  one in Canvas. The drawer warns you about this. To change it for good,
+  change it in Canvas.
+
+### Email a sign-in link
+
+**Email a sign-in link** (under **Firebase account**) emails the person a
+link to set a password. The email also tells them which address they sign
+in with, which helps people who've forgotten which email they used. If they
+have no login yet, for example a rater from an older course recorded only
+for their scores, it creates one first, and their past scores stay attached.
+Save any changes to the record before sending.
 
 ### Firebase account
 

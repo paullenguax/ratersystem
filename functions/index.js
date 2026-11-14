@@ -476,6 +476,68 @@ exports.invitePerson = onCall({ secrets: [RESEND_API_KEY] }, async (request) => 
   return { uid: userRecord.uid, inviteEmailSent }
 })
 
+// Keeps a person's sign-in email in step with their People record. Editing
+// the email in the People drawer calls this first; it moves the Firebase
+// Auth login (uid = people doc ID) to the new address, so they sign in and
+// reset their password with the address the record shows. Records with no
+// login of their own (no Auth user under that ID) are left to the drawer's
+// Firestore write alone.
+exports.setPersonEmail = onCall(async (request) => {
+  await assertAdmin(request)
+  const { personId, email } = request.data || {}
+  if (!personId || !email) throw new HttpsError('invalid-argument', 'personId and email are required')
+
+  const user = await admin.auth().getUser(personId).catch(() => null)
+  if (!user) return { hasLogin: false, changed: false }
+  if ((user.email || '').toLowerCase() === email.toLowerCase()) return { hasLogin: true, changed: false }
+
+  const taken = await admin.auth().getUserByEmail(email).catch(() => null)
+  if (taken && taken.uid !== personId) {
+    throw new HttpsError('already-exists', 'That email is already the sign-in for another account. Link that account to this person instead (Firebase account, below).')
+  }
+  await admin.auth().updateUser(personId, { email })
+  return { hasLogin: true, changed: true, previousEmail: user.email || null }
+})
+
+// Emails a person a link to set (or reset) their password, telling them which
+// address they sign in with. For a record that has no login yet — e.g. a
+// rater from years ago recorded only for their scores — it first creates
+// one under the record's own ID, so their past scores and assignments stay
+// theirs.
+exports.sendSignInLink = onCall({ secrets: [RESEND_API_KEY] }, async (request) => {
+  await assertAdmin(request)
+  const { personId } = request.data || {}
+  if (!personId) throw new HttpsError('invalid-argument', 'personId is required')
+
+  const snap = await admin.firestore().doc(`people/${personId}`).get()
+  if (!snap.exists) throw new HttpsError('not-found', 'No such person')
+  const { name, email } = snap.data()
+  if (!email) throw new HttpsError('failed-precondition', 'This person has no email address')
+
+  let created = false
+  let user = await admin.auth().getUser(personId).catch(() => null)
+  if (!user) {
+    const taken = await admin.auth().getUserByEmail(email).catch(() => null)
+    if (taken) {
+      throw new HttpsError('already-exists', 'A separate login already uses this email. Link it to this person first (Firebase account, below).')
+    }
+    user = await admin.auth().createUser({ uid: personId, email, displayName: name || undefined })
+    created = true
+  } else if ((user.email || '').toLowerCase() !== email.toLowerCase()) {
+    throw new HttpsError('failed-precondition', `Their sign-in email is ${user.email}, not ${email}. Save the record again to bring them into line, then resend.`)
+  }
+
+  const resetLink = await admin.auth().generatePasswordResetLink(email, { url: 'https://lenguax.com/ratersystem/login' })
+  const sent = await sendResendEmail({
+    from: 'RaterSystem <notifications@lenguax.com>',
+    to: email,
+    subject: 'Your RaterSystem sign-in',
+    text: `Hello${name ? ` ${name}` : ''},\n\nYou sign in to the Lenguax RaterSystem with this email address: ${email}\n\nSet your password here:\n\n${resetLink}\n\nThen sign in at https://lenguax.com/ratersystem/login with this address and your new password. If the link has expired, use "Forgot password?" on that page.`,
+  })
+  if (!sent) throw new HttpsError('internal', 'The email could not be sent. They can use "Forgot password?" on the login page with ' + email)
+  return { created, email }
+})
+
 exports.canvasEnrollments = onCall(async (request) => {
   const { courseId } = request.data
   if (!courseId) throw new HttpsError('invalid-argument', 'Missing courseId')
