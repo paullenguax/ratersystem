@@ -30,9 +30,11 @@ async function fetchAll() {
 }
 
 async function fetchMyData(uid: string): Promise<{ assignments: Assignment[]; scoresByAssignment: Map<string, number> }> {
-  const [assignSnap, scoreSnap] = await Promise.all([
+  const [assignSnap, scoreSnap, stdScoreSnap] = await Promise.all([
     getDocs(collection(db, 'assignments')),
     getDocs(query(collection(db, 'scores'), where('raterId', '==', uid))),
+    // Standardization work is scored into its own collection
+    getDocs(query(collection(db, 'standardization_scores'), where('raterId', '==', uid))),
   ])
   const assignments = assignSnap.docs
     .map(d => ({ id: d.id, ...d.data() }) as Assignment)
@@ -40,7 +42,7 @@ async function fetchMyData(uid: string): Promise<{ assignments: Assignment[]; sc
     // same reasoning as ScoringPage's own "My Assignments" list.
     .filter(a => a.raterId === uid && a.status !== 'published' && !a.confirmedAt)
   const scoresByAssignment = new Map<string, number>()
-  scoreSnap.docs.forEach(d => {
+  ;[...scoreSnap.docs, ...stdScoreSnap.docs].forEach(d => {
     const s = d.data() as Score
     scoresByAssignment.set(s.assignmentId, (scoresByAssignment.get(s.assignmentId) ?? 0) + 1)
   })
@@ -189,12 +191,17 @@ export function DashboardPage() {
           {myAssignments.map(a => (
             <button
               key={a.id}
-              onClick={() => navigate('/scoring')}
+              onClick={() => navigate(a.category === 'standardization' ? '/standardization' : '/scoring')}
               className="w-full text-left rounded-lg border p-4 hover:bg-muted/50 transition-colors"
             >
               <div className="flex items-center justify-between gap-4">
                 <div>
-                  <p className="font-medium">{a.sessionName}</p>
+                  <p className="font-medium">
+                    {a.sessionName}
+                    {a.category === 'standardization' && (
+                      <span className="ml-2 text-xs font-normal text-muted-foreground">Standardization</span>
+                    )}
+                  </p>
                   <div className="flex items-center gap-3 mt-1">
                     <div className="flex items-center gap-2">
                       <div className="w-24 h-1.5 rounded-full bg-muted overflow-hidden">
