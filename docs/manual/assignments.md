@@ -35,6 +35,10 @@ There are four ways:
   Tests the rater has already scored are hidden, so you don't repeat one by
   accident. The type can't be changed afterwards. If you edit an assignment
   and untick every test, the assignment is deleted.
+  For a **Standardization** assignment you can tick several raters at
+  once (there's a search box and **Select all**). Each of them gets their
+  own assignment with the same tests. Anyone who already has an assignment
+  in that event is skipped, and you're told who.
 - **Auto-assign** (**Admin → Auto-assign Tests**), for building a whole
   cohort's sets in one go:
   1. Pick the **Session**, the number of **Tests per rater**, and the

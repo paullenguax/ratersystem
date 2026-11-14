@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useForm, Controller, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { collection, addDoc, doc, updateDoc, deleteDoc, getDocs, query, where, serverTimestamp } from 'firebase/firestore'
+import { collection, addDoc, doc, updateDoc, deleteDoc, getDocs, query, where, serverTimestamp, writeBatch } from 'firebase/firestore'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { db } from '@/lib/firebase'
 import { formatTestNumber } from '@/lib/testNumber'
@@ -24,7 +24,7 @@ const STATUS_LABELS: Record<Assignment['status'], string> = {
 const schema = z.object({
   category:  z.enum(['rater_course', 'standardization']),
   sessionId: z.string().min(1, 'Required'),
-  raterId:   z.string().min(1, 'Required'),
+  raterId:   z.string(),  // required unless several raters are ticked (checked in onSubmit)
   status:    z.enum(['pending', 'submitted', 'reviewed', 'published']),
   notes:     z.string().optional(),
 })
@@ -68,6 +68,10 @@ export function AssignmentDrawer({ open, onClose, assignment }: Props) {
   const [selectedTestIds, setSelectedTestIds] = useState<string[]>([])
   const [testSearch, setTestSearch] = useState('')
   const [showRated, setShowRated] = useState(false)
+  // New Standardization assignments can go to several raters at once
+  const [raterIds, setRaterIds] = useState<string[]>([])
+  const [raterSearch, setRaterSearch] = useState('')
+  const [raterError, setRaterError] = useState('')
 
   const { data: sessions = [] } = useQuery({ queryKey: ['sessions'], queryFn: fetchSessions })
   const { data: people = [] } = useQuery({ queryKey: ['people', 'active'], queryFn: fetchPeople })
@@ -78,12 +82,31 @@ export function AssignmentDrawer({ open, onClose, assignment }: Props) {
 
   const raterId = useWatch({ control, name: 'raterId' })
   const category = useWatch({ control, name: 'category' })
+  const multi = !isEdit && category === 'standardization'
 
   const filteredPeople = people.filter(p =>
     category === 'standardization'
       ? p.role === 'examiner' || p.canStandardize
       : p.role !== 'examiner'
   )
+
+  const visiblePeople = raterSearch
+    ? filteredPeople.filter(p => p.name.toLowerCase().includes(raterSearch.toLowerCase()))
+    : filteredPeople
+  const allVisibleTicked = visiblePeople.length > 0 && visiblePeople.every(p => raterIds.includes(p.id))
+
+  function toggleRater(id: string) {
+    setRaterError('')
+    setRaterIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+
+  function toggleAllVisible() {
+    setRaterError('')
+    const ids = visiblePeople.map(p => p.id)
+    setRaterIds(prev => allVisibleTicked
+      ? prev.filter(id => !ids.includes(id))
+      : [...new Set([...prev, ...ids])])
+  }
 
   // Fetch test IDs this rater has already scored (new assignments only)
   const { data: ratedTestIds = new Set<string>() } = useQuery({
@@ -118,6 +141,8 @@ export function AssignmentDrawer({ open, onClose, assignment }: Props) {
     if (!isEdit) {
       setValue('raterId', '')
       setSelectedTestIds([])
+      setRaterIds([])
+      setRaterError('')
     }
   }
 
@@ -137,6 +162,9 @@ export function AssignmentDrawer({ open, onClose, assignment }: Props) {
       setSelectedTestIds([])
     }
     setTestSearch('')
+    setRaterIds([])
+    setRaterSearch('')
+    setRaterError('')
   }, [open, assignment, reset])
 
   function toggleTest(id: string) {
@@ -164,6 +192,42 @@ export function AssignmentDrawer({ open, onClose, assignment }: Props) {
 
     const session = sessions.find(s => s.id === data.sessionId)
       ?? (isEdit ? { id: assignment!.sessionId, name: assignment!.sessionName } as Session : null)
+
+    if (multi) {
+      if (raterIds.length === 0) { setRaterError('Tick at least one rater.'); return }
+      if (!session) return
+      // Skip anyone who already has an assignment in this event
+      const existing = await getDocs(query(collection(db, 'assignments'), where('sessionId', '==', data.sessionId)))
+      const already = new Set(existing.docs.map(d => d.data().raterId as string))
+      const toCreate = raterIds.filter(id => !already.has(id))
+      const batch = writeBatch(db)
+      for (const id of toCreate) {
+        const p = people.find(x => x.id === id)
+        if (!p) continue
+        batch.set(doc(collection(db, 'assignments')), {
+          category: data.category,
+          sessionId: data.sessionId,
+          sessionName: session.name,
+          raterId: id,
+          raterName: p.name,
+          testDocIds: selectedTestIds,
+          status: data.status,
+          notes: data.notes ?? '',
+          createdAt: serverTimestamp(),
+        })
+      }
+      if (toCreate.length) await batch.commit()
+      const skipped = raterIds.length - toCreate.length
+      if (skipped) {
+        const names = raterIds.filter(id => already.has(id)).map(id => people.find(p => p.id === id)?.name ?? id)
+        window.alert(`Created ${toCreate.length} assignment${toCreate.length === 1 ? '' : 's'}.\n\nSkipped ${skipped} who already have an assignment in "${session.name}":\n${names.join('\n')}`)
+      }
+      queryClient.invalidateQueries({ queryKey: ['assignments'] })
+      onClose()
+      return
+    }
+
+    if (!data.raterId) { setRaterError('Required'); return }
     const rater = people.find(p => p.id === data.raterId)
     if (!session || !rater) return
 
@@ -240,7 +304,47 @@ export function AssignmentDrawer({ open, onClose, assignment }: Props) {
             {errors.sessionId && <p className="text-xs text-destructive">{errors.sessionId.message}</p>}
           </div>
 
-          {/* Rater */}
+          {/* Rater — several at once for a new Standardization assignment */}
+          {multi ? (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>Raters</Label>
+              <div className="flex items-center gap-3">
+                {visiblePeople.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={toggleAllVisible}
+                    className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+                  >
+                    {allVisibleTicked ? 'Clear' : raterSearch ? 'Select all shown' : 'Select all'}
+                  </button>
+                )}
+                <span className="text-xs text-muted-foreground">{raterIds.length} selected</span>
+              </div>
+            </div>
+            <Input
+              placeholder="Search raters…"
+              value={raterSearch}
+              onChange={e => setRaterSearch(e.target.value)}
+              className="h-8 text-sm"
+            />
+            <div className="border rounded-md max-h-56 overflow-y-auto divide-y">
+              {visiblePeople.length === 0
+                ? <p className="px-3 py-4 text-sm text-muted-foreground">
+                    {filteredPeople.length === 0 ? 'Nobody has standardization access yet.' : 'No matches.'}
+                  </p>
+                : visiblePeople.map(p => (
+                  <label key={p.id} className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-muted/40 select-none">
+                    <input type="checkbox" checked={raterIds.includes(p.id)} onChange={() => toggleRater(p.id)} className="rounded" />
+                    <span className="text-sm">{p.name}</span>
+                  </label>
+                ))
+              }
+            </div>
+            <p className="text-xs text-muted-foreground">Each ticked rater gets their own assignment with the tests below. Anyone who already has one in this event is skipped.</p>
+            {raterError && <p className="text-xs text-destructive">{raterError}</p>}
+          </div>
+          ) : (
           <div className="space-y-1">
             <Label>Rater</Label>
             <Controller name="raterId" control={control} render={({ field }) => (
@@ -255,8 +359,9 @@ export function AssignmentDrawer({ open, onClose, assignment }: Props) {
                 </SelectContent>
               </Select>
             )} />
-            {errors.raterId && <p className="text-xs text-destructive">{errors.raterId.message}</p>}
+            {(errors.raterId || raterError) && <p className="text-xs text-destructive">{errors.raterId?.message ?? raterError}</p>}
           </div>
+          )}
 
           {/* Test checklist */}
           <div className="space-y-2">
@@ -338,10 +443,10 @@ export function AssignmentDrawer({ open, onClose, assignment }: Props) {
             <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
             <Button
               type="submit"
-              disabled={isSubmitting || (!isEdit && selectedTestIds.length === 0)}
+              disabled={isSubmitting || (!isEdit && selectedTestIds.length === 0) || (multi && raterIds.length === 0)}
               variant={isEdit && selectedTestIds.length === 0 ? 'destructive' : 'default'}
             >
-              {isSubmitting ? 'Saving…' : isEdit && selectedTestIds.length === 0 ? 'Delete assignment' : 'Save'}
+              {isSubmitting ? 'Saving…' : multi && raterIds.length > 1 ? `Create ${raterIds.length} assignments` : isEdit && selectedTestIds.length === 0 ? 'Delete assignment' : 'Save'}
             </Button>
           </SheetFooter>
         </form>
