@@ -68,7 +68,7 @@ async function moveTests(tests: Test[], allTests: Test[], target: 'standardizati
 export function TestBankPage() {
   const [search, setSearch] = useState('')
   const [typeFilter, setLicenceFilter] = useState<'all' | Test['testType']>('all')
-  const [statusFilter, setStatusFilter] = useState<'all' | Test['status']>('all')
+  const [statusFilter, setStatusFilter] = useState<'all' | Test['status']>('active')
   const [poolFilter, setPoolFilter] = useState<'all' | 'pool' | 'excluded'>('all')
   const [categoryFilter, setCategoryFilter] = useState<'all' | NonNullable<Test['category']>>('all')
   // 'all' | 'none' (in no set) | 'day:N' (Rater Course day) | 'rc:N' (refresher set)
@@ -423,7 +423,7 @@ export function TestBankPage() {
           </SelectContent>
         </Select>
         <Select value={statusFilter} onValueChange={v => setStatusFilter(v as typeof statusFilter)}>
-          <SelectTrigger className="w-36"><SelectValue placeholder="All statuses" /></SelectTrigger>
+          <SelectTrigger className="w-36"><SelectValue>{(v: string) => v === 'all' ? 'All statuses' : v === 'retired' ? 'Retired' : 'Active'}</SelectValue></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All statuses</SelectItem>
             <SelectItem value="active">Active</SelectItem>

@@ -37,7 +37,8 @@ click **Edit**, and change its **Category**.
   recording. **Edit** opens the test.
 
 Filters: search (candidate or nationality), test type, status
-(Active / Retired), pool status, and **Course set** (a Rater Course day, an
+(**Active** by default, so retired tests are hidden; pick **Retired** or
+**All statuses** to see them), pool status, and **Course set** (a Rater Course day, an
 RC set, or **Not in any course set**, which is handy when picking audio for
 a new RC set).
 
