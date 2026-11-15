@@ -661,6 +661,7 @@ exports.canvasSections = onCall(async (request) => {
         courseName: course.name,
         courseDate,
         courseStartAt: course.start_at || null,
+        sectionStartAt: section.start_at || null,
         sectionEndAt: section.end_at || null,
         displayName: `${course.name} → ${section.name}`,
       })

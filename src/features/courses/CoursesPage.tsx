@@ -2,12 +2,13 @@ import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { collection, getDocs } from 'firebase/firestore'
-import { Plus, Search, RefreshCw } from 'lucide-react'
+import { Plus, Search, RefreshCw, CalendarPlus } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import type { Course, Person, Test } from '@/types'
 import { fetchCourses, latestRefresherNumber, normName, setForCourse } from '@/lib/courses'
 import { CourseDrawer } from './CourseDrawer'
 import { ResyncPanel } from './ResyncPanel'
+import { CanvasCoursesPanel } from './CanvasCoursesPanel'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -40,6 +41,7 @@ export function CoursesPage() {
   const { data: people = [] } = useQuery({ queryKey: ['people'], queryFn: fetchPeople })
   const { data: tests = [] } = useQuery({ queryKey: ['tests'], queryFn: fetchAllTests })
   const [showResync, setShowResync] = useState(false)
+  const [showCanvas, setShowCanvas] = useState(false)
 
   // Runs created before their set was tagged (e.g. imported past courses)
   // have no audio; Re-sync from sets fills them.
@@ -90,6 +92,9 @@ export function CoursesPage() {
           <Button variant="ghost" onClick={() => setShowResync(s => !s)} aria-expanded={showResync}>
             <RefreshCw className="size-4 mr-2" /> Re-sync from sets
           </Button>
+          <Button variant="outline" onClick={() => setShowCanvas(s => !s)} aria-expanded={showCanvas}>
+            <CalendarPlus className="size-4 mr-2" /> From Canvas
+          </Button>
           <Button variant="outline" onClick={() => setCreating('rater')}>
             <Plus className="size-4 mr-2" /> Rater course
           </Button>
@@ -98,6 +103,10 @@ export function CoursesPage() {
           </Button>
         </div>
       </div>
+
+      {showCanvas && (
+        <CanvasCoursesPanel courses={courses} tests={tests} people={people} onClose={() => setShowCanvas(false)} />
+      )}
 
       {showResync && (
         <ResyncPanel
@@ -165,7 +174,7 @@ export function CoursesPage() {
               <section className="space-y-2">
                 <h2 className="text-sm font-medium text-muted-foreground">Coming up</h2>
                 {comingUp.length === 0
-                  ? <p className="text-sm text-muted-foreground">Nothing scheduled — add a course with a start date to see it here.</p>
+                  ? <p className="text-sm text-muted-foreground">Nothing scheduled — use “From Canvas” to add upcoming Canvas sections, or add a course with a start date.</p>
                   : <CourseTable rows={comingUp} />}
               </section>
               {recent.length > 0 && (

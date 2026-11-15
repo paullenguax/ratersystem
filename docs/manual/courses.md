@@ -45,6 +45,21 @@ Along the top:
     June 2025*
   - the **Trainers**: anyone with the Trainer tick
   - **Notes**, if needed
+- **From Canvas** lists Canvas sections that are upcoming or running and
+  aren't linked to a course yet, so you don't have to type courses in
+  twice:
+  - The **type** comes from the Canvas course name ("Refresher Course 2026"
+    → Refresher). For refreshers, check the **RC** number; the newest set
+    is suggested.
+  - The **start date** comes from the section's start date in Canvas, or
+    else from the month in its name ("July 2026" → 1 July, marked *check
+    the day*). The end date assumes consecutive days (5 for a rater course,
+    3 for a refresher). Change either if needed.
+  - Sections with no date in Canvas are listed but not ticked.
+  - Tick the ones you want and click **Create**. Each course starts from
+    its set's audio, is linked to its Canvas section, and gets the students
+    already enrolled in it. Pull the section again on the course page
+    nearer the time to pick up late enrolments.
 - **Materials & documents**: see *Materials* below.
 - **Import past courses**: see the end of this page.
 - **Re-sync from sets** copies a set's current recordings into its courses:
