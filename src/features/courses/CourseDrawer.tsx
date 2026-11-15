@@ -6,7 +6,7 @@ import { collection, addDoc, doc, updateDoc, deleteDoc, serverTimestamp } from '
 import { useQueryClient } from '@tanstack/react-query'
 import { db } from '@/lib/firebase'
 import type { Course, Person, Test } from '@/types'
-import { autoCourseName, setForCourse, setLabel } from '@/lib/courses'
+import { autoCourseName, refresherSetChange, setForCourse, setLabel } from '@/lib/courses'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -85,7 +85,18 @@ export function CourseDrawer({ open, onClose, kind, suggestedNumber, course, peo
       trainerIds,
     }
     if (isEdit) {
-      await updateDoc(doc(db, 'courses', course.id), payload)
+      // A new RC number also brings that set's audio, unless the run's audio was changed by hand
+      const setChange = effectiveKind === 'refresher' && data.number && data.number !== course.number
+        ? refresherSetChange(course, data.number, tests) : null
+      if (setChange && !confirm(setChange.audioReplaced
+        ? `Change to RC${data.number}? This course's audio will be replaced with the RC${data.number} set (${setChange.fields.testDocIds!.length} recordings).`
+        : `Change to RC${data.number}? This course's audio was changed by hand, so it's kept. Use “Update from RC${data.number} set” on the course page to replace it.`)) return
+      await updateDoc(doc(db, 'courses', course.id), {
+        ...payload,
+        ...(setChange?.fields.testDocIds && { testDocIds: setChange.fields.testDocIds }),
+        // Keep an automatic name in step with the new number
+        ...(setChange?.fields.name && payload.name === course.name && { name: setChange.fields.name }),
+      })
     } else {
       const ref = await addDoc(collection(db, 'courses'), {
         ...payload,

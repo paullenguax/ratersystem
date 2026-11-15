@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { collection, getDocs } from 'firebase/firestore'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { collection, doc, getDocs, updateDoc } from 'firebase/firestore'
 import { Plus, Search, RefreshCw, CalendarPlus } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import type { Course, Person, Test } from '@/types'
-import { fetchCourses, latestRefresherNumber, normName, setForCourse } from '@/lib/courses'
+import { fetchCourses, latestRefresherNumber, normName, refresherNumberOptions, refresherSetChange, setForCourse } from '@/lib/courses'
 import { CourseDrawer } from './CourseDrawer'
 import { ResyncPanel } from './ResyncPanel'
 import { CanvasCoursesPanel } from './CanvasCoursesPanel'
@@ -211,6 +211,23 @@ export function CoursesPage() {
 
 function CourseTable({ rows, matchedNames }: { rows: Course[]; matchedNames?: Map<string, string[]> }) {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  // Both already cached by the page
+  const { data: tests = [] } = useQuery({ queryKey: ['tests'], queryFn: fetchAllTests })
+  const { data: courses = [] } = useQuery({ queryKey: ['courses'], queryFn: fetchCourses })
+  const rcOptions = refresherNumberOptions(courses, tests)
+
+  async function changeSet(c: Course, n: number) {
+    if (n === c.number) return
+    const { fields, audioReplaced } = refresherSetChange(c, n, tests)
+    const played = Object.keys(c.playedAt ?? {}).length
+    const msg = audioReplaced
+      ? `Move ${c.name} to RC${n}? Its audio will be replaced with the RC${n} set (${fields.testDocIds!.length} recordings).${played ? ' Recordings already ticked as played that aren\'t in RC' + n + ' will drop off.' : ''}`
+      : `Move ${c.name} to RC${n}? Its audio was changed by hand, so it's kept as it is. Use “Update from RC${n} set” on the course page to replace it.`
+    if (!confirm(msg)) return
+    await updateDoc(doc(db, 'courses', c.id), fields)
+    queryClient.invalidateQueries({ queryKey: ['courses'] })
+  }
   const today = new Date().toISOString().slice(0, 10)
   return (
     <div className="rounded-md border">
@@ -239,9 +256,22 @@ function CourseTable({ rows, matchedNames }: { rows: Course[]; matchedNames?: Ma
                   {names && <div className="text-xs text-muted-foreground mt-0.5">{names.join(', ')}</div>}
                 </TableCell>
                 <TableCell>
-                  <Badge variant={c.kind === 'refresher' ? 'secondary' : 'outline'}>
-                    {c.kind === 'refresher' ? `RC${c.number ?? '?'}` : 'Initial'}
-                  </Badge>
+                  {c.kind === 'refresher' ? (
+                    <select
+                      value={c.number ?? ''}
+                      onClick={e => e.stopPropagation()}
+                      onChange={e => changeSet(c, Number(e.target.value))}
+                      aria-label={`Refresher set for ${c.name}`}
+                      title="Change which RC set this course runs"
+                      className="text-xs font-medium border rounded-md px-1 py-0.5 bg-secondary text-secondary-foreground"
+                    >
+                      {!c.number && <option value="">RC?</option>}
+                      {[...new Set([...rcOptions, ...(c.number ? [c.number] : [])])].sort((a, b) => a - b)
+                        .map(n => <option key={n} value={n}>RC{n}</option>)}
+                    </select>
+                  ) : (
+                    <Badge variant="outline">Initial</Badge>
+                  )}
                 </TableCell>
                 <TableCell className="text-sm text-muted-foreground whitespace-nowrap">{formatDateRange(c)}</TableCell>
                 <TableCell className="text-right tabular-nums">{c.attendees?.length ?? 0}</TableCell>

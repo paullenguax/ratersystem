@@ -30,6 +30,12 @@ People record. Running a session is covered in **Teaching a course**.
     only appears here if it has a start date.
   - **Recent**: the 3 most recently finished.
   - **Earlier**: everything else, folded. Click to open.
+- The **Set** column on a refresher is a drop-down: pick another RC
+  number to move that course to a different set. Its audio is replaced
+  with the new set's recordings (unless a trainer changed the course's audio
+  by hand, in which case it's kept), and an automatic name like *Refresher
+  Course 5 — July 2026* follows the new number. Changing the **Refresher
+  set** under **Edit** on the course page does the same.
 - The **Audio** column shows **none** in amber for a course with no
   recordings yet.
 - **Teach** on a row opens the teaching view. Click anywhere else on the row

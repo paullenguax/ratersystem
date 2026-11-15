@@ -93,6 +93,22 @@ export function autoCourseName(kind: Course['kind'], number: number | null | und
   return kind === 'refresher' ? `Refresher Course ${number ?? '?'} — ${when}` : `Rater Course — ${when}`
 }
 
+// Moving a refresher run to another RC set. Its audio is re-copied from the
+// new set unless a trainer has changed the run's audio by hand, and an
+// automatic name ("Refresher Course 5 — July 2026") follows the number.
+export function refresherSetChange(c: Course, n: number, tests: Test[]): { fields: Partial<Course>; audioReplaced: boolean } {
+  const autoName = c.name === autoCourseName('refresher', c.number, c.startDate)
+  const audioReplaced = !c.audioTweakedAt
+  return {
+    fields: {
+      number: n,
+      ...(autoName && { name: autoCourseName('refresher', n, c.startDate) }),
+      ...(audioReplaced && { testDocIds: setForCourse(tests, { kind: 'refresher', number: n }).map(t => t.id) }),
+    },
+    audioReplaced,
+  }
+}
+
 // RC numbers to offer when filing refresher material: every set in use by
 // courses or tagged recordings, plus the next one so a new set's materials
 // can be prepared before its first run.
