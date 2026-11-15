@@ -29,7 +29,7 @@ click **Edit**, and change its **Category**.
   means it hasn't been calibrated yet (calibration is saved from
   **Statistics → Tests**).
 - **Course**: for Training audio, the course set it belongs to: **Rater
-  Course · Day 3** and/or **RC2**. Faint italic text is an old tag from
+  Course · Day 3** and/or one or more RC sets (**RC2**, **RC5**…). Faint italic text is an old tag from
   before Courses existed. It's only a hint for sorting tests into pools.
 - **Pool**: **Excluded** means **Auto-assign** and self-serve never pick
   this test, even if it's Certification.
@@ -47,10 +47,13 @@ Tick the rows (or the header box to tick everything shown). A bar appears:
 
 - **Move to: Training / Standardization**. It asks you to confirm, then
   renumbers the tests in their new pool.
-- **Tag: RC set…** puts the ticked Training tests in a refresher set (type
-  the number, e.g. 6). Leave it blank to take them out of any RC set.
-- **Tag: RC day…** sets which day (1–3) of their refresher set the ticked
-  recordings are played on. Leave it blank for no day.
+- **Tag: Add to RC set…** adds the ticked Training tests to a refresher set
+  (type the number, e.g. 6). They stay in any sets they're already in.
+- **Tag: Remove from RC set…** takes them out of one set (type its number),
+  or out of every RC set if you leave it blank.
+- **Tag: RC day…** sets which day (1–3) the ticked recordings are played on
+  in their refresher set. For recordings in more than one set, first set the
+  **Course set** filter to the RC set you mean; otherwise they're skipped.
 - **Tag: Rater Course day…** puts them on a day of the Initial Rater Course
   (1–5). Leave it blank to take them out of the Rater Course set.
 - **Clear** unticks everything.
@@ -58,8 +61,7 @@ Tick the rows (or the header box to tick everything shown). A bar appears:
 Only Training tests can be in a course set; any others ticked are left
 alone.
 
-In the **Course** column, a recording in an RC set has a **Day** drop-down
-next to its RC badge, so you can set each day straight from the list. Click
+In the **Course** column, each RC badge has its own **Day** drop-down, so you can set each day straight from the list. Click
 the **Course** heading to sort by it: Rater Course days first, then each RC
 set in day order. Tagging changes the *set*. To pass it on to courses, use **Re-sync
 from sets** on **Courses**.
@@ -72,9 +74,11 @@ from sets** on **Courses**.
 - **Candidate name, Nationality, Test type.**
 - **Status**: *Retired* tests stay on record but aren't assigned any more.
 - **Category**: the pool (see above).
-- **Initial Rater Course day** and **Refresher set** (Training tests only):
-  which course set the recording belongs to, and for a refresher set which
-  day (1–3) it's played on. A recording can be in both.
+- **Initial Rater Course day** and **Refresher sets** (Training tests only):
+  which course sets the recording belongs to. Click **+ Add RC set** for
+  each refresher set it's played on, and pick its day (1–3) in that set. One
+  recording can be in the Rater Course and several refresher sets, on a
+  different day in each, so there's no need to upload it twice.
 - **Test number**: leave it blank for Standardization or Training tests and
   the next number is filled in. If you change the **Category**, the number
   clears and the test takes the next number in its new pool when you save.
@@ -98,6 +102,30 @@ from sets** on **Courses**.
 
 For Training tests, the form also shows **Heard on courses**: which course
 runs played it.
+
+## Cleaning up duplicate recordings
+
+Before a recording could be in several refresher sets, the same audio was
+sometimes uploaded again for each set. **Find duplicates** (top of the
+page) checks active Training recordings and lists them in groups:
+
+- **Same audio file**: identical uploads. Every copy is ticked to merge.
+- **Same candidate and test type**: probably the same test, but a
+  different file. Play them to check, then tick the copies to merge.
+
+Choose which copy to **Keep** (it suggests the one with the most teaching
+notes) and click **Merge into T…**. The copy you keep:
+
+- joins every course set and day the others were in (if two copies had
+  different days in the same set, it keeps its own and tells you);
+- gets their teaching notes added under its own, headed *Notes merged
+  from T12*, so nothing is lost. Tidy them into one set of notes afterwards;
+- replaces them on every course run, keeping the **played** ticks, and in
+  practice sessions and any scores;
+- replaces their numbers in session plans (*T12* becomes *T5*).
+
+The other copies are **retired** rather than deleted. You'll still find them
+under **Status: Retired**.
 
 ## Good to know
 

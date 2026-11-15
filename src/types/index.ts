@@ -652,6 +652,14 @@ export interface Test {
   // Which day (1–3) of its refresher set this recording is played on.
   // Unset = not yet given a day (shown under "No day" in Teach).
   refresherDay?: number | null
+  // Every RC set the recording is in, each with its own day. Canonical when
+  // present; refresherNumber/refresherDay mirror its first entry so older
+  // records (which only have those two) and simple "in a set?" checks keep
+  // working. Read through rcSlots() (lib/courses.ts), write through rcFields().
+  refresherSets?: { n: number; day: number | null }[]
+  // Set when a duplicate upload was merged into another recording (Test Bank
+  // → Find duplicates). The duplicate is retired and points at the keeper.
+  mergedInto?: string | null
   // Legacy free-form course tags, superseded by raterCourseDay. No longer
   // editable; still shown read-only in the test drawer as a sorting hint.
   courseTag?: 'rater_course' | 'refresher_course' | 'other'

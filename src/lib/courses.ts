@@ -9,13 +9,43 @@ export async function fetchCourses(): Promise<Course[]> {
     .sort((a, b) => (b.startDate ?? '').localeCompare(a.startDate ?? '') || a.name.localeCompare(b.name))
 }
 
+export type RcSlot = { n: number; day: number | null }
+
+// Every RC set a recording is in. Older records only have the single
+// refresherNumber/refresherDay pair.
+export function rcSlots(t: Pick<Test, 'refresherSets' | 'refresherNumber' | 'refresherDay'>): RcSlot[] {
+  if (t.refresherSets?.length) return t.refresherSets
+  return t.refresherNumber ? [{ n: t.refresherNumber, day: t.refresherDay ?? null }] : []
+}
+
+// The recording's day within RC n: undefined when it isn't in that set.
+export function rcDayIn(t: Test, n: number | null | undefined): number | null | undefined {
+  if (!n) return undefined
+  const s = rcSlots(t).find(x => x.n === n)
+  return s ? s.day : undefined
+}
+
+// Firestore fields for a set of RC memberships, keeping the legacy single
+// fields mirrored to the first set.
+export function rcFields(slots: RcSlot[]): Pick<Test, 'refresherSets' | 'refresherNumber' | 'refresherDay'> {
+  const byN = new Map<number, RcSlot>()
+  for (const s of slots) if (s.n > 0 && !byN.has(s.n)) byN.set(s.n, { n: s.n, day: s.day ?? null })
+  const sorted = [...byN.values()].sort((a, b) => a.n - b.n)
+  return { refresherSets: sorted, refresherNumber: sorted[0]?.n ?? null, refresherDay: sorted[0]?.day ?? null }
+}
+
+// Fields that change a recording's day within RC n, leaving its other sets alone
+export function rcDayFields(t: Test, n: number, day: number | null) {
+  return rcFields(rcSlots(t).map(s => s.n === n ? { n, day } : s))
+}
+
 // The newest refresher set in use (by courses or by tagged recordings) —
 // the default for a new refresher run. A brand-new set is this + 1.
 export function latestRefresherNumber(courses: Course[], tests: Test[]): number {
   return Math.max(
     0,
     ...courses.filter(c => c.kind === 'refresher').map(c => c.number ?? 0),
-    ...tests.map(t => t.refresherNumber ?? 0),
+    ...tests.flatMap(t => rcSlots(t).map(s => s.n)),
   ) || 1
 }
 
@@ -30,8 +60,8 @@ export function raterCourseSet(tests: Test[]): Test[] {
 // Refresher set RC N: Training tests tagged with that number.
 export function refresherSet(tests: Test[], n: number): Test[] {
   return tests
-    .filter(t => t.category === 'training' && t.status === 'active' && t.refresherNumber === n)
-    .sort((a, b) => ((a.refresherDay ?? 9) - (b.refresherDay ?? 9)) || ((a.testId ?? 999) - (b.testId ?? 999)))
+    .filter(t => t.category === 'training' && t.status === 'active' && rcDayIn(t, n) !== undefined)
+    .sort((a, b) => ((rcDayIn(a, n) ?? 9) - (rcDayIn(b, n) ?? 9)) || ((a.testId ?? 999) - (b.testId ?? 999)))
 }
 
 // How many days each kind of course runs for
@@ -46,7 +76,7 @@ export function courseDayNumbers(kind: Course['kind']): number[] {
 // or added to this run by hand from outside the set).
 export function recordingDay(t: Test, c: Pick<Course, 'kind' | 'number'>): number | null {
   if (c.kind === 'rater') return t.raterCourseDay ?? null
-  return t.refresherNumber === c.number ? t.refresherDay ?? null : null
+  return rcDayIn(t, c.number) ?? null
 }
 
 // The set a run starts from: the Rater Course set, or its RC number's set.
@@ -69,7 +99,7 @@ export function autoCourseName(kind: Course['kind'], number: number | null | und
 export function refresherNumberOptions(courses: Course[], tests: Test[]): number[] {
   const used = new Set([
     ...courses.filter(c => c.kind === 'refresher' && c.number).map(c => c.number!),
-    ...tests.map(t => t.refresherNumber ?? 0).filter(Boolean),
+    ...tests.flatMap(t => rcSlots(t).map(s => s.n)),
   ])
   const next = Math.max(0, ...used) + 1
   return [...used, next].sort((a, b) => a - b)
@@ -80,7 +110,7 @@ export function setLabel(c: Pick<Course, 'kind' | 'number'>): string {
 }
 
 export function inAnySet(t: Test): boolean {
-  return !!(t.raterCourseDay || t.refresherNumber)
+  return !!(t.raterCourseDay || rcSlots(t).length)
 }
 
 const norm = (e?: string | null) => (e ?? '').toLowerCase().trim()

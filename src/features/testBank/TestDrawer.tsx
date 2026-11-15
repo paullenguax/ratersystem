@@ -11,6 +11,7 @@ import type { Test } from '@/types'
 import { formatTestNumber } from '@/lib/testNumber'
 import { CATEGORY_LABELS, LEGACY_COURSE_TAG_LABELS, type TestCategory } from '@/lib/testPool'
 import { HeardBySection } from '@/features/courses/CourseExposure'
+import { rcFields, rcSlots } from '@/lib/courses'
 import { copyStandardizationScores, countPendingStandardizationScores } from '@/lib/standardizationCalibration'
 import { useCurrentPersonName } from '@/features/courses/MaterialsSection'
 import { Button } from '@/components/ui/button'
@@ -34,8 +35,6 @@ const schema = z.object({
   // 'none' is a form-only sentinel (Select can't bind to undefined) —
   // stripped back to null at the Firestore-payload boundary.
   raterCourseDay: z.enum(['none', '1', '2', '3', '4', '5']),
-  refresherNumber: z.number().int().min(1).optional(),
-  refresherDay: z.enum(['none', '1', '2', '3']),
   notes: z.string().optional(),
   teachingNotes: z.string().optional(),
 })
@@ -44,7 +43,7 @@ type FormData = z.infer<typeof schema>
 const EMPTY: FormData = {
   recordingUrl: '', candidateName: '', candidateNationality: '',
   testType: 'PPL', durationSeconds: undefined, status: 'active', testId: undefined, category: 'rater_course',
-  raterCourseDay: 'none', refresherNumber: undefined, refresherDay: 'none', notes: '', teachingNotes: '',
+  raterCourseDay: 'none', notes: '', teachingNotes: '',
 }
 
 interface Props {
@@ -59,6 +58,8 @@ export function TestDrawer({ open, onClose, test }: Props) {
   const myName = useCurrentPersonName()
   const [previewUrl, setPreviewUrl] = useState('')
   const [excludeFromPool, setExcludeFromPool] = useState(false)
+  // Refresher sets this recording is in, each with its own day ('' = none)
+  const [rcRows, setRcRows] = useState<{ n: string; day: string }[]>([])
 
   const { register, handleSubmit, control, reset, watch, setValue, setError, formState: { errors, isSubmitting } } =
     useForm<FormData>({ resolver: zodResolver(schema), defaultValues: EMPTY })
@@ -97,14 +98,13 @@ export function TestDrawer({ open, onClose, test }: Props) {
         testId: test.testId ?? undefined,
         category: test.category ?? 'rater_course',
         raterCourseDay: test.raterCourseDay ? String(test.raterCourseDay) as FormData['raterCourseDay'] : 'none',
-        refresherNumber: test.refresherNumber ?? undefined,
-        refresherDay: test.refresherDay ? String(test.refresherDay) as FormData['refresherDay'] : 'none',
         notes: test.notes ?? '',
         teachingNotes: test.teachingNotes ?? '',
       } : EMPTY
       reset(vals)
       setPreviewUrl(test?.recordingUrl ?? '')
       setExcludeFromPool(test?.excludeFromPool ?? false)
+      setRcRows(test ? rcSlots(test).map(x => ({ n: String(x.n), day: x.day ? String(x.day) : '' })) : [])
     }
   }, [open, test, reset])
 
@@ -172,8 +172,9 @@ export function TestDrawer({ open, onClose, test }: Props) {
       testId: testId ?? null,
       category: data.category,
       raterCourseDay: data.category === 'training' && data.raterCourseDay !== 'none' ? Number(data.raterCourseDay) : null,
-      refresherNumber: data.category === 'training' ? data.refresherNumber ?? null : null,
-      refresherDay: data.category === 'training' && data.refresherNumber && data.refresherDay !== 'none' ? Number(data.refresherDay) : null,
+      ...rcFields(data.category === 'training'
+        ? rcRows.filter(r => Number(r.n) >= 1).map(r => ({ n: Math.floor(Number(r.n)), day: r.day ? Number(r.day) : null }))
+        : []),
       excludeFromPool,
       notes: data.notes ?? '',
       teachingNotes: data.teachingNotes ?? '',
@@ -314,25 +315,35 @@ export function TestDrawer({ open, onClose, test }: Props) {
                 )} />
               </div>
               <div className="space-y-1">
-                <Label>Refresher set</Label>
-                <div className="flex items-center gap-1">
-                  <span className="text-sm text-muted-foreground">RC</span>
-                  <Input type="number" min={1} className="w-20" placeholder="—" {...register('refresherNumber', {
-                    setValueAs: v => (v === '' || v == null ? undefined : Number(v)),
-                  })} />
-                  <Controller name="refresherDay" control={control} render={({ field }) => (
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <SelectTrigger className="w-28" aria-label="Refresher day"><SelectValue>{(v: string) => v === 'none' ? 'No day' : `Day ${v}`}</SelectValue></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">No day</SelectItem>
-                        {['1', '2', '3'].map(d => <SelectItem key={d} value={d}>Day {d}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  )} />
+                <Label>Refresher sets</Label>
+                <div className="space-y-1">
+                  {rcRows.map((r, i) => (
+                    <div key={i} className="flex items-center gap-1">
+                      <span className="text-sm text-muted-foreground">RC</span>
+                      <Input
+                        type="number" min={1} className="w-16 h-8" aria-label="Refresher set number" value={r.n}
+                        onChange={e => setRcRows(rows => rows.map((x, j) => j === i ? { ...x, n: e.target.value } : x))}
+                      />
+                      <select
+                        value={r.day}
+                        aria-label="Day in this refresher set"
+                        onChange={e => setRcRows(rows => rows.map((x, j) => j === i ? { ...x, day: e.target.value } : x))}
+                        className="h-8 text-sm border rounded-md px-1 bg-background"
+                      >
+                        <option value="">No day</option>
+                        {[1, 2, 3].map(d => <option key={d} value={d}>Day {d}</option>)}
+                      </select>
+                      <Button type="button" variant="ghost" size="sm" className="h-8 px-2" aria-label="Remove this refresher set"
+                        onClick={() => setRcRows(rows => rows.filter((_, j) => j !== i))}>✕</Button>
+                    </div>
+                  ))}
+                  <Button type="button" variant="outline" size="sm" className="h-7" onClick={() => setRcRows(rows => [...rows, { n: '', day: '' }])}>
+                    + Add RC set
+                  </Button>
                 </div>
               </div>
               <p className="col-span-2 text-xs text-muted-foreground">
-                Every new run of that course starts with the recordings tagged here. Leave both blank for audio that isn't in a set.
+                Every new run of a course starts with the recordings tagged for it. One recording can be in several refresher sets, on a different day in each.
               </p>
             </div>
           )}

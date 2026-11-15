@@ -7,6 +7,8 @@ import { db } from '@/lib/firebase'
 import type { Test } from '@/types'
 import { TestDrawer } from './TestDrawer'
 import { TestScoresSheet } from './TestScoresSheet'
+import { DuplicatesPanel } from './DuplicatesPanel'
+import { rcSlots, rcFields, rcDayFields, rcDayIn, type RcSlot } from '@/lib/courses'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -31,9 +33,9 @@ function legacyRaterCourseDay(t: Test): number | null {
 
 function matchesSetFilter(t: Test, f: string): boolean {
   if (f === 'all') return true
-  if (f === 'none') return !t.raterCourseDay && !t.refresherNumber
+  if (f === 'none') return !t.raterCourseDay && rcSlots(t).length === 0
   const [kind, n] = f.split(':')
-  return kind === 'day' ? t.raterCourseDay === Number(n) : t.refresherNumber === Number(n)
+  return kind === 'day' ? t.raterCourseDay === Number(n) : rcDayIn(t, Number(n)) !== undefined
 }
 
 function setFilterLabel(f: string): string {
@@ -57,8 +59,7 @@ async function moveTests(tests: Test[], allTests: Test[], target: 'standardizati
       category: target,
       testId: next++,
       raterCourseDay: target === 'training' ? (t.raterCourseDay ?? legacyRaterCourseDay(t)) : null,
-      refresherNumber: target === 'training' ? (t.refresherNumber ?? null) : null,
-      refresherDay: target === 'training' ? (t.refresherDay ?? null) : null,
+      ...rcFields(target === 'training' ? rcSlots(t) : []),
     })
   }
   await batch.commit()
@@ -79,6 +80,7 @@ export function TestBankPage() {
   const [selectedTest, setSelectedTest] = useState<Test | undefined>()
   const [scoresTest, setScoresTest] = useState<Test | undefined>()
   const [playingUrl, setPlayingUrl] = useState<string | null>(null)
+  const [showDuplicates, setShowDuplicates] = useState(false)
   const [sorting, setSorting] = useState<SortingState>([{ id: 'testId', desc: false }])
 
   const { data: tests = [], isLoading } = useQuery({ queryKey: ['tests'], queryFn: fetchTests })
@@ -96,35 +98,55 @@ export function TestBankPage() {
   }), [tests, search, typeFilter, statusFilter, poolFilter, categoryFilter, setFilter])
 
   const rcNumbers = useMemo(
-    () => [...new Set(tests.map(t => t.refresherNumber).filter((n): n is number => !!n))].sort((a, b) => a - b),
+    () => [...new Set(tests.flatMap(t => rcSlots(t).map(s => s.n)))].sort((a, b) => a - b),
     [tests],
   )
 
   // Bulk-tag the selection into a set. Only Training audio can be in a set.
-  async function handleTag(field: 'refresherNumber' | 'raterCourseDay' | 'refresherDay') {
-    const isRc = field === 'refresherNumber'
+  // A recording can be in several RC sets, each with its own day.
+  async function handleTag(field: 'rcAdd' | 'rcRemove' | 'raterCourseDay' | 'refresherDay') {
     const maxDay = field === 'raterCourseDay' ? 5 : 3
+    const filterRc = setFilter.startsWith('rc:') ? Number(setFilter.slice(3)) : null
     const input = prompt(
-      isRc ? 'Tag the selected Training tests as which refresher set? (e.g. 6 for RC6 — leave blank to remove from any RC set)'
+      field === 'rcAdd' ? 'Add the selected Training tests to which refresher set? (e.g. 6 for RC6). They stay in any sets they\'re already in.'
+      : field === 'rcRemove' ? 'Take the selected tests out of which refresher set? (e.g. 6). Leave blank to take them out of every RC set.'
       : field === 'raterCourseDay' ? 'Put the selected Training tests on which Rater Course day (1–5)? Leave blank to remove them from the Rater Course set.'
-      : 'Play the selected recordings on which day (1–3) of their refresher set? Leave blank for no day.')
+      : `Play the selected recordings on which day (1–3) of ${filterRc ? `RC${filterRc}` : 'their refresher set'}? Leave blank for no day.`)
     if (input === null) return
     const n = input.trim() === '' ? null : Number(input.replace(/\D/g, ''))
-    if (n !== null && (!Number.isInteger(n) || n < 1 || (!isRc && n > maxDay))) { alert(isRc ? 'Enter a set number like 6.' : `Enter a day from 1 to ${maxDay}.`); return }
-    const training = selectedTests.filter(t => t.category === 'training' && (field !== 'refresherDay' || t.refresherNumber))
+    const isSetNumber = field === 'rcAdd' || field === 'rcRemove'
+    if (field === 'rcAdd' && n === null) return
+    if (n !== null && (!Number.isInteger(n) || n < 1 || (!isSetNumber && n > maxDay))) { alert(isSetNumber ? 'Enter a set number like 6.' : `Enter a day from 1 to ${maxDay}.`); return }
+
+    // For an RC day: the set being filtered on, or else the test's only set
+    const daySet = (t: Test): number | null => {
+      const slots = rcSlots(t)
+      if (filterRc) return slots.some(s => s.n === filterRc) ? filterRc : null
+      return slots.length === 1 ? slots[0].n : null
+    }
+    const training = selectedTests.filter(t => t.category === 'training' && (field !== 'refresherDay' || daySet(t) !== null))
     const skipped = selectedTests.length - training.length
     if (training.length === 0) {
-      alert(field === 'refresherDay' ? 'None of the selected tests is in an RC set — tag them with an RC set first.' : 'Only Training tests can be in a course set — move them to Training first.')
+      alert(field === 'refresherDay'
+        ? 'None of the selected tests could be given a day. Recordings in several RC sets need the Course set filter set to one RC set first.'
+        : 'Only Training tests can be in a course set — move them to Training first.')
       return
     }
     setMoving(true)
     try {
       const batch = writeBatch(db)
-      // Leaving an RC set also drops the day within it
-      training.forEach(t => batch.update(doc(db, 'test_bank', t.id), { [field]: n, ...(isRc && n === null && { refresherDay: null }) }))
+      training.forEach(t => {
+        const slots = rcSlots(t)
+        const fields =
+          field === 'rcAdd' ? rcFields([...slots, { n: n!, day: null }])
+          : field === 'rcRemove' ? rcFields(n === null ? [] : slots.filter(s => s.n !== n))
+          : field === 'refresherDay' ? rcDayFields(t, daySet(t)!, n)
+          : { raterCourseDay: n }
+        batch.update(doc(db, 'test_bank', t.id), fields)
+      })
       await batch.commit()
       await queryClient.invalidateQueries({ queryKey: ['tests'] })
-      if (skipped) alert(`${skipped} selected test${skipped === 1 ? ' isn\'t' : 's aren\'t'} ${field === 'refresherDay' ? 'in an RC set' : 'Training audio'} and ${skipped === 1 ? 'was' : 'were'} left alone.`)
+      if (skipped) alert(`${skipped} selected test${skipped === 1 ? ' was' : 's were'} left alone (${field === 'refresherDay' ? 'not in one clear RC set — filter by an RC set to choose which' : 'not Training audio'}).`)
     } finally {
       setMoving(false)
     }
@@ -132,8 +154,8 @@ export function TestBankPage() {
 
   const selectedTests = tests.filter(t => selectedIds.has(t.id))
 
-  async function setRefresherDay(t: Test, value: string) {
-    await updateDoc(doc(db, 'test_bank', t.id), { refresherDay: value ? Number(value) : null })
+  async function setRefresherDay(t: Test, n: number, value: string) {
+    await updateDoc(doc(db, 'test_bank', t.id), rcDayFields(t, n, value ? Number(value) : null))
     queryClient.invalidateQueries({ queryKey: ['tests'] })
   }
 
@@ -237,29 +259,30 @@ export function TestBankPage() {
     {
       // Sorts Rater Course days first, then by RC set and day within it
       id: 'course',
-      accessorFn: t => t.raterCourseDay ?? (t.refresherNumber ? t.refresherNumber * 10 + (t.refresherDay ?? 9) : undefined),
+      accessorFn: t => { const s = rcSlots(t)[0]; return t.raterCourseDay ?? (s ? s.n * 10 + (s.day ?? 9) : undefined) },
       header: 'Course',
       sortUndefined: 'last',
       cell: ({ row }) => {
         const t = row.original
-        if (t.raterCourseDay || t.refresherNumber) {
+        const slots: RcSlot[] = rcSlots(t)
+        if (t.raterCourseDay || slots.length) {
           return (
             <div className="flex gap-1 flex-wrap items-center">
               {t.raterCourseDay && <Badge variant="outline">Rater Course · Day {t.raterCourseDay}</Badge>}
-              {t.refresherNumber && (
-                <>
-                  <Badge variant="outline">RC{t.refresherNumber}</Badge>
+              {slots.map(s => (
+                <span key={s.n} className="inline-flex items-center gap-0.5">
+                  <Badge variant="outline">RC{s.n}</Badge>
                   <select
-                    value={t.refresherDay ?? ''}
-                    onChange={e => setRefresherDay(t, e.target.value)}
-                    aria-label={`RC${t.refresherNumber} day for ${t.candidateName}`}
-                    className={`text-xs border rounded px-1 py-0.5 bg-background ${t.refresherDay ? '' : 'text-muted-foreground'}`}
+                    value={s.day ?? ''}
+                    onChange={e => setRefresherDay(t, s.n, e.target.value)}
+                    aria-label={`RC${s.n} day for ${t.candidateName}`}
+                    className={`text-xs border rounded px-1 py-0.5 bg-background ${s.day ? '' : 'text-muted-foreground'}`}
                   >
                     <option value="">No day</option>
                     {[1, 2, 3].map(d => <option key={d} value={d}>Day {d}</option>)}
                   </select>
-                </>
-              )}
+                </span>
+              ))}
             </div>
           )
         }
@@ -330,10 +353,22 @@ export function TestBankPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Test Bank</h1>
-        <Button onClick={() => { setSelectedTest(undefined); setDrawerOpen(true) }}>
-          <Plus className="size-4 mr-2" /> Add test
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setShowDuplicates(v => !v)}>Find duplicates</Button>
+          <Button onClick={() => { setSelectedTest(undefined); setDrawerOpen(true) }}>
+            <Plus className="size-4 mr-2" /> Add test
+          </Button>
+        </div>
       </div>
+
+      {showDuplicates && (
+        <DuplicatesPanel
+          tests={tests}
+          playingUrl={playingUrl}
+          onPlay={url => setPlayingUrl(p => p === url ? null : url)}
+          onClose={() => setShowDuplicates(false)}
+        />
+      )}
 
       {/* Rater-course and standardization tests are really two separate
           pools — this is the primary way to switch between them, rather
@@ -423,7 +458,8 @@ export function TestBankPage() {
           <Button size="sm" variant="outline" disabled={moving} onClick={() => handleMove('training')}>Training</Button>
           <Button size="sm" variant="outline" disabled={moving} onClick={() => handleMove('standardization')}>Standardization</Button>
           <span className="text-muted-foreground ml-2">Tag:</span>
-          <Button size="sm" variant="outline" disabled={moving} onClick={() => handleTag('refresherNumber')}>RC set…</Button>
+          <Button size="sm" variant="outline" disabled={moving} onClick={() => handleTag('rcAdd')}>Add to RC set…</Button>
+          <Button size="sm" variant="outline" disabled={moving} onClick={() => handleTag('rcRemove')}>Remove from RC set…</Button>
           <Button size="sm" variant="outline" disabled={moving} onClick={() => handleTag('refresherDay')}>RC day…</Button>
           <Button size="sm" variant="outline" disabled={moving} onClick={() => handleTag('raterCourseDay')}>Rater Course day…</Button>
           <Button size="sm" variant="ghost" disabled={moving} onClick={() => setSelectedIds(new Set())}>Clear</Button>

@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { doc, writeBatch } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import type { Course, Test } from '@/types'
-import { setForCourse, setLabel } from '@/lib/courses'
+import { rcSlots, setForCourse, setLabel } from '@/lib/courses'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
@@ -23,7 +23,7 @@ export function ResyncPanel({ courses, tests, initialSet = 'initial', onClose }:
   const queryClient = useQueryClient()
   const rcNumbers = [...new Set([
     ...courses.filter(c => c.kind === 'refresher' && c.number).map(c => c.number!),
-    ...tests.map(t => t.refresherNumber ?? 0).filter(Boolean),
+    ...tests.flatMap(t => rcSlots(t).map(s => s.n)),
   ])].sort((a, b) => a - b)
   const [setKey, setSetKey] = useState(initialSet)
   const [fromDate, setFromDate] = useState('')

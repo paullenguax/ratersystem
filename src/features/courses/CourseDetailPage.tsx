@@ -12,7 +12,7 @@ import type { Course, CourseAttendee, Person, Test } from '@/types'
 type CoursePatch = { [K in keyof Course]?: Course[K] | FieldValue }
 import {
   fetchCourses, mergeAttendees, cohortExposure, setForCourse, setLabel, inAnySet, refresherNumberOptions,
-  COURSE_DAYS, courseDayNumbers, recordingDay,
+  COURSE_DAYS, courseDayNumbers, recordingDay, rcDayIn, rcDayFields,
 } from '@/lib/courses'
 import { formatTestNumber } from '@/lib/testNumber'
 import { CourseDrawer } from './CourseDrawer'
@@ -303,7 +303,8 @@ function AudioSection({ course, courses, tests, testById, playingUrl, onPlay, sa
   // changes it for every run of that set. Test Bank edits are admin-only.
   const canSetDay = course.kind === 'refresher' && role === 'admin'
   async function changeDay(t: Test, value: string) {
-    await updateDoc(doc(db, 'test_bank', t.id), { refresherDay: value ? Number(value) : null })
+    if (!course.number) return
+    await updateDoc(doc(db, 'test_bank', t.id), rcDayFields(t, course.number, value ? Number(value) : null))
     queryClient.invalidateQueries({ queryKey: ['tests'] })
   }
 
@@ -350,13 +351,13 @@ function AudioSection({ course, courses, tests, testById, playingUrl, onPlay, sa
               {ts.map(t => (
                 <TestRow key={t.id} test={t} playing={playingUrl === t.recordingUrl} onPlay={onPlay}>
                   {!setIds.has(t.id) && <span className="text-[10px] text-muted-foreground border rounded px-1">added for this run</span>}
-                  {canSetDay && t.refresherNumber === course.number && (
+                  {canSetDay && rcDayIn(t, course.number) !== undefined && (
                     <select
-                      value={t.refresherDay ?? ''}
+                      value={rcDayIn(t, course.number) ?? ''}
                       onChange={e => changeDay(t, e.target.value)}
                       aria-label={`Day for ${t.candidateName}`}
                       title={`Day in the RC${course.number} set — applies to every RC${course.number} course`}
-                      className={`text-xs border rounded px-1 py-0.5 bg-background ${t.refresherDay ? '' : 'text-muted-foreground'}`}
+                      className={`text-xs border rounded px-1 py-0.5 bg-background ${rcDayIn(t, course.number) ? '' : 'text-muted-foreground'}`}
                     >
                       <option value="">No day</option>
                       {courseDayNumbers('refresher').map(d => <option key={d} value={d}>Day {d}</option>)}
